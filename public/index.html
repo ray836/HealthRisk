@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Exercise Risk — demo</title>
+    <style>
+      :root { color-scheme: light dark; --bg:#14161a; --panel:#1e2127; --line:#2c313a; --text:#e7e9ee; --muted:#9aa0a6; }
+      * { box-sizing: border-box; }
+      body { margin:0; font:14px/1.4 system-ui, sans-serif; background:var(--bg); color:var(--text); }
+      header { padding:12px 16px; border-bottom:1px solid var(--line); display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
+      header h1 { font-size:16px; margin:0; }
+      .pill { padding:2px 8px; border-radius:999px; background:var(--panel); border:1px solid var(--line); }
+      main { display:grid; grid-template-columns: 260px 1fr; gap:16px; padding:16px; align-items:start; }
+      @media (max-width:800px){ main{ grid-template-columns:1fr; } }
+      .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; }
+      button { font:inherit; padding:6px 10px; border-radius:8px; border:1px solid var(--line); background:#262b33; color:var(--text); cursor:pointer; }
+      button:hover { background:#2f353f; }
+      button.active { outline:2px solid #6ea8fe; }
+      button:disabled { opacity:.45; cursor:not-allowed; }
+      .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+      .players li { list-style:none; display:flex; align-items:center; gap:8px; padding:3px 0; }
+      .dot { width:12px; height:12px; border-radius:3px; display:inline-block; }
+      .continent { margin-bottom:14px; }
+      .continent h3 { margin:0 0 6px; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+      .terrs { display:flex; flex-wrap:wrap; gap:6px; }
+      .terr { min-width:104px; padding:6px 8px; border-radius:8px; border:2px solid; background:#20242b; cursor:pointer; user-select:none; }
+      .terr .name { font-size:12px; }
+      .terr .armies { font-weight:700; font-size:15px; }
+      .terr.dim { opacity:.4; }
+      .terr.sel { outline:3px solid #ffd166; }
+      #log { white-space:pre-wrap; font-family:ui-monospace,monospace; font-size:12px; color:var(--muted); max-height:180px; overflow:auto; }
+      .muted { color:var(--muted); }
+      .win { color:#3fae7a; font-weight:700; }
+      #board svg { width:100%; height:auto; display:block; background:#171a20; border-radius:8px; }
+      #board svg .edge { stroke:#333a45; stroke-width:1.5; }
+      #board svg .clabel { fill:#4d5560; font-size:12px; letter-spacing:.14em; text-transform:uppercase; }
+      #board svg .tlabel { fill:#c3c8d0; font-size:9.5px; pointer-events:none; }
+      #board svg .tcount { fill:#0c0e12; font-weight:700; font-size:13px; pointer-events:none; }
+      #board svg .node { cursor:default; }
+      #board svg .node.can { cursor:pointer; }
+      #bonusNote { font-size:12px; margin:8px 0; padding:6px 8px; border-radius:8px; background:#20242b; border:1px solid var(--line); }
+      #bonusNote b { color:#e7e9ee; }
+      #winOverlay { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(10,12,16,.82); z-index:50; }
+      #winOverlay.show { display:flex; }
+      #winOverlay .card { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:28px 40px; text-align:center; }
+      #winOverlay h2 { margin:0 0 10px; font-size:26px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Exercise Risk</h1>
+      <span class="pill" id="dayPill">—</span>
+      <span class="pill" id="turnPill">—</span>
+      <span class="pill" id="timerPill" style="display:none"></span>
+      <span class="pill" id="statusPill">—</span>
+      <span class="row" style="margin-left:auto">
+        <span class="row" id="authOut">
+          <input id="authUser" placeholder="username" autocomplete="username" style="width:110px" />
+          <input id="authPass" type="password" placeholder="password" autocomplete="current-password" style="width:110px" />
+          <button id="loginBtn">Log in</button>
+          <button id="signupBtn">Sign up</button>
+        </span>
+        <span class="row" id="authIn" style="display:none">
+          <span class="muted" id="whoami"></span>
+          <label class="muted">Players
+            <select id="newCount"><option>2</option><option>3</option><option>4</option></select>
+          </label>
+          <label class="muted"><input type="checkbox" id="practiceChk" checked /> practice</label>
+          <button id="newBtn">New game</button>
+          <input id="joinCode" placeholder="game code" style="width:100px" />
+          <button id="joinBtn">Join</button>
+          <button id="logoutBtn">Log out</button>
+        </span>
+      </span>
+    </header>
+
+    <main>
+      <aside class="panel">
+        <ul class="players" id="players"></ul>
+        <div id="bonusNote" style="display:none"></div>
+        <hr style="border-color:var(--line)" />
+        <div class="row" style="margin-bottom:8px">
+          <button id="mReinforce" class="modeBtn" data-mode="reinforce">Reinforce</button>
+          <button id="mAttack" class="modeBtn" data-mode="attack">Attack</button>
+          <button id="mFortify" class="modeBtn" data-mode="fortify">Fortify</button>
+        </div>
+        <div class="row" style="margin-bottom:8px">
+          <button id="endBtn">End turn</button>
+          <button id="expireBtn" title="Auto-resolve the current player (simulate a missed window)">Auto-resolve</button>
+        </div>
+        <div id="exercise" style="border-top:1px solid var(--line); padding-top:8px; margin-bottom:8px">
+          <div class="muted" style="font-size:12px; margin-bottom:4px">🏃 Log exercise → banks troops for the current player</div>
+          <div class="row">
+            <select id="exKey"></select>
+            <input id="exUnits" type="number" min="1" value="1" style="width:56px" />
+            <span id="exUnit" class="muted"></span>
+            <button id="logBtn">Log</button>
+          </div>
+        </div>
+        <p class="muted" id="hint" style="min-height:2.4em"></p>
+        <div id="log"></div>
+      </aside>
+
+      <section class="panel" id="board"></section>
+    </main>
+
+    <div id="winOverlay"><div class="card">
+      <h2 id="winText"></h2>
+      <button id="winNew">New game</button>
+    </div></div>
+
+    <script>
+      const $ = (s) => document.querySelector(s);
+      let game = null;
+      let mode = 'reinforce';
+      let fromSel = null;
+      let lastTurnKey = null;
+      let lastExpiryRefreshed = null;
+      let gameId = localStorage.getItem('exriskGame');
+      let token = localStorage.getItem('exriskToken');
+      let currentUser = null;
+      const authHeaders = () => (token ? { Authorization: 'Bearer ' + token } : {});
+
+      // Geographic-ish layout on a 980x540 board (roughly matches the Risk map).
+      const POS = {
+        alaska:[70,95], northwest_territory:[150,90], greenland:[300,60], alberta:[145,150],
+        ontario:[215,150], quebec:[290,135], western_us:[155,215], eastern_us:[235,210], central_america:[175,280],
+        venezuela:[245,345], peru:[245,420], brazil:[325,400], argentina:[265,485],
+        iceland:[400,105], great_britain:[400,175], scandinavia:[485,80], northern_europe:[475,165],
+        western_europe:[420,245], southern_europe:[505,225], ukraine:[565,135],
+        north_africa:[455,335], egypt:[525,315], east_africa:[565,385], congo:[515,415], south_africa:[515,485], madagascar:[600,460],
+        ural:[645,125], siberia:[705,90], yakutsk:[785,70], kamchatka:[890,95], irkutsk:[765,145],
+        mongolia:[795,200], japan:[900,205], afghanistan:[655,210], china:[770,245], middle_east:[605,275], india:[705,300], siam:[800,315],
+        indonesia:[805,395], new_guinea:[900,400], western_australia:[825,480], eastern_australia:[905,480],
+      };
+      const CONT_LABELS = [
+        ['NORTH AMERICA',160,30],['SOUTH AMERICA',235,520],['EUROPE',430,45],
+        ['AFRICA',455,520],['ASIA',815,30],['AUSTRALIA',845,435],
+      ];
+
+      const pretty = (id) => id.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+      const log = (msg) => { $('#log').textContent = msg + '\n' + $('#log').textContent; };
+
+      async function post(path, body) {
+        const r = await fetch(path, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', ...authHeaders() },
+          body: JSON.stringify(body || {}),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.message || data.error || 'request failed');
+        return data;
+      }
+
+      function updateAuthUI() {
+        const inn = !!currentUser;
+        $('#authOut').style.display = inn ? 'none' : '';
+        $('#authIn').style.display = inn ? '' : 'none';
+        if (inn) $('#whoami').textContent = '👤 ' + currentUser.username;
+      }
+
+      async function loadMe() {
+        if (!token) { currentUser = null; return; }
+        const r = await fetch('/api/auth/me', { headers: authHeaders() });
+        const d = await r.json();
+        currentUser = d.user;
+        if (!currentUser) { token = null; localStorage.removeItem('exriskToken'); }
+      }
+
+      async function doAuth(kind) {
+        const username = $('#authUser').value.trim();
+        const password = $('#authPass').value;
+        try {
+          const d = await post('/api/auth/' + kind, { username, password });
+          token = d.token; currentUser = d.user; localStorage.setItem('exriskToken', token);
+          $('#authPass').value = '';
+          updateAuthUI(); log('Logged in as ' + currentUser.username);
+          if (gameId) await refresh();
+        } catch (e) { log('✋ ' + e.message); }
+      }
+
+      async function doLogout() {
+        try { await post('/api/auth/logout'); } catch {}
+        token = null; currentUser = null; localStorage.removeItem('exriskToken');
+        updateAuthUI();
+        if (gameId) await refresh(); else if (game) render();
+        log('Logged out');
+      }
+
+      async function newGame() {
+        if (!currentUser) { log('✋ Log in first'); return; }
+        const data = await post('/api/games', { players: Number($('#newCount').value), practice: $('#practiceChk').checked });
+        gameId = data.id; localStorage.setItem('exriskGame', gameId);
+        game = data; fromSel = null; mode = 'reinforce'; lastTurnKey = null; render();
+        log('New game ' + gameId + ($('#practiceChk').checked ? ' (practice — you control all seats)' : ' — share this code so others can Join'));
+      }
+
+      async function joinGame() {
+        const code = $('#joinCode').value.trim();
+        if (!code) return;
+        try {
+          const d = await post('/api/games/' + code + '/join');
+          gameId = code; localStorage.setItem('exriskGame', gameId);
+          game = d.game; fromSel = null; lastTurnKey = null; render();
+          log('Joined ' + code + ' as ' + d.seat);
+        } catch (e) { log('✋ ' + e.message); }
+      }
+
+      async function refresh() {
+        if (!gameId) return;
+        const r = await fetch('/api/games/' + gameId, { headers: authHeaders() });
+        if (!r.ok) { return; }
+        game = await r.json(); render();
+      }
+
+      function terr(id) { return game.territories.find((t) => t.id === id); }
+      function me() { return game.currentPlayerId; }
+      function myBank() { const p = game.players.find((x) => x.id === me()); return p ? p.pendingReinforcements : 0; }
+
+      // Which board modes the current phase allows (only on your own turn).
+      function allowedModes() {
+        if (!game.yourTurn || game.status !== 'active') return {};
+        return { reinforce: game.phase === 'reinforce', attack: game.phase === 'attack', fortify: game.phase === 'attack' };
+      }
+
+      // Keep the client mode consistent with the server phase (auto-advance).
+      function syncMode() {
+        const a = allowedModes();
+        if (a.reinforce) mode = 'reinforce';
+        else if (a.attack) { if (mode !== 'attack' && mode !== 'fortify') mode = 'attack'; }
+        else mode = 'reinforce'; // fortify/done: nothing selectable on the board
+      }
+
+      function selectable(t) {
+        if (!game.yourTurn || game.status !== 'active') return false;
+        if (mode === 'reinforce') return t.owner === me() && game.phase === 'reinforce';
+        if (mode === 'attack') {
+          if (game.phase !== 'attack') return false;
+          if (!fromSel) return t.owner === me() && t.armies > 1;
+          const from = terr(fromSel);
+          return from.neighbors.includes(t.id) && t.owner !== me();
+        }
+        if (mode === 'fortify') {
+          if (game.phase !== 'attack') return false;
+          if (!fromSel) return t.owner === me() && t.armies > 1;
+          return t.owner === me() && t.id !== fromSel;
+        }
+        return false;
+      }
+
+      async function onClick(t) {
+        try {
+          if (mode === 'reinforce') {
+            const n = Number(prompt(`Place how many on ${pretty(t.id)}? (bank ${myBank()})`, String(myBank())));
+            if (!n) return;
+            const d = await post(`/api/games/${gameId}/reinforce`, { placements: [{ territoryId: t.id, count: n }] });
+            game = d.game; log(`Reinforced ${pretty(t.id)} +${n}`);
+          } else if (mode === 'attack') {
+            if (!fromSel) { fromSel = t.id; render(); return; }
+            const from = terr(fromSel);
+            const commit = Number(prompt(`Commit how many from ${pretty(from.id)}? (max ${from.armies - 1})`, String(from.armies - 1)));
+            if (!commit) { fromSel = null; render(); return; }
+            const stop = Number(prompt('Stop-loss (max troops to lose before halting)?', '3')) || 3;
+            const d = await post(`/api/games/${gameId}/attack`, { fromId: from.id, toId: t.id, committedTroops: commit, stopLoss: stop });
+            game = d.game; const r = d.result;
+            log(`${pretty(from.id)} → ${pretty(t.id)}: ${r.endReason}${r.captured ? ' (captured!)' : ''} — you lost ${r.totalAttackerLosses}, they lost ${r.totalDefenderLosses} over ${r.rounds.length} round(s)`);
+            fromSel = null;
+          } else if (mode === 'fortify') {
+            if (!fromSel) { fromSel = t.id; render(); return; }
+            const from = terr(fromSel);
+            const n = Number(prompt(`Move how many ${pretty(from.id)} → ${pretty(t.id)}? (max ${from.armies - 1})`, String(from.armies - 1)));
+            if (!n) { fromSel = null; render(); return; }
+            const d = await post(`/api/games/${gameId}/fortify`, { fromId: from.id, toId: t.id, count: n });
+            game = d.game; log(`Fortified ${pretty(from.id)} → ${pretty(t.id)} (${n})`); fromSel = null;
+          }
+          render();
+        } catch (e) { log('✋ ' + e.message); fromSel = null; render(); }
+      }
+
+      function setMode(m) { if (!allowedModes()[m]) return; mode = m; fromSel = null; render(); }
+
+      function hintText() {
+        if (!currentUser) return 'Log in, then create or join a game.';
+        if (game.status === 'finished') return '';
+        if (!me()) return 'No active turn.';
+        const cur = game.players.find((p) => p.id === me());
+        if (!game.yourTurn) {
+          const mine = (game.mySeats || []).length ? `you are ${game.mySeats.join(', ')}` : 'spectating';
+          return `Waiting for ${cur.name}'s turn — ${mine}.`;
+        }
+        if (game.phase === 'reinforce') return `Your turn — place reinforcements (bank ${myBank()}); auto-advances to attack when empty.`;
+        if (game.phase === 'attack') {
+          if (mode === 'fortify') return `Your turn — fortify: ${fromSel ? 'pick a destination for ' + pretty(fromSel) : 'pick a source (or End turn)'}`;
+          return `Your turn — attack: ${fromSel ? 'pick a target for ' + pretty(fromSel) : 'pick a source (or switch to Fortify / End turn)'}`;
+        }
+        if (game.phase === 'fortify') return 'Your turn — fortify done. End turn when ready.';
+        return '';
+      }
+
+      function renderExercise() {
+        const sel = $('#exKey');
+        const exs = game.exercises || [];
+        if (sel.options.length !== exs.length) {
+          sel.innerHTML = exs.map((e) => `<option value="${e.key}">${e.label}</option>`).join('');
+        }
+        const cur = exs.find((e) => e.key === sel.value) || exs[0];
+        $('#exUnit').textContent = cur ? cur.unitLabel + '(s)' : '';
+        const active = !!game.yourTurn && game.status === 'active';
+        $('#logBtn').disabled = !active;
+        $('#exKey').disabled = !active;
+        $('#exUnits').disabled = !active;
+      }
+
+      // Live window countdown; when it hits 0 the server auto-resolves, so we
+      // refresh once to pick up the new turn.
+      function tickTimer() {
+        if (!game) return;
+        const pill = $('#timerPill');
+        const exp = game.windowExpiresAt;
+        if (!exp || game.status !== 'active' || !game.currentPlayerId) { pill.style.display = 'none'; return; }
+        const ms = new Date(exp).getTime() - Date.now();
+        const s = Math.max(0, Math.ceil(ms / 1000));
+        pill.textContent = `⏳ ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+        pill.style.color = ms < 15000 ? '#e05c4b' : '';
+        pill.style.display = '';
+        if (ms <= 0 && lastExpiryRefreshed !== exp) {
+          lastExpiryRefreshed = exp;
+          if (gameId) refresh();
+        }
+      }
+
+      function renderMeta() {
+        // Start-of-turn bonus note for the current player.
+        const note = $('#bonusNote');
+        if (me() && game.status === 'active' && (game.startBonus || 0) > 0) {
+          const conts = (game.startContinents || []).length ? ` — continents: <b>${game.startContinents.join(', ')}</b>` : '';
+          note.innerHTML = `Start-of-turn reinforcements: <b>+${game.startBonus}</b> (territory + continent control)${conts}. Exercise troops add on top.`;
+          note.style.display = '';
+        } else {
+          note.style.display = 'none';
+        }
+        // Log once when a new turn begins.
+        const key = `${gameId}:${game.dayNumber}:${game.currentPlayerId}`;
+        if (game.currentPlayerId && key !== lastTurnKey) {
+          lastTurnKey = key;
+          fromSel = null; // clear stale selection from the previous player
+          if (mode !== 'reinforce') mode = 'reinforce';
+          const who = game.players.find((p) => p.id === game.currentPlayerId);
+          let msg = `— ${who.name}'s turn (day ${game.dayNumber})`;
+          if ((game.startBonus || 0) > 0) msg += ` — +${game.startBonus} troops from territory/continent control`;
+          log(msg);
+        }
+        // Win overlay.
+        const ov = $('#winOverlay');
+        if (game.status === 'finished') {
+          const w = game.players.find((p) => p.id === game.winnerId);
+          $('#winText').innerHTML = `🏆 <span style="color:${w ? w.color : '#fff'}">${w ? w.name : 'Someone'}</span> conquered the world!`;
+          ov.classList.add('show');
+        } else {
+          ov.classList.remove('show');
+        }
+      }
+
+      function render() {
+        if (!game) return;
+        syncMode();
+        renderMeta();
+        renderExercise();
+        $('#dayPill').textContent = 'Day ' + game.dayNumber;
+        const cur = game.players.find((p) => p.id === game.currentPlayerId);
+        $('#turnPill').innerHTML = cur ? `Turn: <b style="color:${cur.color}">${cur.name}</b> · ${game.phase}` : 'Turn: —';
+        $('#statusPill').innerHTML = game.status === 'finished'
+          ? `<span class="win">🏆 ${game.players.find((p) => p.id === game.winnerId)?.name} wins!</span>`
+          : 'In progress';
+
+        const mine = new Set(game.mySeats || []);
+        $('#players').innerHTML = game.players.map((p) => {
+          const owned = game.territories.filter((t) => t.owner === p.id).length;
+          const cur = p.id === game.currentPlayerId ? '▶ ' : '';
+          const you = mine.has(p.id) ? ' <span style="color:#6ea8fe">(you)</span>' : '';
+          const open = !p.claimed ? ' <span class="muted">· open seat</span>' : '';
+          return `<li><span class="dot" style="background:${p.color}"></span>${cur}<b>${p.name}</b>${you}
+            <span class="muted">· ${owned} terr · bank ${p.pendingReinforcements}${p.status !== 'active' ? ' · ' + p.status : ''}</span>${open}</li>`;
+        }).join('');
+
+        const allowed = allowedModes();
+        document.querySelectorAll('.modeBtn').forEach((b) => {
+          const m = b.dataset.mode;
+          b.disabled = !allowed[m];
+          b.classList.toggle('active', m === mode && !!allowed[m]);
+        });
+        $('#endBtn').disabled = !game.yourTurn || game.status !== 'active';
+        $('#expireBtn').disabled = !(game.mySeats || []).length || game.status !== 'active';
+        $('#hint').textContent = hintText();
+
+        // Adjacency edges (each undirected pair once).
+        const seen = new Set(), edges = [];
+        for (const t of game.territories) {
+          for (const n of t.neighbors) {
+            const key = [t.id, n].sort().join('|');
+            if (seen.has(key)) continue;
+            seen.add(key);
+            const a = POS[t.id], b = POS[n];
+            if (a && b) edges.push(`<line class="edge" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/>`);
+          }
+        }
+        const clabels = CONT_LABELS.map(([txt, x, y]) => `<text class="clabel" x="${x}" y="${y}">${txt}</text>`);
+        const nodes = game.territories.map((t) => {
+          const p = POS[t.id]; if (!p) return '';
+          const [x, y] = p;
+          const can = selectable(t), sel = t.id === fromSel;
+          const stroke = sel ? '#ffd166' : can ? '#eef1f6' : 'transparent';
+          const sw = sel ? 3 : can ? 2 : 1;
+          const op = can || sel ? 1 : 0.55;
+          return `<g class="node${can ? ' can' : ''}" data-id="${t.id}" opacity="${op}">
+            <text class="tlabel" x="${x}" y="${y - 21}" text-anchor="middle">${pretty(t.id)}</text>
+            <circle cx="${x}" cy="${y}" r="16" fill="${t.color}" stroke="${stroke}" stroke-width="${sw}"/>
+            <text class="tcount" x="${x}" y="${y + 5}" text-anchor="middle">${t.armies}</text>
+          </g>`;
+        });
+        $('#board').innerHTML =
+          `<svg viewBox="0 0 980 545" preserveAspectRatio="xMidYMid meet">
+            <g>${edges.join('')}</g>${clabels.join('')}${nodes.join('')}
+          </svg>`;
+
+        $('#board').querySelectorAll('.node').forEach((el) => {
+          el.onclick = () => { const t = terr(el.dataset.id); if (selectable(t)) onClick(t); };
+        });
+      }
+
+      $('#newBtn').onclick = newGame;
+      $('#winNew').onclick = newGame;
+      $('#exKey').onchange = renderExercise;
+      $('#logBtn').onclick = async () => {
+        try {
+          const units = Number($('#exUnits').value);
+          const d = await post(`/api/games/${gameId}/exercise`, { exerciseKey: $('#exKey').value, units });
+          game = d.game;
+          const label = (game.exercises.find((e) => e.key === $('#exKey').value) || {}).label;
+          log(`🏃 Logged ${units} ${label} → +${d.deltaTroops} troops (day total ${d.dayTotal}/${game.dailyTotalTroopCap}${d.totalCapApplied ? ' — capped' : ''})`);
+          render();
+        } catch (e) { log('✋ ' + e.message); }
+      };
+      document.querySelectorAll('.modeBtn').forEach((b) => (b.onclick = () => setMode(b.dataset.mode)));
+      $('#endBtn').onclick = async () => { try { const d = await post(`/api/games/${gameId}/end`); game = d.game; fromSel = null; mode = 'reinforce'; log('Ended turn'); render(); } catch (e) { log('✋ ' + e.message); } };
+      $('#expireBtn').onclick = async () => { try { const d = await post(`/api/games/${gameId}/expire`); game = d.game; fromSel = null; log('Auto-resolved current player (defensive)'); render(); } catch (e) { log('✋ ' + e.message); } };
+
+      $('#loginBtn').onclick = () => doAuth('login');
+      $('#signupBtn').onclick = () => doAuth('signup');
+      $('#logoutBtn').onclick = doLogout;
+      $('#joinBtn').onclick = joinGame;
+      $('#authPass').onkeydown = (e) => { if (e.key === 'Enter') doAuth('login'); };
+
+      (async () => {
+        await loadMe();
+        updateAuthUI();
+        if (gameId) await refresh();
+      })();
+
+      // Countdown ticks every second; a gentle poll keeps state fresh (picks up
+      // window auto-resolve, day rollover, and other players' moves).
+      setInterval(tickTimer, 1000);
+      setInterval(() => { if (gameId && currentUser) refresh(); }, 4000);
+    </script>
+  </body>
+</html>

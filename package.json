@@ -1,0 +1,27 @@
+{
+  "name": "exercise-risk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Exercise Risk — daily turn-based Risk where reinforcements are earned via real-world exercise. Core game engine.",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "serve": "tsx src/server/server.ts"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "tsx": "^4.23.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
+    "@electric-sql/pglite": "^0.5.4",
+    "drizzle-orm": "^0.45.2",
+    "express": "^5.2.1",
+    "pg-boss": "^12.25.1",
+    "postgres": "^3.4.9"
+  }
+}
