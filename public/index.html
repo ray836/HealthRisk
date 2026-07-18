@@ -8,7 +8,7 @@
       :root { color-scheme: light dark; --bg:#14161a; --panel:#1e2127; --line:#2c313a; --text:#e7e9ee; --muted:#9aa0a6; }
       * { box-sizing: border-box; }
       body { margin:0; font:14px/1.4 system-ui, sans-serif; background:var(--bg); color:var(--text); }
-      header { padding:12px 16px; border-bottom:1px solid var(--line); display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
+      header { padding:12px 16px; border-bottom:1px solid var(--line); display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
       header h1 { font-size:16px; margin:0; }
       .pill { padding:2px 8px; border-radius:999px; background:var(--panel); border:1px solid var(--line); }
       main { display:grid; grid-template-columns: 260px 1fr; gap:16px; padding:16px; align-items:start; }
@@ -19,7 +19,10 @@
       button.active { outline:2px solid #6ea8fe; }
       button:disabled { opacity:.45; cursor:not-allowed; }
       .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-      .players li { list-style:none; display:flex; align-items:center; gap:8px; padding:3px 0; }
+      .players { margin:0; padding:0; display:grid; gap:7px; }
+      .players li { list-style:none; display:grid; grid-template-columns:12px 1fr; gap:2px 8px; padding:9px; border-radius:8px; background:#20242b; }
+      .players li .dot { grid-row:1 / 3; margin-top:4px; }
+      .playerMeta { grid-column:2; font-size:12px; color:var(--muted); }
       .dot { width:12px; height:12px; border-radius:3px; display:inline-block; }
       .continent { margin-bottom:14px; }
       .continent h3 { margin:0 0 6px; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
@@ -45,6 +48,25 @@
       #winOverlay.show { display:flex; }
       #winOverlay .card { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:28px 40px; text-align:center; }
       #winOverlay h2 { margin:0 0 10px; font-size:26px; }
+      #bonusOverlay { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(10,12,16,.72); z-index:40; }
+      #bonusOverlay.show { display:flex; }
+      #bonusOverlay .card { width:min(420px, calc(100vw - 32px)); background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:24px; }
+      #bonusOverlay h2 { margin:0 0 6px; }
+      #bonusBreakdown { margin:16px 0; padding:0; list-style:none; }
+      #bonusBreakdown li { display:flex; justify-content:space-between; gap:16px; padding:7px 0; border-bottom:1px solid var(--line); }
+      .sectionLabel { margin:14px 0 7px; color:var(--muted); font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; }
+      .actionGrid { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; }
+      .actionGrid button { padding-inline:6px; }
+      details.activity { margin-top:12px; border-top:1px solid var(--line); padding-top:9px; }
+      details.activity summary { cursor:pointer; color:var(--muted); font-size:12px; }
+      #userPanelOverlay { position:fixed; inset:0; display:none; align-items:center; justify-content:flex-end; background:rgba(10,12,16,.64); z-index:45; }
+      #userPanelOverlay.show { display:flex; }
+      #userPanel { width:min(390px, 100vw); height:100%; overflow:auto; background:var(--panel); border-left:1px solid var(--line); padding:22px; box-shadow:-12px 0 30px rgba(0,0,0,.28); }
+      #userPanel header { padding:0 0 18px; border:0; justify-content:space-between; }
+      #userPanel h2 { margin:0; font-size:18px; }
+      .userSection { padding:16px 0; border-top:1px solid var(--line); }
+      .userSection h3 { margin:0 0 5px; font-size:14px; }
+      .userSection p { margin:0 0 12px; }
     </style>
   </head>
   <body>
@@ -62,44 +84,28 @@
           <button id="signupBtn">Sign up</button>
         </span>
         <span class="row" id="authIn" style="display:none">
-          <span class="muted" id="whoami"></span>
-          <label class="muted">Players
-            <select id="newCount"><option>2</option><option>3</option><option>4</option></select>
-          </label>
-          <label class="muted"><input type="checkbox" id="practiceChk" checked /> practice</label>
-          <button id="newBtn">New game</button>
-          <input id="joinCode" placeholder="game code" style="width:100px" />
-          <button id="joinBtn">Join</button>
-          <button id="logoutBtn">Log out</button>
+          <button id="userPanelBtn"><span id="whoami"></span> ▾</button>
         </span>
       </span>
     </header>
 
     <main>
       <aside class="panel">
+        <div class="sectionLabel" style="margin-top:0">Players</div>
         <ul class="players" id="players"></ul>
         <div id="bonusNote" style="display:none"></div>
-        <hr style="border-color:var(--line)" />
-        <div class="row" style="margin-bottom:8px">
+        <div class="sectionLabel">Turn actions</div>
+        <div class="actionGrid">
           <button id="mReinforce" class="modeBtn" data-mode="reinforce">Reinforce</button>
           <button id="mAttack" class="modeBtn" data-mode="attack">Attack</button>
           <button id="mFortify" class="modeBtn" data-mode="fortify">Fortify</button>
         </div>
-        <div class="row" style="margin-bottom:8px">
+        <div class="row" style="margin-top:8px">
           <button id="endBtn">End turn</button>
           <button id="expireBtn" title="Auto-resolve the current player (simulate a missed window)">Auto-resolve</button>
         </div>
-        <div id="exercise" style="border-top:1px solid var(--line); padding-top:8px; margin-bottom:8px">
-          <div class="muted" style="font-size:12px; margin-bottom:4px">🏃 Log exercise → banks troops for the current player</div>
-          <div class="row">
-            <select id="exKey"></select>
-            <input id="exUnits" type="number" min="1" value="1" style="width:56px" />
-            <span id="exUnit" class="muted"></span>
-            <button id="logBtn">Log</button>
-          </div>
-        </div>
         <p class="muted" id="hint" style="min-height:2.4em"></p>
-        <div id="log"></div>
+        <details class="activity"><summary>Game activity</summary><div id="log" style="margin-top:8px"></div></details>
       </aside>
 
       <section class="panel" id="board"></section>
@@ -110,12 +116,50 @@
       <button id="winNew">New game</button>
     </div></div>
 
+    <div id="bonusOverlay"><div class="card">
+      <h2 id="bonusTitle">Reinforcements received</h2>
+      <div class="muted" id="bonusTotal"></div>
+      <ul id="bonusBreakdown"></ul>
+      <button id="bonusClose">Place troops</button>
+    </div></div>
+
+    <div id="userPanelOverlay">
+      <aside id="userPanel">
+        <header><div><div class="muted" style="font-size:12px">Signed in as</div><h2 id="panelWhoami"></h2></div><button id="userPanelClose" aria-label="Close user panel">✕</button></header>
+        <section class="userSection">
+          <h3>Exercise</h3>
+          <p class="muted">Log activity to bank troops for the current player.</p>
+          <div class="row">
+            <select id="exKey"></select>
+            <input id="exUnits" type="number" min="1" value="1" style="width:60px" />
+            <span id="exUnit" class="muted"></span>
+            <button id="logBtn">Log exercise</button>
+          </div>
+        </section>
+        <section class="userSection">
+          <h3>Start a game</h3>
+          <p class="muted">Practice lets you control every player locally.</p>
+          <div class="row">
+            <label class="muted">Players <select id="newCount"><option>2</option><option>3</option><option>4</option></select></label>
+            <label class="muted"><input type="checkbox" id="practiceChk" checked /> Practice mode</label>
+            <button id="newBtn">New game</button>
+          </div>
+        </section>
+        <section class="userSection">
+          <h3>Join a game</h3>
+          <div class="row"><input id="joinCode" placeholder="game code" style="width:140px" /><button id="joinBtn">Join game</button></div>
+        </section>
+        <section class="userSection"><button id="logoutBtn">Log out</button></section>
+      </aside>
+    </div>
+
     <script>
       const $ = (s) => document.querySelector(s);
       let game = null;
       let mode = 'reinforce';
       let fromSel = null;
       let lastTurnKey = null;
+      let lastBonusKey = null;
       let lastExpiryRefreshed = null;
       let gameId = localStorage.getItem('exriskGame');
       let token = localStorage.getItem('exriskToken');
@@ -157,8 +201,13 @@
         const inn = !!currentUser;
         $('#authOut').style.display = inn ? 'none' : '';
         $('#authIn').style.display = inn ? '' : 'none';
-        if (inn) $('#whoami').textContent = '👤 ' + currentUser.username;
+        if (inn) {
+          $('#whoami').textContent = '👤 ' + currentUser.username;
+          $('#panelWhoami').textContent = currentUser.username;
+        }
       }
+
+      function closeUserPanel() { $('#userPanelOverlay').classList.remove('show'); }
 
       async function loadMe() {
         if (!token) { currentUser = null; return; }
@@ -184,6 +233,7 @@
         try { await post('/api/auth/logout'); } catch {}
         token = null; currentUser = null; localStorage.removeItem('exriskToken');
         updateAuthUI();
+        closeUserPanel();
         if (gameId) await refresh(); else if (game) render();
         log('Logged out');
       }
@@ -193,6 +243,7 @@
         const data = await post('/api/games', { players: Number($('#newCount').value), practice: $('#practiceChk').checked });
         gameId = data.id; localStorage.setItem('exriskGame', gameId);
         game = data; fromSel = null; mode = 'reinforce'; lastTurnKey = null; render();
+        closeUserPanel();
         log('New game ' + gameId + ($('#practiceChk').checked ? ' (practice — you control all seats)' : ' — share this code so others can Join'));
       }
 
@@ -203,6 +254,7 @@
           const d = await post('/api/games/' + code + '/join');
           gameId = code; localStorage.setItem('exriskGame', gameId);
           game = d.game; fromSel = null; lastTurnKey = null; render();
+          closeUserPanel();
           log('Joined ' + code + ' as ' + d.seat);
         } catch (e) { log('✋ ' + e.message); }
       }
@@ -261,7 +313,12 @@
             const from = terr(fromSel);
             const commit = Number(prompt(`Commit how many from ${pretty(from.id)}? (max ${from.armies - 1})`, String(from.armies - 1)));
             if (!commit) { fromSel = null; render(); return; }
-            const stop = Number(prompt('Stop-loss (max troops to lose before halting)?', '3')) || 3;
+            const stopInput = prompt(`Stop-loss? Choose 1–${commit} troops.`, String(commit));
+            if (stopInput === null) { fromSel = null; render(); return; }
+            const stop = Number(stopInput);
+            if (!Number.isInteger(stop) || stop < 1 || stop > commit) {
+              throw new Error(`Stop-loss must be a whole number from 1 to ${commit}`);
+            }
             const d = await post(`/api/games/${gameId}/attack`, { fromId: from.id, toId: t.id, committedTroops: commit, stopLoss: stop });
             game = d.game; const r = d.result;
             log(`${pretty(from.id)} → ${pretty(t.id)}: ${r.endReason}${r.captured ? ' (captured!)' : ''} — you lost ${r.totalAttackerLosses}, they lost ${r.totalDefenderLosses} over ${r.rounds.length} round(s)`);
@@ -351,6 +408,24 @@
           if ((game.startBonus || 0) > 0) msg += ` — +${game.startBonus} troops from territory/continent control`;
           log(msg);
         }
+        // Show the current player a once-per-turn award breakdown. The total
+        // and controlled-continent names are captured by the server when the
+        // turn starts, so the popup remains accurate after later attacks.
+        if (game.yourTurn && game.status === 'active' && key !== lastBonusKey) {
+          lastBonusKey = key;
+          const continentByLabel = new Map((game.continents || []).map((c) => [c.label, c]));
+          const controlled = (game.startContinents || []).map((label) => continentByLabel.get(label)).filter(Boolean);
+          const continentTroops = controlled.reduce((sum, c) => sum + c.bonus, 0);
+          const territoryTroops = Math.max(0, (game.startBonus || 0) - continentTroops);
+          const rows = [
+            `<li><span>Territories owned</span><b>+${territoryTroops}</b></li>`,
+            ...controlled.map((c) => `<li><span>${c.label} control</span><b>+${c.bonus}</b></li>`),
+          ];
+          $('#bonusTitle').textContent = `${game.players.find((p) => p.id === game.currentPlayerId)?.name || 'Player'} received reinforcements`;
+          $('#bonusTotal').textContent = `+${game.startBonus || 0} troops at the start of this turn`;
+          $('#bonusBreakdown').innerHTML = rows.join('');
+          $('#bonusOverlay').classList.add('show');
+        }
         // Win overlay.
         const ov = $('#winOverlay');
         if (game.status === 'finished') {
@@ -380,8 +455,9 @@
           const cur = p.id === game.currentPlayerId ? '▶ ' : '';
           const you = mine.has(p.id) ? ' <span style="color:#6ea8fe">(you)</span>' : '';
           const open = !p.claimed ? ' <span class="muted">· open seat</span>' : '';
-          return `<li><span class="dot" style="background:${p.color}"></span>${cur}<b>${p.name}</b>${you}
-            <span class="muted">· ${owned} terr · bank ${p.pendingReinforcements}${p.status !== 'active' ? ' · ' + p.status : ''}</span>${open}</li>`;
+          return `<li><span class="dot" style="background:${p.color}"></span>
+            <div>${cur}<b>${p.name}</b>${you}${open}</div>
+            <div class="playerMeta">${owned} territories · ${p.pendingReinforcements} troops to place${p.status !== 'active' ? ' · ' + p.status : ''}</div></li>`;
         }).join('');
 
         const allowed = allowedModes();
@@ -431,6 +507,7 @@
 
       $('#newBtn').onclick = newGame;
       $('#winNew').onclick = newGame;
+      $('#bonusClose').onclick = () => $('#bonusOverlay').classList.remove('show');
       $('#exKey').onchange = renderExercise;
       $('#logBtn').onclick = async () => {
         try {
@@ -450,6 +527,10 @@
       $('#signupBtn').onclick = () => doAuth('signup');
       $('#logoutBtn').onclick = doLogout;
       $('#joinBtn').onclick = joinGame;
+      $('#userPanelBtn').onclick = () => $('#userPanelOverlay').classList.add('show');
+      $('#userPanelClose').onclick = closeUserPanel;
+      $('#userPanelOverlay').onclick = (e) => { if (e.target === $('#userPanelOverlay')) closeUserPanel(); };
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeUserPanel(); });
       $('#authPass').onkeydown = (e) => { if (e.key === 'Enter') doAuth('login'); };
 
       (async () => {

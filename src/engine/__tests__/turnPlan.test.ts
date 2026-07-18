@@ -66,7 +66,7 @@ describe('applyTurnPlan', () => {
   it('executes a note-style attack and captures a weak neighbor', () => {
     const plan: TurnPlan = {
       placements: [{ territoryId: 'venezuela', count: 5 }], // venezuela -> 15
-      attacks: [{ fromId: 'venezuela', toId: 'brazil', committedTroops: 12, stopLoss: 100 }],
+      attacks: [{ fromId: 'venezuela', toId: 'brazil', committedTroops: 12, stopLoss: 12 }],
     };
     const rep = applyTurnPlan(board(), 'a', plan, 'seed');
     expect(rep.attacks).toHaveLength(1);

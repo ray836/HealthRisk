@@ -21,7 +21,14 @@ describe('combat resolution', () => {
     const r = resolveAttack(20, 20, 2, 'sl');
     expect(r.endReason).toBe('stop_loss');
     expect(r.captured).toBe(false);
-    expect(r.totalAttackerLosses).toBeGreaterThanOrEqual(2);
+    expect(r.totalAttackerLosses).toBe(2);
+  });
+
+  it('never exceeds the declared stop-loss when a round could inflict two losses', () => {
+    for (let i = 0; i < 1_000; i++) {
+      const r = resolveAttack(20, 20, 3, `strict-stop-${i}`);
+      expect(r.totalAttackerLosses).toBeLessThanOrEqual(3);
+    }
   });
 
   it('halts when the attacking force is exhausted (reduced to <= 1)', () => {

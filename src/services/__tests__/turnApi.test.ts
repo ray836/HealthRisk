@@ -62,7 +62,7 @@ describe('TurnApi — full turn', () => {
     expect(r.remainingBank).toBe(0);
     expect((await repo.loadGame('g'))!.territories.find((t) => t.id === 'china')!.armies).toBe(15);
 
-    const result = await api.attack('g', 1, 'a', { fromId: 'china', toId: 'india', committedTroops: 14, stopLoss: 100 });
+    const result = await api.attack('g', 1, 'a', { fromId: 'china', toId: 'india', committedTroops: 14, stopLoss: 14 });
     expect(result.captured).toBe(true);
     expect((await repo.loadGame('g'))!.territories.find((t) => t.id === 'india')!.owner).toBe('a');
 
@@ -120,6 +120,15 @@ describe('TurnApi — full turn', () => {
     await expect(
       api.attack('g', 1, 'a', { fromId: 'china', toId: 'brazil', committedTroops: 3, stopLoss: 2 }),
     ).rejects.toMatchObject({ code: 'not_adjacent' });
+  });
+
+  it('rejects a stop-loss above the number of committed troops', async () => {
+    const { api, repo } = setup();
+    await openDailySession(repo, 'g', 1);
+    await api.placeReinforcements('g', 1, 'a', [{ territoryId: 'china', count: 3 }]);
+    await expect(
+      api.attack('g', 1, 'a', { fromId: 'china', toId: 'india', committedTroops: 3, stopLoss: 4 }),
+    ).rejects.toMatchObject({ code: 'bad_stop_loss' });
   });
 
   it('enforces maxAttacksPerTurn', async () => {

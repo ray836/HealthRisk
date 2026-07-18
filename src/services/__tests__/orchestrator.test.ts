@@ -64,7 +64,7 @@ describe('orchestrator', () => {
       expect(ctx.note).toBe('take india from china');
       return {
         placements: [{ territoryId: 'china', count: 3 }],
-        attacks: [{ fromId: 'china', toId: 'india', committedTroops: 14, stopLoss: 100 }],
+        attacks: [{ fromId: 'china', toId: 'india', committedTroops: 14, stopLoss: 14 }],
       };
     };
 

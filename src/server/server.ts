@@ -31,6 +31,7 @@ import { currentPlayer } from '../engine/turnSession.js';
 import type { GameState } from '../engine/types.js';
 
 const PLAYER_COLORS = ['#e05c4b', '#4b8fe0', '#3fae7a', '#c98a2b', '#8a63d2', '#d0518f'];
+const MIN_PLAYER_WINDOW_MINUTES = 20;
 
 // Assigned in main() before the server accepts requests.
 let repo: GameRepository;
@@ -62,14 +63,31 @@ async function getActor(gameId: string): Promise<{ game: GameState; day: number;
 
 /** Serialize game state for the UI. `viewerId` marks which seat is "you". */
 async function gameView(gameId: string, viewerId?: string) {
-  const day0 = (await repo.loadGame(gameId))?.dayNumber;
-  if (day0 === undefined) return null;
-  const session = await repo.loadSession(gameId, day0);
+  let game = await repo.loadGame(gameId);
+  if (!game) return null;
+  const day0 = game.dayNumber;
+  let session = await repo.loadSession(gameId, day0);
   const playerId = session ? currentPlayer(session) : null;
+
+  // Migrate games created with the old three-minute demo setting. Re-arming
+  // also gives the current player a fresh full window instead of retaining the
+  // shorter persisted deadline.
+  if (game.config.perPlayerWindowMinutes < MIN_PLAYER_WINDOW_MINUTES) {
+    game = {
+      ...game,
+      config: { ...game.config, perPlayerWindowMinutes: MIN_PLAYER_WINDOW_MINUTES },
+    };
+    await repo.saveGame(game);
+    if (playerId) {
+      await scheduler.armNextWindow(gameId, day0);
+      session = await repo.loadSession(gameId, day0);
+    }
+  }
+
   // Starting the turn grants the current player their standard reinforcements.
   if (playerId) await ensureTurnStarted(repo, gameId, day0, playerId);
 
-  const game = (await repo.loadGame(gameId))!;
+  game = (await repo.loadGame(gameId))!;
   const colorOf = new Map(game.players.map((p, i) => [p.id, PLAYER_COLORS[i % PLAYER_COLORS.length]]));
   const turnState = playerId ? await repo.loadTurnState(gameId, game.dayNumber, playerId) : null;
   const members = await repo.listMembers(gameId);
@@ -102,7 +120,7 @@ async function gameView(gameId: string, viewerId?: string) {
     })),
     exercises: game.config.exercises.map((e) => ({ key: e.key, label: e.label, unitLabel: e.unitLabel })),
     dailyTotalTroopCap: game.config.dailyTotalTroopCap,
-    continents: CONTINENTS.map((c) => ({ id: c.id, label: c.label })),
+    continents: CONTINENTS.map((c) => ({ id: c.id, label: c.label, bonus: c.bonus })),
     territories: game.territories.map((t) => ({
       id: t.id,
       owner: t.owner,
@@ -324,9 +342,12 @@ function demoConfig() {
     ],
     dailyTotalTroopCap: 8,
     windowStartMinuteOfDay: 19 * 60,
-    // Demo default 3 min; set EXRISK_WINDOW_MIN (e.g. 0.5 = 30s) to see the
-    // auto-resolve-on-expiry sooner. You can always End turn early.
-    perPlayerWindowMinutes: Number(process.env.EXRISK_WINDOW_MIN ?? 3),
+    // Never shorter than twenty minutes. EXRISK_WINDOW_MIN may make the
+    // window longer; players can always end their turn early.
+    perPlayerWindowMinutes: Math.max(
+      MIN_PLAYER_WINDOW_MINUTES,
+      Number(process.env.EXRISK_WINDOW_MIN ?? MIN_PLAYER_WINDOW_MINUTES) || MIN_PLAYER_WINDOW_MINUTES,
+    ),
     autoForfeitAfterDays: null,
     autoAttackStopLoss: 3,
     maxAttacksPerTurn: null,

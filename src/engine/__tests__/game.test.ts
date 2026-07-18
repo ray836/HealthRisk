@@ -157,7 +157,7 @@ describe('auto-resolution', () => {
     };
     const plan = {
       placements: [{ territoryId: 'china', count: 3 }],
-      attacks: [{ fromId: 'china', toId: 'india', committedTroops: 14, stopLoss: 100 }],
+      attacks: [{ fromId: 'china', toId: 'india', committedTroops: 14, stopLoss: 14 }],
     };
     const res = applyTurnEffect(s, { type: 'auto_resolved', playerId: 'a' }, plan);
     expect(res.autoReport).toBeDefined();

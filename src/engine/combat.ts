@@ -108,7 +108,12 @@ export function resolveAttack(
     let dLost = 0;
     for (let i = 0; i < compares; i++) {
       if (attackerDice[i]! > defenderDice[i]!) dLost++; // defender loses ties-excluded
-      else aLost++; // defender wins ties
+      else {
+        aLost++; // defender wins ties
+        // Stop-loss is a strict casualty ceiling. Dice comparisons are ordered
+        // highest-first, so halt the exchange as soon as that ceiling is hit.
+        if (attackerLosses + aLost >= stopLoss) break;
+      }
     }
     attackerForce -= aLost;
     defenderForce -= dLost;
@@ -156,11 +161,18 @@ export function validateAttack(
   if (from.owner !== attackerId) return { code: 'not_owner', message: 'You do not own the origin' };
   if (to.owner === attackerId) return { code: 'self_attack', message: 'Cannot attack your own territory' };
   if (!areAdjacent(decl.fromId, decl.toId)) return { code: 'not_adjacent', message: 'Territories are not adjacent' };
-  if (decl.committedTroops < 1) return { code: 'no_troops', message: 'Must commit at least 1 troop' };
+  if (!Number.isInteger(decl.committedTroops) || decl.committedTroops < 1) {
+    return { code: 'no_troops', message: 'Committed troops must be a positive whole number' };
+  }
   if (decl.committedTroops > from.armies - 1) {
     return { code: 'must_hold_origin', message: 'Must leave at least 1 army to hold the origin' };
   }
-  if (decl.stopLoss < 1) return { code: 'bad_stop_loss', message: 'Stop-loss must be at least 1' };
+  if (!Number.isInteger(decl.stopLoss) || decl.stopLoss < 1) {
+    return { code: 'bad_stop_loss', message: 'Stop-loss must be a positive whole number' };
+  }
+  if (decl.stopLoss > decl.committedTroops) {
+    return { code: 'bad_stop_loss', message: 'Stop-loss cannot exceed committed troops' };
+  }
   return null;
 }
 
