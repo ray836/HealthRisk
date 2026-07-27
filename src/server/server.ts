@@ -24,12 +24,18 @@ import { InProcessJobQueue } from '../services/scheduling/jobQueue.js';
 import { logExercise } from '../services/exerciseApi.js';
 import { ensureTurnStarted } from '../services/turnStart.js';
 import { buildPlayerDashboard } from '../services/playerDashboard.js';
+import {
+  proposeHealthRules,
+  voteOnHealthRules,
+  withHealthRules,
+  type HealthRulesInput,
+} from '../services/healthRules.js';
 import { signup, login, logout, resolveToken, type PublicUser } from '../services/authApi.js';
 import { claimSeat, claimAllSeats, claimOpenSeat, seatFor } from '../services/membership.js';
 import { createGame } from '../engine/setup.js';
 import { CONTINENTS, CONTINENT_OF, NEIGHBORS } from '../engine/map.js';
 import { currentPlayer } from '../engine/turnSession.js';
-import type { GameState } from '../engine/types.js';
+import type { GameConfig, GameState, HealthRuleGovernance } from '../engine/types.js';
 
 const PLAYER_COLORS = ['#e05c4b', '#4b8fe0', '#3fae7a', '#c98a2b', '#8a63d2', '#d0518f'];
 const MIN_PLAYER_WINDOW_MINUTES = 20;
@@ -111,6 +117,7 @@ async function gameView(gameId: string, viewerId?: string) {
     turnOrder: game.turnOrder,
     currentPlayerId: playerId,
     mySeats,
+    isCreator: mySeats.includes(game.players[0]!.id),
     yourTurn,
     dashboard,
     phase: turnState?.phase ?? 'reinforce',
@@ -127,7 +134,19 @@ async function gameView(gameId: string, viewerId?: string) {
       note: p.standingOrdersNote,
       claimed: seatOwner.has(p.id),
     })),
-    exercises: game.config.exercises.map((e) => ({ key: e.key, label: e.label, unitLabel: e.unitLabel })),
+    exercises: game.config.exercises.map((e) => ({
+      key: e.key,
+      label: e.label,
+      unitLabel: e.unitLabel,
+      category: e.category ?? 'movement',
+      trackingType: e.trackingType ?? 'quantity',
+      troopsPerUnit: e.troopsPerUnit,
+      dailyUnitCap: e.dailyUnitCap,
+    })),
+    categoryTroopCaps: game.config.categoryTroopCaps ?? {},
+    healthRuleGovernance: game.config.healthRuleGovernance ?? 'creator',
+    healthRulesVersion: game.healthRulesVersion ?? 1,
+    pendingHealthRuleProposal: game.pendingHealthRuleProposal ?? null,
     dailyTotalTroopCap: game.config.dailyTotalTroopCap,
     continents: CONTINENTS.map((c) => ({ id: c.id, label: c.label, bonus: c.bonus })),
     territories: game.territories.map((t) => ({
@@ -238,9 +257,19 @@ app.post(
     const practice = Boolean(req.body?.practice);
     const players = Array.from({ length: count }, (_, i) => ({ id: `p${i + 1}`, name: `Player ${i + 1}` }));
     const id = `game-${Math.random().toString(36).slice(2, 8)}`;
-    const game = createGame({ id, config: demoConfig(), players, seed: (Math.random() * 2 ** 31) | 0 });
+    let config = demoConfig();
+    if (req.body?.healthRules) {
+      try {
+        config = withHealthRules(config, req.body.healthRules as HealthRulesInput);
+      } catch (error) {
+        throw new TurnError('bad_health_rules', (error as Error).message);
+      }
+    }
+    const governance: HealthRuleGovernance = req.body?.healthRuleGovernance === 'vote' ? 'vote' : 'creator';
+    config = { ...config, healthRuleGovernance: governance };
+    const game = createGame({ id, config, players, seed: (Math.random() * 2 ** 31) | 0 });
+    game.healthRulesVersion = 1;
     await repo.saveGame(game);
-    for (const p of players) await logExercise(repo, id, 0, p.id, { exerciseKey: 'running', units: 3 });
 
     if (practice) await claimAllSeats(repo, id, players.map((p) => p.id), user.id);
     else await claimSeat(repo, id, 'p1', user.id);
@@ -248,6 +277,44 @@ app.post(
     await openDailySession(repo, id, 0);
     await scheduler.armNextWindow(id, 0);
     res.json(await gameView(id, user.id));
+  }),
+);
+
+app.post(
+  '/api/games/:id/health-rules/propose',
+  asyncH(async (req, res) => {
+    const user = requireUser(req);
+    const id = req.params.id as string;
+    const game = await repo.loadGame(id);
+    if (!game) throw new TurnError('no_game', 'Unknown game');
+    const creatorSeat = game.players[0]!.id;
+    const creator = await repo.getMemberBySeat(id, creatorSeat);
+    if (!creator || creator.userId !== user.id) {
+      throw new TurnError('not_creator', 'Only the game creator can propose health-rule changes');
+    }
+    try {
+      await proposeHealthRules(repo, id, creatorSeat, req.body as HealthRulesInput);
+    } catch (error) {
+      throw new TurnError('bad_health_rules', (error as Error).message);
+    }
+    res.json({ game: await gameView(id, user.id) });
+  }),
+);
+
+app.post(
+  '/api/games/:id/health-rules/vote',
+  asyncH(async (req, res) => {
+    const user = requireUser(req);
+    const id = req.params.id as string;
+    const members = await repo.listMembers(id);
+    const mySeats = members.filter((member) => member.userId === user.id).map((member) => member.playerId);
+    if (!mySeats.length) throw new TurnError('no_seat', 'Join this game before voting');
+    for (const playerId of mySeats) {
+      const latest = await repo.loadGame(id);
+      if (latest?.pendingHealthRuleProposal?.status !== 'pending') break;
+      await voteOnHealthRules(repo, id, playerId, Boolean(req.body?.approve));
+    }
+    res.json({ game: await gameView(id, user.id) });
   }),
 );
 
@@ -342,13 +409,66 @@ app.post(
   }),
 );
 
-function demoConfig() {
+function demoConfig(): GameConfig {
   return {
     exercises: [
-      { key: 'running', label: 'Running', unitLabel: 'mile', troopsPerUnit: 1, dailyUnitCap: 5 },
-      { key: 'cycling', label: 'Cycling', unitLabel: 'mile', troopsPerUnit: 0.25, dailyUnitCap: 40 },
-      { key: 'lifting', label: 'Weightlifting', unitLabel: 'min', troopsPerUnit: 1 / 30, dailyUnitCap: 90 },
+      {
+        key: 'running',
+        label: 'Running',
+        unitLabel: 'mile',
+        category: 'movement',
+        trackingType: 'quantity',
+        troopsPerUnit: 1,
+        dailyUnitCap: 5,
+      },
+      {
+        key: 'cycling',
+        label: 'Cycling',
+        unitLabel: 'mile',
+        category: 'movement',
+        trackingType: 'quantity',
+        troopsPerUnit: 0.25,
+        dailyUnitCap: 40,
+      },
+      {
+        key: 'lifting',
+        label: 'Weightlifting',
+        unitLabel: 'min',
+        category: 'movement',
+        trackingType: 'duration',
+        troopsPerUnit: 1 / 30,
+        dailyUnitCap: 90,
+      },
+      {
+        key: 'vegetables',
+        label: 'Vegetable goal',
+        unitLabel: 'completion',
+        category: 'nutrition',
+        trackingType: 'checkbox',
+        troopsPerUnit: 1,
+        dailyUnitCap: 1,
+      },
+      {
+        key: 'balanced-meals',
+        label: 'Balanced meals',
+        unitLabel: 'completion',
+        category: 'nutrition',
+        trackingType: 'checkbox',
+        troopsPerUnit: 1,
+        dailyUnitCap: 1,
+      },
+      {
+        key: 'sleep',
+        label: 'Sleep goal',
+        unitLabel: 'completion',
+        category: 'recovery',
+        trackingType: 'checkbox',
+        troopsPerUnit: 1,
+        dailyUnitCap: 1,
+      },
     ],
+    categoryTroopCaps: { movement: 6, nutrition: 2, recovery: 1 },
+    healthRuleGovernance: 'creator',
     dailyTotalTroopCap: 8,
     windowStartMinuteOfDay: 19 * 60,
     // Never shorter than twenty minutes. EXRISK_WINDOW_MIN may make the

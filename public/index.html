@@ -59,9 +59,15 @@
       .win { color:#3fae7a; font-weight:700; }
       #board { background:#181f28; border-color:#34465a; }
       #board svg { width:100%; height:auto; display:block; background:#0f151d; border:1px solid #263545; border-radius:9px; }
-      #board svg .edge { stroke:#333a45; stroke-width:1.5; }
-      #board svg .clabel { fill:#4d5560; font-size:12px; letter-spacing:.14em; text-transform:uppercase; }
-      #board svg .tlabel { fill:#c3c8d0; font-size:9.5px; pointer-events:none; }
+      #board svg .landBase { fill:#17212c; pointer-events:none; }
+      #board svg .continentRegion { fill-opacity:.26; stroke:none; pointer-events:none; }
+      #board svg .continentRegion.controlled { fill-opacity:.42; }
+      #board svg .coastline { fill:none; stroke:#758699; stroke-width:1.15; stroke-opacity:.78; stroke-linecap:round; stroke-linejoin:round; vector-effect:non-scaling-stroke; pointer-events:none; }
+      #board svg .edge { fill:none; stroke:#526174; stroke-width:1.25; stroke-opacity:.78; vector-effect:non-scaling-stroke; }
+      #board svg .edge.ocean { stroke:#6d7f94; stroke-dasharray:4 4; stroke-opacity:.72; }
+      #board svg .clabel { font-size:12px; font-weight:650; letter-spacing:.14em; text-transform:uppercase; pointer-events:none; }
+      #board svg .cowner { fill:#aab3bf; font-size:8px; font-weight:650; letter-spacing:.05em; text-transform:uppercase; pointer-events:none; }
+      #board svg .tlabel { fill:#d0d7e1; stroke:#0f151d; stroke-width:3px; paint-order:stroke; stroke-linejoin:round; font-size:9px; pointer-events:none; }
       #board svg .tcount { fill:#0c0e12; font-weight:700; font-size:13px; pointer-events:none; }
       #board svg .node { cursor:default; }
       #board svg .node.can { cursor:pointer; }
@@ -129,6 +135,19 @@
       .userSection { padding:16px 0; border-top:1px solid var(--line); }
       .userSection h3 { margin:0 0 5px; font-size:14px; }
       .userSection p { margin:0 0 12px; }
+      .ruleEditor { display:grid; gap:10px; margin:10px 0; }
+      .ruleCard { padding:12px; border:1px solid #343b47; border-radius:10px; background:#171b22; }
+      .ruleCardTop { display:flex; gap:8px; align-items:center; margin-bottom:9px; }
+      .ruleCardTop input { min-width:0; flex:1; font-weight:700; }
+      .ruleFields { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+      .ruleFields label, .capGrid label { display:grid; gap:4px; color:var(--muted); font-size:11px; }
+      .ruleFields input, .ruleFields select, .capGrid input { width:100%; min-width:0; box-sizing:border-box; }
+      .capGrid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:10px 0; }
+      .ruleRemove { padding:6px 9px; color:#e98b80; }
+      .panelDetails { border:1px solid #343b47; border-radius:10px; padding:10px 12px; margin:12px 0; }
+      .panelDetails summary { cursor:pointer; font-weight:700; }
+      .voteBox { padding:12px; border:1px solid #6b572b; background:#242015; border-radius:10px; }
+      .categoryTag { text-transform:capitalize; color:#8ebcff; font-size:11px; }
     </style>
   </head>
   <body>
@@ -238,14 +257,15 @@
       <aside id="userPanel">
         <header><div><div class="muted" style="font-size:12px">Signed in as</div><h2 id="panelWhoami"></h2></div><button id="userPanelClose" aria-label="Close user panel">✕</button></header>
         <section class="userSection">
-          <h3>Exercise</h3>
-          <p class="muted">Log activity to bank troops for the current player.</p>
+          <h3>Health goals</h3>
+          <p class="muted">Log a goal to bank troops for the current player.</p>
           <div class="row">
             <select id="exKey"></select>
             <input id="exUnits" type="number" min="1" value="1" style="width:60px" />
             <span id="exUnit" class="muted"></span>
-            <button id="logBtn">Log exercise</button>
+            <button id="logBtn">Log goal</button>
           </div>
+          <div id="healthLogHelp" class="muted" style="font-size:11px;margin-top:8px"></div>
         </section>
         <section class="userSection">
           <h3>Start a game</h3>
@@ -253,9 +273,32 @@
           <div class="row">
             <label class="muted">Players <select id="newCount"><option>2</option><option>3</option><option>4</option></select></label>
             <label class="muted"><input type="checkbox" id="practiceChk" checked /> Practice mode</label>
+          </div>
+          <details class="panelDetails">
+            <summary>Health rules</summary>
+            <p class="muted" style="margin-top:10px">Movement is the main bonus. Nutrition and recovery add smaller rewards.</p>
+            <div id="ruleEditor" class="ruleEditor"></div>
+            <button id="addRuleBtn" type="button">+ Add goal</button>
+            <div class="capGrid">
+              <label>Movement cap<input id="movementCap" type="number" min="1" step="1" value="6" /></label>
+              <label>Nutrition cap<input id="nutritionCap" type="number" min="1" step="1" value="2" /></label>
+              <label>Recovery cap<input id="recoveryCap" type="number" min="1" step="1" value="1" /></label>
+              <label>Overall daily cap<input id="dailyCap" type="number" min="1" step="1" value="8" /></label>
+            </div>
+            <label class="muted">Mid-game changes
+              <select id="governance">
+                <option value="creator">Creator decides</option>
+                <option value="vote">Players vote</option>
+              </select>
+            </label>
+          </details>
+          <div class="row">
             <button id="newBtn">New game</button>
+            <button id="loadRulesBtn" type="button" style="display:none">Load current rules</button>
+            <button id="proposeRulesBtn" type="button" style="display:none">Propose changes</button>
           </div>
         </section>
+        <section id="healthVoteSection" class="userSection" style="display:none"></section>
         <section class="userSection">
           <h3>Join a game</h3>
           <div class="row"><input id="joinCode" placeholder="game code" style="width:140px" /><button id="joinBtn">Join game</button></div>
@@ -264,6 +307,7 @@
       </aside>
     </div>
 
+    <script src="/world-map-data.js"></script>
     <script>
       const $ = (s) => document.querySelector(s);
       let game = null;
@@ -277,27 +321,162 @@
       let gameId = localStorage.getItem('exriskGame');
       let token = localStorage.getItem('exriskToken');
       let currentUser = null;
+      let ruleDraft = [
+        { key:'running', label:'Running', category:'movement', trackingType:'quantity', unitLabel:'mile', troopsPerUnit:1, dailyUnitCap:5 },
+        { key:'cycling', label:'Cycling', category:'movement', trackingType:'quantity', unitLabel:'mile', troopsPerUnit:.25, dailyUnitCap:40 },
+        { key:'lifting', label:'Weightlifting', category:'movement', trackingType:'duration', unitLabel:'min', troopsPerUnit:1/30, dailyUnitCap:90 },
+        { key:'vegetables', label:'Vegetable goal', category:'nutrition', trackingType:'checkbox', unitLabel:'completion', troopsPerUnit:1, dailyUnitCap:1 },
+        { key:'balanced-meals', label:'Balanced meals', category:'nutrition', trackingType:'checkbox', unitLabel:'completion', troopsPerUnit:1, dailyUnitCap:1 },
+        { key:'sleep', label:'Sleep goal', category:'recovery', trackingType:'checkbox', unitLabel:'completion', troopsPerUnit:1, dailyUnitCap:1 },
+      ];
       const authHeaders = () => (token ? { Authorization: 'Bearer ' + token } : {});
 
-      // Geographic-ish layout on a 980x540 board (roughly matches the Risk map).
-      const POS = {
-        alaska:[70,95], northwest_territory:[150,90], greenland:[300,60], alberta:[145,150],
-        ontario:[215,150], quebec:[290,135], western_us:[155,215], eastern_us:[235,210], central_america:[175,280],
-        venezuela:[245,345], peru:[245,420], brazil:[325,400], argentina:[265,485],
-        iceland:[400,105], great_britain:[400,175], scandinavia:[485,80], northern_europe:[475,165],
-        western_europe:[420,245], southern_europe:[505,225], ukraine:[565,135],
-        north_africa:[455,335], egypt:[525,315], east_africa:[565,385], congo:[515,415], south_africa:[515,485], madagascar:[600,460],
-        ural:[645,125], siberia:[705,90], yakutsk:[785,70], kamchatka:[890,95], irkutsk:[765,145],
-        mongolia:[795,200], japan:[900,205], afghanistan:[655,210], china:[770,245], middle_east:[605,275], india:[705,300], siam:[800,315],
-        indonesia:[805,395], new_guinea:[900,400], western_australia:[825,480], eastern_australia:[905,480],
+      const MAP_BOUNDS = { west:-180, east:180, north:82, south:-58, padX:18, padY:14, width:980, height:545 };
+      const GEO_POS = {
+        alaska:[-150,64], northwest_territory:[-117,64], greenland:[-42,72], alberta:[-115,53],
+        ontario:[-85,50], quebec:[-68,52], western_us:[-113,39], eastern_us:[-82,38], central_america:[-96,18],
+        venezuela:[-66,7], peru:[-75,-10], brazil:[-52,-13], argentina:[-65,-38],
+        iceland:[-19,65], great_britain:[-4,55], scandinavia:[18,62], northern_europe:[16,53],
+        western_europe:[-4,46], southern_europe:[18,42], ukraine:[32,49],
+        north_africa:[-5,28], egypt:[30,27], east_africa:[38,4], congo:[23,-4], south_africa:[24,-29], madagascar:[47,-19],
+        ural:[60,60], siberia:[95,65], yakutsk:[125,66], kamchatka:[160,58], irkutsk:[105,54],
+        mongolia:[106,46], japan:[138,37], afghanistan:[67,34], china:[104,34], middle_east:[45,29], india:[78,21], siam:[101,14],
+        indonesia:[115,-3], new_guinea:[145,-6], western_australia:[118,-26], eastern_australia:[147,-26],
       };
-      const CONT_LABELS = [
-        ['NORTH AMERICA',160,30],['SOUTH AMERICA',235,520],['EUROPE',430,45],
-        ['AFRICA',455,520],['ASIA',815,30],['AUSTRALIA',845,435],
+      const POS_NUDGE = {
+        greenland:[-2,4], great_britain:[-5,3], western_europe:[-7,5],
+        northern_europe:[-2,2], southern_europe:[3,4], ukraine:[5,0],
+        middle_east:[-2,5], egypt:[-3,-3], japan:[5,1],
+      };
+      function mapPoint([longitude, latitude]) {
+        const width = MAP_BOUNDS.width - MAP_BOUNDS.padX * 2;
+        const height = MAP_BOUNDS.height - MAP_BOUNDS.padY * 2;
+        return [
+          MAP_BOUNDS.padX + ((longitude - MAP_BOUNDS.west) / (MAP_BOUNDS.east - MAP_BOUNDS.west)) * width,
+          MAP_BOUNDS.padY + ((MAP_BOUNDS.north - latitude) / (MAP_BOUNDS.north - MAP_BOUNDS.south)) * height,
+        ];
+      }
+      const POS = Object.fromEntries(Object.entries(GEO_POS).map(([id, point]) => {
+        const [x, y] = mapPoint(point);
+        const [dx, dy] = POS_NUDGE[id] || [0, 0];
+        return [id, [Math.round(x + dx), Math.round(y + dy)]];
+      }));
+      const CONTINENT_REGIONS = [
+        { id:'north_america', label:'NORTH AMERICA', color:'#5a9bd5', x:105, y:50 },
+        { id:'south_america', label:'SOUTH AMERICA', color:'#55b58f', x:218, y:493 },
+        { id:'europe', label:'EUROPE', color:'#9a83d3', x:470, y:48 },
+        { id:'africa', label:'AFRICA', color:'#d49a52', x:466, y:474 },
+        { id:'asia', label:'ASIA', color:'#d16f83', x:740, y:52 },
+        { id:'australia', label:'AUSTRALIA', color:'#55aaa8', x:818, y:466 },
       ];
+      const OCEAN_EDGES = new Set([
+        'alaska|kamchatka', 'greenland|iceland', 'brazil|north_africa',
+        'east_africa|madagascar', 'south_africa|madagascar',
+        'kamchatka|japan', 'mongolia|japan', 'indonesia|siam',
+        'indonesia|new_guinea', 'indonesia|western_australia',
+        'eastern_australia|new_guinea',
+      ]);
+      function mapEdgePath(fromId, toId, from, to, key) {
+        if (key === 'alaska|kamchatka') {
+          const alaska = fromId === 'alaska' ? from : to;
+          const kamchatka = fromId === 'kamchatka' ? from : to;
+          const top = Math.min(alaska[1], kamchatka[1]);
+          return `M${alaska[0]},${alaska[1]} Q45,${top - 18} 18,${top - 8}
+            M962,${top - 8} Q935,${top - 18} ${kamchatka[0]},${kamchatka[1]}`;
+        }
+        if (!OCEAN_EDGES.has(key)) return `M${from[0]},${from[1]} L${to[0]},${to[1]}`;
+        const dx = to[0] - from[0];
+        const dy = to[1] - from[1];
+        const length = Math.max(1, Math.hypot(dx, dy));
+        const bend = Math.min(38, length * .18);
+        const direction = ['greenland|iceland', 'brazil|north_africa', 'indonesia|siam'].includes(key) ? -1 : 1;
+        const controlX = (from[0] + to[0]) / 2 + (-dy / length) * bend * direction;
+        const controlY = (from[1] + to[1]) / 2 + (dx / length) * bend * direction;
+        return `M${from[0]},${from[1]} Q${controlX.toFixed(1)},${controlY.toFixed(1)} ${to[0]},${to[1]}`;
+      }
 
       const pretty = (id) => id.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+      const esc = (value) => String(value ?? '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
       const log = (msg) => { $('#log').textContent = msg + '\n' + $('#log').textContent; };
+
+      function readHealthRulesEditor() {
+        const exercises = [...document.querySelectorAll('.ruleCard')].map((card) => {
+          const value = (field) => card.querySelector(`[data-field="${field}"]`).value;
+          const trackingType = value('trackingType');
+          return {
+            key: value('label'),
+            label: value('label'),
+            category: value('category'),
+            trackingType,
+            unitLabel: trackingType === 'checkbox' ? 'completion' : value('unitLabel'),
+            troopsPerUnit: Number(value('troopsPerUnit')),
+            dailyUnitCap: trackingType === 'checkbox' ? 1 : Number(value('dailyUnitCap')),
+          };
+        });
+        return {
+          exercises,
+          categoryTroopCaps: {
+            movement: Number($('#movementCap').value),
+            nutrition: Number($('#nutritionCap').value),
+            recovery: Number($('#recoveryCap').value),
+          },
+          dailyTotalTroopCap: Number($('#dailyCap').value),
+        };
+      }
+
+      function renderRuleEditor() {
+        $('#ruleEditor').innerHTML = ruleDraft.map((rule, index) => {
+          const checkbox = rule.trackingType === 'checkbox';
+          const rate = Number(rule.troopsPerUnit.toFixed ? rule.troopsPerUnit.toFixed(3) : rule.troopsPerUnit);
+          return `<div class="ruleCard" data-index="${index}">
+            <div class="ruleCardTop">
+              <input data-field="label" value="${esc(rule.label)}" aria-label="Goal name" />
+              <button class="ruleRemove" type="button" data-remove="${index}" aria-label="Remove goal">Remove</button>
+            </div>
+            <div class="ruleFields">
+              <label>Category<select data-field="category">
+                <option value="movement"${rule.category === 'movement' ? ' selected' : ''}>Movement</option>
+                <option value="nutrition"${rule.category === 'nutrition' ? ' selected' : ''}>Nutrition</option>
+                <option value="recovery"${rule.category === 'recovery' ? ' selected' : ''}>Recovery</option>
+              </select></label>
+              <label>Track as<select data-field="trackingType">
+                <option value="quantity"${rule.trackingType === 'quantity' ? ' selected' : ''}>Quantity</option>
+                <option value="duration"${rule.trackingType === 'duration' ? ' selected' : ''}>Duration</option>
+                <option value="checkbox"${checkbox ? ' selected' : ''}>Done / not done</option>
+              </select></label>
+              <label>Unit<input data-field="unitLabel" value="${esc(rule.unitLabel)}" ${checkbox ? 'disabled' : ''} /></label>
+              <label>Troops per unit<input data-field="troopsPerUnit" type="number" min=".01" step=".01" value="${rate}" /></label>
+              <label>Daily unit limit<input data-field="dailyUnitCap" type="number" min="1" step="1" value="${rule.dailyUnitCap ?? 1}" ${checkbox ? 'disabled' : ''} /></label>
+            </div>
+          </div>`;
+        }).join('');
+        document.querySelectorAll('[data-remove]').forEach((button) => {
+          button.onclick = () => {
+            ruleDraft = readHealthRulesEditor().exercises;
+            ruleDraft.splice(Number(button.dataset.remove), 1);
+            renderRuleEditor();
+          };
+        });
+        document.querySelectorAll('[data-field="trackingType"]').forEach((select) => {
+          select.onchange = () => {
+            ruleDraft = readHealthRulesEditor().exercises;
+            renderRuleEditor();
+          };
+        });
+      }
+
+      function loadCurrentRules() {
+        if (!game) return;
+        ruleDraft = game.exercises.map((rule) => ({ ...rule }));
+        $('#movementCap').value = game.categoryTroopCaps.movement ?? game.dailyTotalTroopCap;
+        $('#nutritionCap').value = game.categoryTroopCaps.nutrition ?? game.dailyTotalTroopCap;
+        $('#recoveryCap').value = game.categoryTroopCaps.recovery ?? game.dailyTotalTroopCap;
+        $('#dailyCap').value = game.dailyTotalTroopCap;
+        $('#governance').value = game.healthRuleGovernance;
+        renderRuleEditor();
+      }
 
       async function post(path, body) {
         const r = await fetch(path, {
@@ -381,11 +560,40 @@
 
       async function newGame() {
         if (!currentUser) { log('✋ Log in first'); return; }
-        const data = await post('/api/games', { players: Number($('#newCount').value), practice: $('#practiceChk').checked });
+        const healthRules = readHealthRulesEditor();
+        const data = await post('/api/games', {
+          players: Number($('#newCount').value),
+          practice: $('#practiceChk').checked,
+          healthRules,
+          healthRuleGovernance: $('#governance').value,
+        });
         gameId = data.id; localStorage.setItem('exriskGame', gameId);
         game = data; fromSel = null; mode = 'reinforce'; lastTurnKey = null; render();
         closeUserPanel();
         log('New game ' + gameId + ($('#practiceChk').checked ? ' (practice — you control all seats)' : ' — share this code so others can Join'));
+      }
+
+      async function proposeRules() {
+        if (!gameId || !game?.isCreator) return;
+        try {
+          const data = await post(`/api/games/${gameId}/health-rules/propose`, readHealthRulesEditor());
+          game = data.game;
+          render();
+          log(`Health-rule changes proposed for day ${game.dayNumber + 1}`);
+        } catch (error) {
+          log('Health rules: ' + error.message);
+        }
+      }
+
+      async function voteRules(approve) {
+        try {
+          const data = await post(`/api/games/${gameId}/health-rules/vote`, { approve });
+          game = data.game;
+          render();
+          log(approve ? 'Voted to approve the health-rule change' : 'Voted against the health-rule change');
+        } catch (error) {
+          log('Health-rule vote: ' + error.message);
+        }
       }
 
       async function joinGame() {
@@ -402,9 +610,14 @@
 
       async function refresh() {
         if (!gameId) return;
-        const r = await fetch('/api/games/' + gameId, { headers: authHeaders() });
-        if (!r.ok) { return; }
-        game = await r.json(); render();
+        try {
+          const r = await fetch('/api/games/' + gameId, { headers: authHeaders() });
+          if (!r.ok) return;
+          game = await r.json();
+          render();
+        } catch {
+          if (game) $('#statusPill').textContent = 'Reconnecting...';
+        }
       }
 
       function terr(id) { return game.territories.find((t) => t.id === id); }
@@ -616,13 +829,23 @@
       function renderExercise() {
         const sel = $('#exKey');
         const exs = game.exercises || [];
-        if (sel.options.length !== exs.length) {
-          sel.innerHTML = exs.map((e) => `<option value="${e.key}">${e.label}</option>`).join('');
-        }
+        const previous = sel.value;
+        sel.innerHTML = exs.map((e) =>
+          `<option value="${esc(e.key)}">${pretty(e.category)} - ${esc(e.label)}</option>`
+        ).join('');
+        if (exs.some((e) => e.key === previous)) sel.value = previous;
         const cur = exs.find((e) => e.key === sel.value) || exs[0];
-        $('#exUnit').textContent = cur ? cur.unitLabel + '(s)' : '';
+        const checkbox = cur?.trackingType === 'checkbox';
+        $('#exUnits').style.display = checkbox ? 'none' : '';
+        $('#exUnit').textContent = cur && !checkbox ? cur.unitLabel + '(s)' : '';
+        $('#logBtn').textContent = checkbox ? 'Mark complete' : 'Log goal';
+        const progress = game.dashboard?.exercise?.progress?.find((item) => item.key === cur?.key);
+        const completed = checkbox && (progress?.unitsLogged ?? 0) >= 1;
+        $('#healthLogHelp').textContent = cur
+          ? `${pretty(cur.category)}: ${cur.troopsPerUnit} troop${cur.troopsPerUnit === 1 ? '' : 's'} per ${cur.unitLabel}${completed ? ' - completed today' : ''}`
+          : '';
         const active = !!game.yourTurn && game.status === 'active';
-        $('#logBtn').disabled = !active;
+        $('#logBtn').disabled = !active || completed;
         $('#exKey').disabled = !active;
         $('#exUnits').disabled = !active;
       }
@@ -684,7 +907,7 @@
           ? `<details class="disclosure dashboardDisclosure" open>
               <summary><span>Reinforcements</span><span class="summaryMeta">${d.availableReinforcements} available</span></summary>
               <div class="disclosureBody">
-                <div class="incomeRow"><span>Exercise bank</span><b>+${d.turnStart.exerciseTroops}</b></div>
+                <div class="incomeRow"><span>Health-goal bank</span><b>+${d.turnStart.exerciseTroops}</b></div>
                 <div class="incomeRow"><span>Territory + continents</span><b>+${d.turnStart.territoryAndContinentTroops}</b></div>
               </div>
             </details>`
@@ -695,10 +918,12 @@
         const exerciseRows = d.exercise.progress.map((x) => {
           const cap = x.unitCap;
           const pct = cap ? Math.min(100, (x.countedUnits / cap) * 100) : (x.unitsLogged ? 100 : 0);
-          const units = cap === null ? `${x.unitsLogged}` : `${x.countedUnits}/${cap}`;
+          const units = x.trackingType === 'checkbox'
+            ? (x.unitsLogged >= 1 ? 'Complete' : 'Not complete')
+            : (cap === null ? `${x.unitsLogged}` : `${x.countedUnits}/${cap} ${x.unitLabel}${x.countedUnits === 1 ? '' : 's'}`);
           const troops = Number.isInteger(x.troopsEarned) ? x.troopsEarned : x.troopsEarned.toFixed(1);
           return `<div class="exerciseRow">
-            <div class="exerciseRowTop"><span>${x.label}: ${units} ${x.unitLabel}${x.countedUnits === 1 ? '' : 's'}</span><b>${troops} troops</b></div>
+            <div class="exerciseRowTop"><span><span class="categoryTag">${x.category}</span><br>${x.label}: ${units}</span><b>${troops} troops</b></div>
             <div class="progress"><span style="width:${pct}%"></span></div>
           </div>`;
         }).join('');
@@ -718,9 +943,48 @@
           </div>
           ${turnStart}
           <details class="disclosure dashboardDisclosure">
-            <summary><span>Today's exercise</span><span class="summaryMeta">${d.exercise.totalTroops}/${d.exercise.dailyCap} troops</span></summary>
+            <summary><span>Today's health goals</span><span class="summaryMeta">${d.exercise.totalTroops}/${d.exercise.dailyCap} troops</span></summary>
             <div class="disclosureBody">${exerciseRows}</div>
           </details>`;
+      }
+
+      function renderHealthRuleControls() {
+        const loadButton = $('#loadRulesBtn');
+        const proposeButton = $('#proposeRulesBtn');
+        loadButton.style.display = game?.isCreator ? '' : 'none';
+        proposeButton.style.display = game?.isCreator ? '' : 'none';
+        if (!game) return;
+
+        const section = $('#healthVoteSection');
+        section.style.display = '';
+        const caps = ['movement', 'nutrition', 'recovery']
+          .filter((category) => game.categoryTroopCaps?.[category] !== undefined)
+          .map((category) => `${pretty(category)} ${game.categoryTroopCaps[category]}`)
+          .join(' / ');
+        const proposal = game.pendingHealthRuleProposal;
+        let proposalHtml = '';
+        if (proposal) {
+          const yes = Object.values(proposal.votes).filter((vote) => vote === true).length;
+          const no = Object.values(proposal.votes).filter((vote) => vote === false).length;
+          const unvoted = (game.mySeats || []).some((seat) => proposal.votes[seat] === undefined);
+          const statusText = proposal.status === 'approved'
+            ? `Approved - starts on day ${proposal.effectiveDay}`
+            : proposal.status === 'rejected'
+              ? 'Not approved'
+              : `Vote in progress - ${yes} yes, ${no} no`;
+          proposalHtml = `<div class="voteBox">
+            <b>${statusText}</b>
+            <p class="muted">${proposal.exercises.length} goals, overall cap ${proposal.dailyTotalTroopCap}. Changes never take effect partway through a day.</p>
+            ${proposal.status === 'pending' && unvoted
+              ? '<div class="row"><button id="approveRulesBtn">Approve</button><button id="rejectRulesBtn">Vote no</button></div>'
+              : ''}
+          </div>`;
+        }
+        section.innerHTML = `<h3>Current game rules</h3>
+          <p class="muted">${game.exercises.length} goals - ${caps || 'no category caps'} - overall cap ${game.dailyTotalTroopCap}. Mid-game changes: ${game.healthRuleGovernance === 'vote' ? 'majority vote' : 'creator decides'}.</p>
+          ${proposalHtml}`;
+        if ($('#approveRulesBtn')) $('#approveRulesBtn').onclick = () => voteRules(true);
+        if ($('#rejectRulesBtn')) $('#rejectRulesBtn').onclick = () => voteRules(false);
       }
 
       function render() {
@@ -729,6 +993,7 @@
         renderMeta();
         renderDashboard();
         renderExercise();
+        renderHealthRuleControls();
         $('#dayPill').textContent = 'Day ' + game.dayNumber;
         const cur = game.players.find((p) => p.id === game.currentPlayerId);
         $('#turnPill').innerHTML = cur ? `Turn: <b style="color:${cur.color}">${cur.name}</b> · ${game.phase}` : 'Turn: —';
@@ -766,26 +1031,45 @@
             if (seen.has(key)) continue;
             seen.add(key);
             const a = POS[t.id], b = POS[n];
-            if (a && b) edges.push(`<line class="edge" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/>`);
+            if (a && b) {
+              const ocean = OCEAN_EDGES.has(key);
+              edges.push(`<path class="edge${ocean ? ' ocean' : ''}" d="${mapEdgePath(t.id, n, a, b, key)}"/>`);
+            }
           }
         }
-        const clabels = CONT_LABELS.map(([txt, x, y]) => `<text class="clabel" x="${x}" y="${y}">${txt}</text>`);
+        const mapData = globalThis.WORLD_MAP_DATA || { regions:{}, coastline:'' };
+        const continentRegions = CONTINENT_REGIONS.map((region) => {
+          const territories = game.territories.filter((territory) => territory.continent === region.id);
+          const owners = new Set(territories.map((territory) => territory.owner));
+          const ownerId = territories.length && owners.size === 1 ? territories[0].owner : null;
+          const controller = ownerId ? game.players.find((player) => player.id === ownerId) : null;
+          return `<g>
+            <path class="continentRegion${controller ? ' controlled' : ''}" d="${mapData.regions[region.id] || ''}" fill="${region.color}" fill-rule="evenodd"/>
+            <text class="clabel" x="${region.x}" y="${region.y}" fill="${region.color}">${region.label}</text>
+            ${controller
+              ? `<text class="cowner" x="${region.x}" y="${region.y + 12}">&#9679; ${esc(controller.name)} controls</text>`
+              : ''}
+          </g>`;
+        });
         const nodes = game.territories.map((t) => {
           const p = POS[t.id]; if (!p) return '';
           const [x, y] = p;
           const can = selectable(t), sel = t.id === fromSel;
           const stroke = sel ? '#ffd166' : can ? '#eef1f6' : 'transparent';
           const sw = sel ? 3 : can ? 2 : 1;
-          const op = can || sel ? 1 : 0.55;
+          const op = can || sel ? 1 : 0.78;
           return `<g class="node${can ? ' can' : ''}" data-id="${t.id}" opacity="${op}">
-            <text class="tlabel" x="${x}" y="${y - 21}" text-anchor="middle">${pretty(t.id)}</text>
-            <circle cx="${x}" cy="${y}" r="16" fill="${t.color}" stroke="${stroke}" stroke-width="${sw}"/>
-            <text class="tcount" x="${x}" y="${y + 5}" text-anchor="middle">${t.armies}</text>
+            <text class="tlabel" x="${x}" y="${y - 18}" text-anchor="middle">${pretty(t.id)}</text>
+            <circle cx="${x}" cy="${y}" r="13.5" fill="${t.color}" stroke="${stroke}" stroke-width="${sw}"/>
+            <text class="tcount" x="${x}" y="${y + 4.5}" text-anchor="middle">${t.armies}</text>
           </g>`;
         });
         $('#board').innerHTML =
           `<svg viewBox="0 0 980 545" preserveAspectRatio="xMidYMid meet">
-            <g>${edges.join('')}</g>${clabels.join('')}${nodes.join('')}
+            <path class="landBase" d="${mapData.coastline}" fill-rule="evenodd"/>
+            <g>${continentRegions.join('')}</g>
+            <path class="coastline" d="${mapData.coastline}"/>
+            <g>${edges.join('')}</g>${nodes.join('')}
           </svg>`;
 
       }
@@ -839,7 +1123,8 @@
       $('#exKey').onchange = renderExercise;
       $('#logBtn').onclick = async () => {
         try {
-          const units = Number($('#exUnits').value);
+          const selectedGoal = game.exercises.find((e) => e.key === $('#exKey').value);
+          const units = selectedGoal?.trackingType === 'checkbox' ? 1 : Number($('#exUnits').value);
           const d = await post(`/api/games/${gameId}/exercise`, { exerciseKey: $('#exKey').value, units });
           game = d.game;
           const label = (game.exercises.find((e) => e.key === $('#exKey').value) || {}).label;
@@ -855,6 +1140,22 @@
       $('#signupBtn').onclick = () => doAuth('signup');
       $('#logoutBtn').onclick = doLogout;
       $('#joinBtn').onclick = joinGame;
+      $('#addRuleBtn').onclick = () => {
+        ruleDraft = readHealthRulesEditor().exercises;
+        if (ruleDraft.length >= 12) return;
+        ruleDraft.push({
+          key: `goal-${ruleDraft.length + 1}`,
+          label: `New goal ${ruleDraft.length + 1}`,
+          category: 'movement',
+          trackingType: 'quantity',
+          unitLabel: 'unit',
+          troopsPerUnit: 1,
+          dailyUnitCap: 1,
+        });
+        renderRuleEditor();
+      };
+      $('#loadRulesBtn').onclick = loadCurrentRules;
+      $('#proposeRulesBtn').onclick = proposeRules;
       $('#userPanelBtn').onclick = () => $('#userPanelOverlay').classList.add('show');
       $('#userPanelClose').onclick = closeUserPanel;
       $('#userPanelOverlay').onclick = (e) => { if (e.target === $('#userPanelOverlay')) closeUserPanel(); };
@@ -862,6 +1163,7 @@
       $('#authPass').onkeydown = (e) => { if (e.key === 'Enter') doAuth('login'); };
 
       (async () => {
+        renderRuleEditor();
         await loadMe();
         updateAuthUI();
         if (gameId) await refresh();

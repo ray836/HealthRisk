@@ -52,6 +52,27 @@ describe('earnedTroops', () => {
     const r = earnedTroops(config, [{ exerciseKey: 'yoga', units: 100 }]);
     expect(r.total).toBe(0);
   });
+
+  it('caps categories before applying the overall daily cap', () => {
+    const healthConfig: GameConfig = {
+      ...config,
+      exercises: [
+        { key: 'run', label: 'Run', unitLabel: 'mile', category: 'movement', troopsPerUnit: 2, dailyUnitCap: 10 },
+        { key: 'veg', label: 'Vegetables', unitLabel: 'completion', category: 'nutrition', troopsPerUnit: 1, dailyUnitCap: 1 },
+      ],
+      categoryTroopCaps: { movement: 4, nutrition: 2 },
+      dailyTotalTroopCap: 6,
+    };
+    const r = earnedTroops(healthConfig, [
+      { exerciseKey: 'run', units: 10 },
+      { exerciseKey: 'veg', units: 1 },
+    ]);
+    expect(r.perExercise.run).toBe(20);
+    expect(r.perCategory.movement).toBe(4);
+    expect(r.perCategory.nutrition).toBe(1);
+    expect(r.total).toBe(5);
+    expect(r.totalCapApplied).toBe(true);
+  });
 });
 
 function stateWith(pending: number): GameState {
