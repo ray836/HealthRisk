@@ -2,6 +2,7 @@ export * from './types.js';
 export * from './rng.js';
 export * from './map.js';
 export * from './reinforce.js';
+export * from './cards.js';
 export * from './bonus.js';
 export * from './combat.js';
 export * from './fortify.js';

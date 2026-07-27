@@ -12,6 +12,8 @@ import { earnedTroops, type ExerciseLogEntry } from './reinforce.js';
 import type { GameState, PlayerId } from './types.js';
 import type { TurnEffect } from './turnSession.js';
 
+export const ELIMINATION_REWARD_REINFORCEMENTS = 3;
+
 /**
  * Bank a player's earned troops from a day's logs onto their pending
  * reinforcements (§3). Eliminated/forfeited players earn nothing (§3, §7).
@@ -41,29 +43,68 @@ export function clearPending(state: GameState, playerId: PlayerId): GameState {
 
 /**
  * Re-evaluate elimination for every player: a player owning zero territories is
- * eliminated (§7). Returns new state.
+ * eliminated (§7). When an eliminator is supplied, each newly eliminated
+ * player produces a public event and banks a fixed reward for the eliminator's
+ * next turn. Defeated hands are discarded rather than transferred.
  */
-export function applyEliminations(state: GameState): GameState {
+export function applyEliminations(state: GameState, eliminatedByPlayerId?: PlayerId): GameState {
   const owns = new Map<PlayerId, number>();
   for (const t of state.territories) {
     if (t.owner) owns.set(t.owner, (owns.get(t.owner) ?? 0) + 1);
   }
+  const eliminatedIds = state.players
+    .filter(
+      (player) =>
+        player.status !== 'eliminated' &&
+        player.status !== 'forfeited' &&
+        (owns.get(player.id) ?? 0) === 0,
+    )
+    .map((player) => player.id);
+  if (eliminatedIds.length === 0) return state;
+
   const players = state.players.map((p) => {
     if (p.status === 'eliminated' || p.status === 'forfeited') return p;
-    if ((owns.get(p.id) ?? 0) === 0) return { ...p, status: 'eliminated' as const };
+    if (eliminatedIds.includes(p.id)) {
+      return {
+        ...p,
+        status: 'eliminated' as const,
+        cards: [],
+        pendingEliminationReward: 0,
+        pendingReinforcements: 0,
+      };
+    }
+    if (p.id === eliminatedByPlayerId) {
+      return {
+        ...p,
+        pendingEliminationReward:
+          (p.pendingEliminationReward ?? 0) +
+          eliminatedIds.length * ELIMINATION_REWARD_REINFORCEMENTS,
+      };
+    }
     return p;
   });
-  return { ...state, players };
+  const events = eliminatedByPlayerId
+    ? [
+        ...(state.events ?? []),
+        ...eliminatedIds.map((eliminatedPlayerId) => ({
+          id: `${state.id}:${state.dayNumber}:${eliminatedByPlayerId}:eliminated:${eliminatedPlayerId}`,
+          type: 'player_eliminated' as const,
+          dayNumber: state.dayNumber,
+          eliminatedPlayerId,
+          eliminatedByPlayerId,
+          rewardTroops: ELIMINATION_REWARD_REINFORCEMENTS,
+        })),
+      ]
+    : state.events;
+  return { ...state, players, events };
 }
 
 /**
- * Win check (§9): a single non-eliminated, non-forfeited player owning all 42
- * territories. Neutral territories must be gone. Returns new state, possibly
- * finished with winnerId set.
+ * Win check (§9): once only one player owns territory, no opponent remains able
+ * to act. Neutral garrisons do not delay the victory screen.
  */
 export function checkWin(state: GameState): GameState {
-  const owners = new Set(state.territories.map((t) => t.owner));
-  if (owners.has(null)) return state; // neutrals remain
+  const owners = new Set(state.territories.map((t) => t.owner).filter((owner) => owner !== null));
   if (owners.size !== 1) return state;
   const [winnerId] = [...owners];
   if (winnerId == null) return state;
@@ -141,7 +182,7 @@ export function applyTurnEffect(
     }
   }
 
-  next = applyEliminations(next);
+  next = applyEliminations(next, effect.type === 'auto_resolved' ? effect.playerId : undefined);
   next = checkWin(next);
   return { state: next, autoReport };
 }

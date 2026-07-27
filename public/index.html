@@ -44,6 +44,9 @@
       .players { margin:0; padding:0; display:grid; gap:7px; }
       .players li { list-style:none; display:grid; grid-template-columns:12px 1fr; gap:2px 8px; padding:9px; border-radius:8px; background:#222c38; border:1px solid #2d3b4c; }
       .players li .dot { grid-row:1 / 3; margin-top:4px; }
+      .players li.eliminated { background:#1a1c22; border-color:#4b3438; opacity:.78; }
+      .players li.eliminated .dot { filter:grayscale(.7); }
+      .playerStatusBadge { margin-left:6px; padding:1px 5px; border:1px solid #72464d; border-radius:999px; color:#f0a0a8; font-size:9px; font-weight:750; letter-spacing:.05em; text-transform:uppercase; }
       .playerMeta { grid-column:2; font-size:12px; color:var(--muted); }
       .dot { width:12px; height:12px; border-radius:3px; display:inline-block; }
       .continent { margin-bottom:14px; }
@@ -148,6 +151,49 @@
       .panelDetails summary { cursor:pointer; font-weight:700; }
       .voteBox { padding:12px; border:1px solid #6b572b; background:#242015; border-radius:10px; }
       .categoryTag { text-transform:capitalize; color:#8ebcff; font-size:11px; }
+      .cardHand { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; margin-bottom:10px; }
+      .territoryCard { --card-color:#6ea8fe; position:relative; min-height:112px; padding:0; display:block; overflow:hidden; border:1px solid color-mix(in srgb,var(--card-color) 62%,#526274); border-radius:10px; background:radial-gradient(circle at 70% 22%,color-mix(in srgb,var(--card-color) 24%,transparent),transparent 42%),linear-gradient(155deg,#273549,#121923 72%); color:#fff; box-shadow:inset 0 1px rgba(255,255,255,.1),0 5px 12px rgba(0,0,0,.2); text-align:left; isolation:isolate; }
+      button.territoryCard { width:100%; cursor:pointer; transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease; }
+      button.territoryCard:hover { transform:translateY(-2px); border-color:var(--card-color); background:radial-gradient(circle at 70% 22%,color-mix(in srgb,var(--card-color) 32%,transparent),transparent 44%),linear-gradient(155deg,#2c3b51,#151d28 72%); box-shadow:inset 0 1px rgba(255,255,255,.12),0 8px 18px rgba(0,0,0,.28); }
+      button.territoryCard:focus-visible { outline:2px solid #fff; outline-offset:2px; }
+      .cardMap { position:absolute; inset:4px 3px 25px; width:calc(100% - 6px); height:calc(100% - 29px); overflow:visible; opacity:.92; z-index:-1; }
+      .cardRegionShape { fill:var(--card-color); fill-opacity:.58; stroke:color-mix(in srgb,var(--card-color) 88%,#fff); stroke-width:1.5; vector-effect:non-scaling-stroke; }
+      .cardMarkerRing { fill:color-mix(in srgb,var(--card-color) 22%,transparent); stroke:#fff; stroke-width:1.5; vector-effect:non-scaling-stroke; }
+      .cardMarker { fill:#fff; stroke:var(--card-color); stroke-width:2; vector-effect:non-scaling-stroke; }
+      .cardContent { position:absolute; inset:auto 7px 7px; display:flex; align-items:end; gap:4px; text-shadow:0 1px 3px #000; }
+      .cardName { font-size:11px; line-height:1.1; }
+      .emptyCardSlot { min-height:112px; display:grid; place-items:center; border:1px dashed #536174; border-radius:10px; background:linear-gradient(145deg,rgba(68,82,101,.18),rgba(18,25,35,.28)); color:#758296; font-size:22px; }
+      .cardTradeRow { display:grid; grid-template-columns:1fr auto; align-items:center; gap:8px; }
+      .cardSetMeter { display:flex; align-items:center; gap:5px; min-width:0; }
+      .cardSetMeter .setPip { width:8px; height:8px; border:1px solid #66778c; border-radius:50%; background:#151c25; }
+      .cardSetMeter .setPip.filled { border-color:#79b4ff; background:#5d9de9; box-shadow:0 0 7px rgba(93,157,233,.55); }
+      .cardSetMeter b { margin-left:2px; font-size:11px; }
+      .cardSetMeter .tradeArrow { color:#718096; }
+      .cardSetMeter .rewardBadge { padding:2px 5px; border-radius:999px; background:#213c2e; color:#80d7a6; font-size:10px; font-weight:750; }
+      .cardMeterLabel { grid-column:1 / -1; color:var(--muted); font-size:10px; }
+      #cardDetailOverlay { position:fixed; inset:0; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(7,10,15,.78); backdrop-filter:blur(4px); z-index:55; }
+      #cardDetailOverlay.show { display:flex; }
+      .cardDetailPanel { position:relative; width:min(620px,calc(100vw - 32px)); display:grid; grid-template-columns:minmax(240px,1fr) minmax(220px,1fr); gap:18px; padding:22px; border:1px solid #52657c; border-radius:18px; background:linear-gradient(145deg,#202b39,#151b24); box-shadow:0 24px 70px rgba(0,0,0,.5); }
+      #cardDetailFace .territoryCard { min-height:260px; cursor:default; }
+      #cardDetailFace .cardMap { inset:8px 8px 44px; height:calc(100% - 52px); }
+      #cardDetailFace .cardName { font-size:22px; }
+      #cardDetailFace .cardContent { inset:auto 14px 15px; }
+      #cardDetailClose { position:absolute; top:10px; right:10px; z-index:2; width:32px; height:32px; padding:0; border-radius:50%; background:rgba(10,14,20,.72); }
+      .cardDetailInfo { align-self:center; padding-right:8px; }
+      .cardDetailInfo .eyebrow { color:#8ebcff; font-size:10px; font-weight:750; letter-spacing:.12em; text-transform:uppercase; }
+      .cardDetailInfo h2 { margin:3px 0 14px; font-size:26px; }
+      .cardFactGrid { display:grid; grid-template-columns:repeat(2,1fr); gap:7px; }
+      .cardFact { padding:9px 7px; border:1px solid #35465a; border-radius:9px; background:#151d27; text-align:center; }
+      .cardFact span { display:block; color:var(--muted); font-size:9px; text-transform:uppercase; letter-spacing:.06em; }
+      .cardFact b { display:block; margin-top:3px; font-size:12px; }
+      #cardDetailOwnership { margin:14px 0 0; padding:10px; border-left:3px solid #5e9fe9; border-radius:0 7px 7px 0; background:#182535; color:#c7d3df; font-size:11px; }
+      @media (max-width:620px){ .cardDetailPanel{ grid-template-columns:1fr; max-height:calc(100vh - 32px); overflow:auto; } #cardDetailFace .territoryCard{ min-height:210px; } }
+      #gameToast { position:fixed; top:68px; right:18px; z-index:60; max-width:320px; padding:11px 14px; border:1px solid #5984b5; border-radius:10px; background:#20344d; color:#f4f7fb; box-shadow:0 12px 32px rgba(0,0,0,.34); opacity:0; transform:translateY(-8px); pointer-events:none; transition:opacity .18s ease,transform .18s ease; }
+      #gameToast.show { opacity:1; transform:translateY(0); }
+      #eliminationBanner { display:none; margin:12px 16px 0; padding:10px 14px; border:1px solid #804b55; border-radius:10px; background:linear-gradient(90deg,#351f26,#222632); color:#f5dce0; box-shadow:0 7px 22px rgba(0,0,0,.2); }
+      #eliminationBanner.show { display:flex; align-items:center; gap:9px; }
+      #eliminationBanner .eventIcon { font-size:20px; }
+      #eliminationBanner .eventReward { margin-left:auto; color:#ffd17a; font-weight:750; white-space:nowrap; }
     </style>
   </head>
   <body>
@@ -170,6 +216,10 @@
         </span>
       </span>
     </header>
+
+    <div id="gameToast" role="status" aria-live="polite"></div>
+    <div id="eliminationBanner" role="status" aria-live="polite"></div>
+    <svg width="0" height="0" aria-hidden="true" style="position:absolute"><defs id="cardMapDefs"></defs></svg>
 
     <main>
       <aside class="sidebar">
@@ -210,6 +260,22 @@
       <h2 id="winText"></h2>
       <button id="winNew">New game</button>
     </div></div>
+
+    <div id="cardDetailOverlay">
+      <div class="cardDetailPanel" role="dialog" aria-modal="true" aria-labelledby="cardDetailTitle">
+        <button id="cardDetailClose" aria-label="Close card details">×</button>
+        <div id="cardDetailFace"></div>
+        <div class="cardDetailInfo">
+          <div class="eyebrow">Territory card</div>
+          <h2 id="cardDetailTitle"></h2>
+          <div class="cardFactGrid">
+            <div class="cardFact"><span>Region</span><b id="cardDetailRegion"></b></div>
+            <div class="cardFact"><span>Trade</span><b id="cardDetailTrade"></b></div>
+          </div>
+          <p id="cardDetailOwnership"></p>
+        </div>
+      </div>
+    </div>
 
     <div id="reinforceOverlay">
       <div class="card">
@@ -318,6 +384,10 @@
       let fortifyTarget = null;
       let lastTurnKey = null;
       let lastExpiryRefreshed = null;
+      let toastTimer = null;
+      let selectedCardId = null;
+      let eventGameId = null;
+      const seenGameEventIds = new Set();
       let gameId = localStorage.getItem('exriskGame');
       let token = localStorage.getItem('exriskToken');
       let currentUser = null;
@@ -369,6 +439,18 @@
         { id:'asia', label:'ASIA', color:'#d16f83', x:740, y:52 },
         { id:'australia', label:'AUSTRALIA', color:'#55aaa8', x:818, y:466 },
       ];
+      const CARD_REGION_VIEWS = {
+        north_america:[0,10,385,300],
+        south_america:[265,210,220,330],
+        europe:[405,25,195,210],
+        africa:[405,185,250,335],
+        asia:[525,15,455,330],
+        australia:[740,290,240,225],
+      };
+      const cardMapDefs = $('#cardMapDefs');
+      cardMapDefs.innerHTML = CONTINENT_REGIONS.map((region) =>
+        `<path id="card-region-${region.id}" d="${globalThis.WORLD_MAP_DATA?.regions?.[region.id] || ''}" fill-rule="evenodd"/>`
+      ).join('');
       const OCEAN_EDGES = new Set([
         'alaska|kamchatka', 'greenland|iceland', 'brazil|north_africa',
         'east_africa|madagascar', 'south_africa|madagascar',
@@ -399,7 +481,60 @@
       const esc = (value) => String(value ?? '')
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+      function cardPresentation(card) {
+        const territory = game?.territories.find((candidate) => candidate.id === card.territoryId);
+        const continentId = territory?.continent || 'north_america';
+        const region = CONTINENT_REGIONS.find((candidate) => candidate.id === continentId) || CONTINENT_REGIONS[0];
+        const view = CARD_REGION_VIEWS[continentId] || CARD_REGION_VIEWS.north_america;
+        const point = POS[card.territoryId] || [view[0] + view[2] / 2, view[1] + view[3] / 2];
+        const markerRadius = Math.max(4, Math.min(view[2], view[3]) * .032);
+        return { territory, continentId, region, view, point, markerRadius };
+      }
+      function renderTerritoryCard(card, index, large = false) {
+        const { continentId, region, view, point, markerRadius } = cardPresentation(card);
+        const tag = large ? 'div' : 'button';
+        const interaction = large
+          ? ''
+          : ` type="button" data-card-index="${index}" aria-label="${esc(pretty(card.territoryId))} conquest card details"`;
+        return `<${tag} class="territoryCard${large ? ' cardLarge' : ''}"${interaction} style="--card-color:${region.color}">
+          <svg class="cardMap" viewBox="${view.join(' ')}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+            <use href="#card-region-${continentId}" class="cardRegionShape"></use>
+            <circle class="cardMarkerRing" cx="${point[0]}" cy="${point[1]}" r="${markerRadius * 2.15}"></circle>
+            <circle class="cardMarker" cx="${point[0]}" cy="${point[1]}" r="${markerRadius}"></circle>
+          </svg>
+          <span class="cardContent">
+            <b class="cardName">${esc(pretty(card.territoryId))}</b>
+          </span>
+        </${tag}>`;
+      }
+      function closeCardDetails() {
+        selectedCardId = null;
+        $('#cardDetailOverlay').classList.remove('show');
+      }
+      function openCardDetails(index) {
+        const dashboard = game?.dashboard;
+        const card = dashboard?.cards?.hand?.[index];
+        if (!card) return;
+        const { territory, region } = cardPresentation(card);
+        selectedCardId = card.id;
+        $('#cardDetailFace').innerHTML = renderTerritoryCard(card, index, true);
+        $('#cardDetailTitle').textContent = pretty(card.territoryId);
+        $('#cardDetailRegion').textContent = region.label;
+        $('#cardDetailTrade').textContent = `${dashboard.cards.tradeSize} for +${dashboard.cards.tradeReward}`;
+        $('#cardDetailOwnership').textContent = territory?.owner === dashboard.playerId
+          ? 'You still control this territory.'
+          : 'The card stays in your hand even if control of the territory changes.';
+        $('#cardDetailOverlay').classList.add('show');
+        $('#cardDetailClose').focus();
+      }
       const log = (msg) => { $('#log').textContent = msg + '\n' + $('#log').textContent; };
+      function showToast(message) {
+        const toast = $('#gameToast');
+        toast.textContent = message;
+        toast.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove('show'), 3600);
+      }
 
       function readHealthRulesEditor() {
         const exercises = [...document.querySelectorAll('.ruleCard')].map((card) => {
@@ -596,6 +731,19 @@
         }
       }
 
+      async function tradeCards() {
+        if (!gameId) return;
+        try {
+          const data = await post(`/api/games/${gameId}/cards/trade`);
+          game = data.game;
+          showToast(`Card set traded: +${data.troopsAwarded} troops`);
+          log(`Traded 3 conquest cards for +${data.troopsAwarded} troops`);
+          render();
+        } catch (error) {
+          log('Card trade: ' + error.message);
+        }
+      }
+
       async function joinGame() {
         const code = $('#joinCode').value.trim();
         if (!code) return;
@@ -690,7 +838,7 @@
             $('#fortifyTitle').textContent = `${pretty(from.id)} → ${pretty(t.id)}`;
             $('#fortifyHelp').textContent = `Move up to ${max} troops while leaving one behind.`;
             $('#fortifyCount').max = String(max);
-            $('#fortifyCount').value = '1';
+            $('#fortifyCount').value = String(max);
             $('#fortifyError').textContent = '';
             $('#fortifyOverlay').classList.add('show');
             $('#fortifyCount').focus();
@@ -880,6 +1028,38 @@
           if ((game.startBonus || 0) > 0) msg += ` — +${game.startBonus} troops from territory/continent control`;
           log(msg);
         }
+        if (eventGameId !== game.id) {
+          eventGameId = game.id;
+          seenGameEventIds.clear();
+        }
+        const events = game.events || [];
+        const unseenEvents = events.filter((event) => !seenGameEventIds.has(event.id));
+        for (const event of unseenEvents) {
+          seenGameEventIds.add(event.id);
+          const eliminator = game.players.find((player) => player.id === event.eliminatedByPlayerId);
+          const eliminated = game.players.find((player) => player.id === event.eliminatedPlayerId);
+          const result = game.status === 'finished' ? 'victory secured' : `+${event.rewardTroops} troops next turn`;
+          log(`⚔ ${eliminator?.name || 'A player'} eliminated ${eliminated?.name || 'a player'} · ${result}`);
+        }
+        if (unseenEvents.length) {
+          const event = unseenEvents[unseenEvents.length - 1];
+          const eliminator = game.players.find((player) => player.id === event.eliminatedByPlayerId);
+          const eliminated = game.players.find((player) => player.id === event.eliminatedPlayerId);
+          const result = game.status === 'finished' ? 'game won!' : `+${event.rewardTroops} next turn`;
+          showToast(`${eliminator?.name || 'A player'} eliminated ${eliminated?.name || 'a player'} — ${result}`);
+        }
+        const latestElimination = events[events.length - 1];
+        const banner = $('#eliminationBanner');
+        if (latestElimination) {
+          const eliminator = game.players.find((player) => player.id === latestElimination.eliminatedByPlayerId);
+          const eliminated = game.players.find((player) => player.id === latestElimination.eliminatedPlayerId);
+          const result = game.status === 'finished' ? 'Victory secured' : `+${latestElimination.rewardTroops} next turn`;
+          banner.innerHTML = `<span class="eventIcon">⚔</span><span><b>${esc(eliminator?.name || 'A player')}</b> eliminated <b>${esc(eliminated?.name || 'a player')}</b></span><span class="eventReward">${result}</span>`;
+          banner.classList.add('show');
+        } else {
+          banner.classList.remove('show');
+          banner.textContent = '';
+        }
         // Win overlay.
         const ov = $('#winOverlay');
         if (game.status === 'finished') {
@@ -895,23 +1075,36 @@
         const root = $('#myDashboard');
         const d = game.dashboard;
         if (!d) {
+          delete root.dataset.playerId;
           root.innerHTML = `<div class="dashEmpty">${currentUser ? 'Join a game to see your position.' : 'Log in to see your position.'}</div>`;
+          if (selectedCardId) closeCardDetails();
           return;
         }
+        if (selectedCardId && !d.cards.hand.some((card) => card.id === selectedCardId)) {
+          closeCardDetails();
+        }
+        const rememberedOpen = (section, defaultOpen) => {
+          if (root.dataset.playerId !== d.playerId) return defaultOpen;
+          const previous = root.querySelector(`details[data-dashboard-section="${section}"]`);
+          return previous ? previous.open : defaultOpen;
+        };
         const player = game.players.find((p) => p.id === d.playerId);
         const isUp = game.currentPlayerId === d.playerId;
-        const turnLabel = isUp
-          ? (game.yourTurn ? `Your turn - ${game.phase}` : `${player.name}'s turn`)
-          : `Waiting for ${game.players.find((p) => p.id === game.currentPlayerId)?.name || 'the next turn'}`;
+        const turnLabel = game.status === 'finished'
+          ? (game.winnerId === d.playerId ? 'Victory' : 'Game over')
+          : isUp
+            ? (game.yourTurn ? `Your turn - ${game.phase}` : `${player.name}'s turn`)
+            : `Waiting for ${game.players.find((p) => p.id === game.currentPlayerId)?.name || 'the next turn'}`;
         const turnStart = d.turnStart
-          ? `<details class="disclosure dashboardDisclosure" open>
+          ? `<details class="disclosure dashboardDisclosure" data-dashboard-section="reinforcements"${rememberedOpen('reinforcements', true) ? ' open' : ''}>
               <summary><span>Reinforcements</span><span class="summaryMeta">${d.availableReinforcements} available</span></summary>
               <div class="disclosureBody">
                 <div class="incomeRow"><span>Health-goal bank</span><b>+${d.turnStart.exerciseTroops}</b></div>
                 <div class="incomeRow"><span>Territory + continents</span><b>+${d.turnStart.territoryAndContinentTroops}</b></div>
+                ${d.turnStart.eliminationTroops ? `<div class="incomeRow"><span>Elimination reward</span><b>+${d.turnStart.eliminationTroops}</b></div>` : ''}
               </div>
             </details>`
-          : `<details class="disclosure dashboardDisclosure">
+          : `<details class="disclosure dashboardDisclosure" data-dashboard-section="reinforcements"${rememberedOpen('reinforcements', false) ? ' open' : ''}>
               <summary><span>Next turn</span><span class="summaryMeta">${d.availableReinforcements} banked</span></summary>
               <div class="disclosureBody muted" style="font-size:12px">Standard territory and continent troops are added when your turn starts.</div>
             </details>`;
@@ -930,6 +1123,15 @@
         const continents = d.controlledContinents.length
           ? d.controlledContinents.map((c) => c.label).join(', ')
           : 'None';
+        const emptySlots = Math.max(0, d.cards.tradeSize - d.cards.hand.length);
+        const cardItems = d.cards.hand.map((card, index) => renderTerritoryCard(card, index)).join('')
+          + Array.from({ length: emptySlots }, () => '<div class="emptyCardSlot" aria-hidden="true">+</div>').join('');
+        const setPips = Array.from({ length: d.cards.tradeSize }, (_, index) =>
+          `<span class="setPip${index < d.cards.hand.length ? ' filled' : ''}"></span>`
+        ).join('');
+        const cardMeterLabel = d.cards.hand.length >= d.cards.tradeSize
+          ? (d.cards.canTrade ? 'Set ready' : 'Trade during reinforcement')
+          : 'Capture land to fill the set';
         root.innerHTML = `
           <div class="dashHero">
             <div class="eyebrow">${player ? player.name : 'Your position'}</div>
@@ -942,10 +1144,34 @@
             <div class="dashStat"><b>${d.availableReinforcements}</b><span>To place</span></div>
           </div>
           ${turnStart}
-          <details class="disclosure dashboardDisclosure">
+          <details class="disclosure dashboardDisclosure" data-dashboard-section="cards"${rememberedOpen('cards', d.cards.hand.length >= d.cards.tradeSize) ? ' open' : ''}>
+            <summary><span>Conquest cards</span><span class="summaryMeta">${d.cards.hand.length}/${d.cards.tradeSize}</span></summary>
+            <div class="disclosureBody">
+              <div class="cardHand">${cardItems}</div>
+              <div class="cardTradeRow">
+                <div class="cardSetMeter">
+                  ${setPips}
+                  <b>${Math.min(d.cards.hand.length, d.cards.tradeSize)}/${d.cards.tradeSize}</b>
+                  <span class="tradeArrow">→</span>
+                  <span class="rewardBadge">+${d.cards.tradeReward} troops</span>
+                </div>
+                ${d.cards.hand.length >= d.cards.tradeSize
+                  ? `<button id="tradeCardsBtn"${d.cards.canTrade ? '' : ' disabled'}>Trade for +${d.cards.tradeReward}</button>`
+                  : ''}
+                <span class="cardMeterLabel">${cardMeterLabel} · Select a card for details</span>
+              </div>
+            </div>
+          </details>
+          <details class="disclosure dashboardDisclosure" data-dashboard-section="health"${rememberedOpen('health', false) ? ' open' : ''}>
             <summary><span>Today's health goals</span><span class="summaryMeta">${d.exercise.totalTroops}/${d.exercise.dailyCap} troops</span></summary>
             <div class="disclosureBody">${exerciseRows}</div>
           </details>`;
+        root.dataset.playerId = d.playerId;
+        root.querySelectorAll('[data-card-index]').forEach((button) => {
+          button.onclick = () => openCardDetails(Number(button.dataset.cardIndex));
+        });
+        const tradeButton = $('#tradeCardsBtn');
+        if (tradeButton) tradeButton.onclick = tradeCards;
       }
 
       function renderHealthRuleControls() {
@@ -995,8 +1221,12 @@
         renderExercise();
         renderHealthRuleControls();
         $('#dayPill').textContent = 'Day ' + game.dayNumber;
-        const cur = game.players.find((p) => p.id === game.currentPlayerId);
-        $('#turnPill').innerHTML = cur ? `Turn: <b style="color:${cur.color}">${cur.name}</b> · ${game.phase}` : 'Turn: —';
+        const cur = game.status === 'active' ? game.players.find((p) => p.id === game.currentPlayerId) : null;
+        $('#turnPill').innerHTML = game.status === 'finished'
+          ? 'Game over'
+          : cur
+            ? `Turn: <b style="color:${cur.color}">${cur.name}</b> · ${game.phase}`
+            : 'Turn: —';
         $('#statusPill').innerHTML = game.status === 'finished'
           ? `<span class="win">🏆 ${game.players.find((p) => p.id === game.winnerId)?.name} wins!</span>`
           : 'In progress';
@@ -1004,14 +1234,20 @@
         const mine = new Set(game.mySeats || []);
         $('#players').innerHTML = game.players.map((p) => {
           const owned = game.territories.filter((t) => t.owner === p.id).length;
-          const cur = p.id === game.currentPlayerId ? '▶ ' : '';
+          const cur = game.status === 'active' && p.id === game.currentPlayerId ? '▶ ' : '';
           const you = mine.has(p.id) ? ' <span style="color:#6ea8fe">(you)</span>' : '';
           const open = !p.claimed ? ' <span class="muted">· open seat</span>' : '';
-          return `<li><span class="dot" style="background:${p.color}"></span>
-            <div>${cur}<b>${p.name}</b>${you}${open}</div>
-            <div class="playerMeta">${owned} territories · ${p.pendingReinforcements} troops to place${p.status !== 'active' ? ' · ' + p.status : ''}</div></li>`;
+          const eliminated = p.status === 'eliminated';
+          const status = eliminated ? '<span class="playerStatusBadge">Eliminated</span>' : '';
+          const meta = eliminated
+            ? '0 territories · out of the game'
+            : `${owned} territories · ${p.pendingReinforcements} troops to place${p.pendingEliminationReward ? ` · +${p.pendingEliminationReward} next turn` : ''}${p.status !== 'active' ? ' · ' + p.status : ''}`;
+          return `<li class="${eliminated ? 'eliminated' : ''}"><span class="dot" style="background:${p.color}"></span>
+            <div>${cur}<b>${esc(p.name)}</b>${status}${you}${open}</div>
+            <div class="playerMeta">${meta}</div></li>`;
         }).join('');
-        $('#playersSummary').textContent = `${game.players.length} players · ${cur ? cur.name + ' active' : 'complete'}`;
+        const activePlayers = game.players.filter((player) => player.status !== 'eliminated' && player.status !== 'forfeited').length;
+        $('#playersSummary').textContent = `${activePlayers}/${game.players.length} active · ${cur ? cur.name + "'s turn" : 'complete'}`;
 
         const allowed = allowedModes();
         document.querySelectorAll('.modeBtn').forEach((b) => {
@@ -1133,7 +1369,21 @@
         } catch (e) { log('✋ ' + e.message); }
       };
       document.querySelectorAll('.modeBtn').forEach((b) => (b.onclick = () => setMode(b.dataset.mode)));
-      $('#endBtn').onclick = async () => { try { const d = await post(`/api/games/${gameId}/end`); game = d.game; fromSel = null; mode = 'reinforce'; log('Ended turn'); render(); } catch (e) { log('✋ ' + e.message); } };
+      $('#endBtn').onclick = async () => {
+        try {
+          const data = await post(`/api/games/${gameId}/end`);
+          if (data.cardAwarded) {
+            const territory = pretty(data.cardAwarded.territoryId);
+            showToast(`Conquest card earned: ${territory}`);
+            log(`Earned a conquest card for ${territory}`);
+          }
+          game = data.game;
+          fromSel = null;
+          mode = 'reinforce';
+          log('Ended turn');
+          render();
+        } catch (error) { log('✋ ' + error.message); }
+      };
       $('#expireBtn').onclick = async () => { try { const d = await post(`/api/games/${gameId}/expire`); game = d.game; fromSel = null; log('Auto-resolved current player (defensive)'); render(); } catch (e) { log('✋ ' + e.message); } };
 
       $('#loginBtn').onclick = () => doAuth('login');
@@ -1159,7 +1409,14 @@
       $('#userPanelBtn').onclick = () => $('#userPanelOverlay').classList.add('show');
       $('#userPanelClose').onclick = closeUserPanel;
       $('#userPanelOverlay').onclick = (e) => { if (e.target === $('#userPanelOverlay')) closeUserPanel(); };
-      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeUserPanel(); });
+      $('#cardDetailClose').onclick = closeCardDetails;
+      $('#cardDetailOverlay').onclick = (e) => { if (e.target === $('#cardDetailOverlay')) closeCardDetails(); };
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          closeUserPanel();
+          closeCardDetails();
+        }
+      });
       $('#authPass').onkeydown = (e) => { if (e.key === 'Enter') doAuth('login'); };
 
       (async () => {

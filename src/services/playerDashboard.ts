@@ -7,7 +7,8 @@
 
 import { earnedTroops } from '../engine/reinforce.js';
 import { ownedContinents } from '../engine/bonus.js';
-import type { HealthCategory, HealthTrackingType } from '../engine/types.js';
+import { CARD_TRADE_REINFORCEMENTS, CARD_TRADE_SIZE } from '../engine/cards.js';
+import type { HealthCategory, HealthTrackingType, TerritoryCard } from '../engine/types.js';
 import type { GameRepository, TurnState } from './repository.js';
 
 export interface ExerciseProgress {
@@ -31,8 +32,15 @@ export interface PlayerDashboard {
   turnStart: {
     exerciseTroops: number;
     territoryAndContinentTroops: number;
+    eliminationTroops: number;
     total: number;
   } | null;
+  cards: {
+    hand: TerritoryCard[];
+    tradeSize: number;
+    tradeReward: number;
+    canTrade: boolean;
+  };
   exercise: {
     totalTroops: number;
     dailyCap: number;
@@ -63,6 +71,7 @@ export async function buildPlayerDashboard(
   const territories = game.territories.filter((t) => t.owner === playerId);
   const startBonus = turnState?.startBonus ?? 0;
   const startExerciseTroops = turnState?.startExerciseTroops ?? 0;
+  const startEliminationTroops = turnState?.startEliminationTroops ?? 0;
 
   return {
     playerId,
@@ -74,9 +83,16 @@ export async function buildPlayerDashboard(
       ? {
           exerciseTroops: startExerciseTroops,
           territoryAndContinentTroops: startBonus,
-          total: startExerciseTroops + startBonus,
+          eliminationTroops: startEliminationTroops,
+          total: startExerciseTroops + startBonus + startEliminationTroops,
         }
       : null,
+    cards: {
+      hand: player.cards ?? [],
+      tradeSize: CARD_TRADE_SIZE,
+      tradeReward: CARD_TRADE_REINFORCEMENTS,
+      canTrade: turnState?.phase === 'reinforce' && (player.cards?.length ?? 0) >= CARD_TRADE_SIZE,
+    },
     exercise: {
       totalTroops: exercise.total,
       dailyCap: game.config.dailyTotalTroopCap,

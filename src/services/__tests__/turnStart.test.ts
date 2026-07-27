@@ -69,4 +69,21 @@ describe('ensureTurnStarted', () => {
     expect(r.started).toBe(false);
     expect(await bank(repo, 'b')).toBe(0);
   });
+
+  it('releases a banked elimination reward once at the start of the next turn', async () => {
+    const game = makeGame();
+    game.players = game.players.map((player) =>
+      player.id === 'a' ? { ...player, pendingEliminationReward: 3 } : player,
+    );
+    const repo = new InMemoryGameRepository({ games: [game] });
+    await openDailySession(repo, 'g', 0);
+
+    await ensureTurnStarted(repo, 'g', 0, 'a');
+    expect(await bank(repo)).toBe(11); // 2 exercise + 6 standard + 3 elimination
+    expect((await repo.loadGame('g'))!.players.find((player) => player.id === 'a')!.pendingEliminationReward).toBe(0);
+    expect((await repo.loadTurnState('g', 0, 'a'))!.startEliminationTroops).toBe(3);
+
+    await ensureTurnStarted(repo, 'g', 0, 'a');
+    expect(await bank(repo)).toBe(11);
+  });
 });

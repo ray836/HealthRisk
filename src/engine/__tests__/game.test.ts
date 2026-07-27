@@ -96,10 +96,47 @@ describe('elimination and win', () => {
     expect(next.players.find((p) => p.id === 'b')!.status).toBe('eliminated');
   });
 
-  it('declares a winner only at full domination (no neutrals left)', () => {
-    // one neutral remaining -> not won
+  it('banks a fixed reward, discards the defeated hand, and records the elimination once', () => {
+    let state = twoPlayerBoard(TERRITORY_IDS, []);
+    state = {
+      ...state,
+      players: state.players.map((player) =>
+        player.id === 'b'
+          ? {
+              ...player,
+              cards: [{ id: 'b-card', territoryId: 'brazil', earnedDay: 0 }],
+              pendingReinforcements: 5,
+            }
+          : player,
+      ),
+    };
+
+    const next = applyEliminations(state, 'a');
+    expect(next.players.find((player) => player.id === 'a')!.pendingEliminationReward).toBe(3);
+    expect(next.players.find((player) => player.id === 'b')).toMatchObject({
+      status: 'eliminated',
+      cards: [],
+      pendingReinforcements: 0,
+    });
+    expect(next.events).toEqual([
+      expect.objectContaining({
+        type: 'player_eliminated',
+        eliminatedPlayerId: 'b',
+        eliminatedByPlayerId: 'a',
+        rewardTroops: 3,
+      }),
+    ]);
+
+    const repeated = applyEliminations(next, 'a');
+    expect(repeated.players.find((player) => player.id === 'a')!.pendingEliminationReward).toBe(3);
+    expect(repeated.events).toHaveLength(1);
+  });
+
+  it('declares the last remaining player the winner even while neutral garrisons remain', () => {
     const almost = twoPlayerBoard(TERRITORY_IDS.filter((t) => t !== 'brazil'), []);
-    expect(checkWin(almost).status).toBe('active');
+    const earlyWin = checkWin(almost);
+    expect(earlyWin.status).toBe('finished');
+    expect(earlyWin.winnerId).toBe('a');
     const all = twoPlayerBoard(TERRITORY_IDS, []);
     const won = checkWin(all);
     expect(won.status).toBe('finished');

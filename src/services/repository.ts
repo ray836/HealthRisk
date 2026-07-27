@@ -8,7 +8,7 @@
  * in-memory implementation below is for tests and local development.
  */
 
-import type { GameState } from '../engine/types.js';
+import type { GameState, TerritoryId } from '../engine/types.js';
 import type { DailySession } from '../engine/turnSession.js';
 import type { ExerciseLogEntry } from '../engine/reinforce.js';
 
@@ -30,8 +30,14 @@ export interface TurnState {
   startBonus?: number;
   /** Exercise-earned troops already banked when this turn began. */
   startExerciseTroops?: number;
+  /** Fixed elimination rewards released when this turn began. */
+  startEliminationTroops?: number;
   /** Labels of continents the player controlled at turn start. */
   startContinents?: string[];
+  /** First territory captured this turn; earns one card when the turn ends. */
+  capturedTerritoryId?: TerritoryId;
+  /** Recorded after the deterministic conquest-card award is applied. */
+  conquestCardAwarded?: boolean;
 }
 
 /** A user account. */
