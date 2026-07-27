@@ -7,12 +7,15 @@
 
 import { earnedTroops } from '../engine/reinforce.js';
 import { ownedContinents } from '../engine/bonus.js';
+import type { HealthCategory, HealthTrackingType } from '../engine/types.js';
 import type { GameRepository, TurnState } from './repository.js';
 
 export interface ExerciseProgress {
   key: string;
   label: string;
   unitLabel: string;
+  category: HealthCategory;
+  trackingType: HealthTrackingType;
   unitsLogged: number;
   countedUnits: number;
   unitCap: number | null;
@@ -87,6 +90,8 @@ export async function buildPlayerDashboard(
           key: type.key,
           label: type.label,
           unitLabel: type.unitLabel,
+          category: type.category ?? 'movement',
+          trackingType: type.trackingType ?? 'quantity',
           unitsLogged,
           countedUnits,
           unitCap: type.dailyUnitCap,

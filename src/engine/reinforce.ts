@@ -9,7 +9,7 @@
  *      onto territories they own.
  */
 
-import type { GameConfig, GameState, TerritoryId } from './types.js';
+import type { GameConfig, GameState, HealthCategory, TerritoryId } from './types.js';
 import type { ValidationError } from './combat.js';
 
 /** A single self-reported exercise entry for one day. */
@@ -21,7 +21,8 @@ export interface ExerciseLogEntry {
 export interface EarnedBreakdown {
   total: number;
   perExercise: Record<string, number>;
-  /** True if the daily total cap clipped the sum. */
+  perCategory: Record<HealthCategory, number>;
+  /** True if a category cap or the daily total cap clipped the sum. */
   totalCapApplied: boolean;
 }
 
@@ -40,18 +41,38 @@ export function earnedTroops(config: GameConfig, logs: ExerciseLogEntry[]): Earn
   }
 
   const perExercise: Record<string, number> = {};
-  let rawTotal = 0;
+  const rawPerCategory: Record<HealthCategory, number> = {
+    movement: 0,
+    nutrition: 0,
+    recovery: 0,
+  };
   for (const ex of config.exercises) {
     const rawUnits = byKey[ex.key] ?? 0;
     const cappedUnits = ex.dailyUnitCap === null ? rawUnits : Math.min(rawUnits, ex.dailyUnitCap);
     const troops = cappedUnits * ex.troopsPerUnit;
     perExercise[ex.key] = troops;
-    rawTotal += troops;
+    rawPerCategory[ex.category ?? 'movement'] += troops;
   }
 
+  let categoryCapApplied = false;
+  const perCategory = Object.fromEntries(
+    (Object.keys(rawPerCategory) as HealthCategory[]).map((category) => {
+      const raw = rawPerCategory[category];
+      const cap = config.categoryTroopCaps?.[category];
+      const capped = cap === undefined ? raw : Math.min(raw, cap);
+      if (capped < raw) categoryCapApplied = true;
+      return [category, capped];
+    }),
+  ) as Record<HealthCategory, number>;
+  const rawTotal = Object.values(perCategory).reduce((sum, value) => sum + value, 0);
   const flooredTotal = Math.floor(rawTotal);
   const total = Math.min(flooredTotal, config.dailyTotalTroopCap);
-  return { total, perExercise, totalCapApplied: flooredTotal > config.dailyTotalTroopCap };
+  return {
+    total,
+    perExercise,
+    perCategory,
+    totalCapApplied: categoryCapApplied || flooredTotal > config.dailyTotalTroopCap,
+  };
 }
 
 export interface ReinforcePlacement {

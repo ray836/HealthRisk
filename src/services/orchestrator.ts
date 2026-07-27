@@ -26,6 +26,7 @@ import {
 } from '../engine/turnSession.js';
 import type { GameRepository } from './repository.js';
 import { ensureTurnStarted } from './turnStart.js';
+import { applyApprovedHealthRules } from './healthRules.js';
 
 /** Injectable clock so window timing is testable. */
 export interface Clock {
@@ -45,12 +46,13 @@ export async function openDailySession(
 ): Promise<DailySession> {
   const existing = await repo.loadSession(gameId, dayNumber);
   if (existing) return existing;
-  const game = await repo.loadGame(gameId);
-  if (!game) throw new Error(`Unknown game ${gameId}`);
-  if (game.dayNumber !== dayNumber) {
-    await repo.saveGame({ ...game, dayNumber });
+  const loaded = await repo.loadGame(gameId);
+  if (!loaded) throw new Error(`Unknown game ${gameId}`);
+  const game = applyApprovedHealthRules({ ...loaded, dayNumber }, dayNumber);
+  if (game.dayNumber !== loaded.dayNumber || game !== loaded) {
+    await repo.saveGame(game);
   }
-  const session = startDailySession({ ...game, dayNumber }, dayNumber);
+  const session = startDailySession(game, dayNumber);
   await repo.saveSession(session);
   return session;
 }

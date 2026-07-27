@@ -10,6 +10,9 @@
 export type PlayerId = string;
 export type TerritoryId = string; // e.g. "alaska", "ural" — see map.ts
 export type ContinentId = string;
+export type HealthCategory = 'movement' | 'nutrition' | 'recovery';
+export type HealthTrackingType = 'quantity' | 'duration' | 'checkbox';
+export type HealthRuleGovernance = 'creator' | 'vote';
 
 /** A territory owner is either a player, or the neutral garrison (null). */
 export type Owner = PlayerId | null;
@@ -50,6 +53,10 @@ export interface ExerciseType {
   key: string; // e.g. "running"
   label: string; // e.g. "Running"
   unitLabel: string; // e.g. "mile", "minute"
+  /** Groups goals for balancing. Older games default to movement. */
+  category?: HealthCategory;
+  /** Checkbox goals count as one completion per day. */
+  trackingType?: HealthTrackingType;
   /** Troops earned per unit. May be fractional (e.g. 1 troop / 30 min). */
   troopsPerUnit: number;
   /** Max *units* countable per day for this exercise (null = uncapped here). */
@@ -58,6 +65,10 @@ export interface ExerciseType {
 
 export interface GameConfig {
   exercises: ExerciseType[];
+  /** Optional ceilings per health category, applied before the overall cap. */
+  categoryTroopCaps?: Partial<Record<HealthCategory, number>>;
+  /** Who approves changes proposed while a game is in progress. */
+  healthRuleGovernance?: HealthRuleGovernance;
   /** Hard ceiling on total troops earnable per player per day across all types (§3). */
   dailyTotalTroopCap: number;
   /** Turn window opens at this local time each day. Minutes since midnight. */
@@ -77,6 +88,24 @@ export interface GameConfig {
   timezone: string;
 }
 
+export interface HealthRuleProposal {
+  id: string;
+  proposedByPlayerId: PlayerId;
+  proposedAtDay: number;
+  exercises: ExerciseType[];
+  categoryTroopCaps: Partial<Record<HealthCategory, number>>;
+  dailyTotalTroopCap: number;
+  votes: Record<PlayerId, boolean>;
+  status: 'pending' | 'approved' | 'rejected';
+  /** Approved changes begin on the next game day, never partway through today. */
+  effectiveDay?: number;
+}
+
+export interface HealthRuleHistoryEntry {
+  dayNumber: number;
+  summary: string;
+}
+
 export interface GameState {
   id: string;
   config: GameConfig;
@@ -88,4 +117,7 @@ export interface GameState {
   dayNumber: number;
   status: 'setup' | 'active' | 'finished';
   winnerId?: PlayerId;
+  healthRulesVersion?: number;
+  pendingHealthRuleProposal?: HealthRuleProposal;
+  healthRuleHistory?: HealthRuleHistoryEntry[];
 }
