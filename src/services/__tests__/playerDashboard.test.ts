@@ -26,7 +26,13 @@ describe('buildPlayerDashboard', () => {
       players: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }],
       seed: 7,
     });
-    game.players.find((p) => p.id === 'a')!.pendingReinforcements = 9;
+    const player = game.players.find((p) => p.id === 'a')!;
+    player.pendingReinforcements = 9;
+    player.cards = [
+      { id: 'one', territoryId: 'alaska', earnedDay: 0 },
+      { id: 'two', territoryId: 'india', earnedDay: 0 },
+      { id: 'three', territoryId: 'brazil', earnedDay: 0 },
+    ];
     const repo = new InMemoryGameRepository({ games: [game] });
     await repo.saveExerciseLog('g', 0, 'a', [
       { exerciseKey: 'running', units: 3 },
@@ -54,6 +60,11 @@ describe('buildPlayerDashboard', () => {
         exerciseTroops: 4,
         territoryAndContinentTroops: 5,
         total: 9,
+      },
+      cards: {
+        tradeSize: 3,
+        tradeReward: 3,
+        canTrade: true,
       },
       exercise: {
         totalTroops: 4,

@@ -33,9 +33,15 @@ import {
 } from '../engine/reinforce.js';
 import { validateFortify, applyFortify, type FortifyMove } from '../engine/fortify.js';
 import { applyEliminations, checkWin } from '../engine/game.js';
+import {
+  applyCardTrade,
+  awardConquestCard,
+  CARD_TRADE_REINFORCEMENTS,
+  validateCardTrade,
+} from '../engine/cards.js';
 import { buildPlannerContext, type PlannerContext } from '../engine/planner.js';
 import { currentPlayer } from '../engine/turnSession.js';
-import type { GameState } from '../engine/types.js';
+import type { GameState, TerritoryCard } from '../engine/types.js';
 import type { GameRepository, TurnPhase, TurnState } from './repository.js';
 import { ensureTurnStarted } from './turnStart.js';
 
@@ -71,6 +77,16 @@ export interface TurnView {
   startContinents: string[];
   /** Board/holdings/legal-attack context for the current player (UI-ready). */
   context: PlannerContext;
+}
+
+export interface CardTradeResult {
+  remainingBank: number;
+  remainingCards: number;
+  troopsAwarded: number;
+}
+
+export interface EndTurnResult {
+  cardAwarded: TerritoryCard | null;
 }
 
 export class TurnApi {
@@ -167,8 +183,30 @@ export class TurnApi {
 
     turnState.phase = 'attack';
     turnState.attacksMade += 1;
+    if (result.captured && !turnState.capturedTerritoryId) {
+      turnState.capturedTerritoryId = decl.toId;
+    }
     await this.repo.saveTurnState(turnState);
     return result;
+  }
+
+  /** Trade any three conquest cards for a fixed three troops during reinforce. */
+  async tradeCards(gameId: string, dayNumber: number, playerId: string): Promise<CardTradeResult> {
+    const { game, turnState } = await this.begin(gameId, dayNumber, playerId);
+    if (turnState.phase !== 'reinforce') {
+      throw new TurnError('card_trade_phase_over', 'Cards can only be traded during reinforcement');
+    }
+    const error = validateCardTrade(game, playerId);
+    if (error) throw new TurnError(error.code, error.message);
+
+    const next = applyCardTrade(game, playerId);
+    await this.repo.saveGame(next);
+    const player = next.players.find((candidate) => candidate.id === playerId)!;
+    return {
+      remainingBank: player.pendingReinforcements,
+      remainingCards: player.cards?.length ?? 0,
+      troopsAwarded: CARD_TRADE_REINFORCEMENTS,
+    };
   }
 
   async fortify(gameId: string, dayNumber: number, playerId: string, move: FortifyMove): Promise<void> {
@@ -188,14 +226,30 @@ export class TurnApi {
   }
 
   /** End the turn (any phase). Advances the line via the scheduler hook. */
-  async endTurn(gameId: string, dayNumber: number, playerId: string): Promise<void> {
-    await this.guard(gameId, dayNumber, playerId);
+  async endTurn(gameId: string, dayNumber: number, playerId: string): Promise<EndTurnResult> {
+    const { game } = await this.guard(gameId, dayNumber, playerId);
+    const startingTurnState = await this.repo.loadTurnState(gameId, dayNumber, playerId);
+    let cardAwarded: TerritoryCard | null = null;
+    if (startingTurnState?.capturedTerritoryId && !startingTurnState.conquestCardAwarded) {
+      const award = awardConquestCard(
+        game,
+        playerId,
+        dayNumber,
+        startingTurnState.capturedTerritoryId,
+      );
+      if (award.awarded) await this.repo.saveGame(award.state);
+      cardAwarded = award.card;
+      startingTurnState.conquestCardAwarded = true;
+      await this.repo.saveTurnState(startingTurnState);
+    }
+
     await this.onPlayerCompleted(gameId, dayNumber, playerId);
     const ts = await this.repo.loadTurnState(gameId, dayNumber, playerId);
     if (ts) {
       ts.phase = 'done';
       await this.repo.saveTurnState(ts);
     }
+    return { cardAwarded };
   }
 
   /** Assert it's this player's turn on an active game/session. */

@@ -16,6 +16,7 @@
 
 import { buildPlannerContext, type TurnPlanner } from '../engine/planner.js';
 import { applyTurnEffect } from '../engine/game.js';
+import { awardConquestCard } from '../engine/cards.js';
 import type { TurnPlanReport } from '../engine/turnPlan.js';
 import {
   startDailySession,
@@ -125,7 +126,16 @@ export async function handleWindowExpiry(
 
   const { session: next, effect } = expireWindow(session);
   const { state, autoReport } = applyTurnEffect(current, effect, plan);
-  await repo.saveGame(state);
+  const firstCapture = autoReport?.attacks.find((attack) => attack.result.captured);
+  const rewardedState = firstCapture
+    ? awardConquestCard(
+        state,
+        playerId,
+        dayNumber,
+        firstCapture.declaration.toId,
+      ).state
+    : state;
+  await repo.saveGame(rewardedState);
   await repo.saveSession(next);
 
   return { playerId, usedFallback, report: autoReport };

@@ -351,6 +351,16 @@ app.post(
 );
 
 app.post(
+  '/api/games/:id/cards/trade',
+  asyncH(async (req, res) => {
+    const id = req.params.id as string;
+    const { day, playerId } = await actingSeat(req, id);
+    const out = await api.tradeCards(id, day, playerId);
+    res.json({ ...out, game: await gameView(id, currentUser(req)?.id) });
+  }),
+);
+
+app.post(
   '/api/games/:id/attack',
   asyncH(async (req, res) => {
     const id = req.params.id as string;
@@ -375,8 +385,8 @@ app.post(
   asyncH(async (req, res) => {
     const id = req.params.id as string;
     const { day, playerId } = await actingSeat(req, id);
-    await api.endTurn(id, day, playerId);
-    res.json({ game: await gameView(id, currentUser(req)?.id) });
+    const out = await api.endTurn(id, day, playerId);
+    res.json({ ...out, game: await gameView(id, currentUser(req)?.id) });
   }),
 );
 

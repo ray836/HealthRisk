@@ -28,6 +28,8 @@ export interface Player {
   id: PlayerId;
   name: string;
   status: PlayerStatus;
+  /** Conquest cards held for a future fixed-value reinforcement trade. */
+  cards?: TerritoryCard[];
   /** Troops banked from logged exercise, waiting to be placed next turn. */
   pendingReinforcements: number;
   /** Consecutive daily turns auto-resolved (drives admin/auto forfeit). */
@@ -46,6 +48,13 @@ export interface Territory {
   owner: Owner;
   /** Armies present. Neutral territories always have >= 1; owned always >= 1. */
   armies: number;
+}
+
+export interface TerritoryCard {
+  /** Stable per-turn id makes end-turn card awards idempotent. */
+  id: string;
+  territoryId: TerritoryId;
+  earnedDay: number;
 }
 
 /** Exercise → troop conversion, set once by admin at game creation (§3). */
