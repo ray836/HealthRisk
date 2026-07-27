@@ -5,6 +5,7 @@ import {
   completeTurn,
   expireWindow,
   isComplete,
+  pruneIneligiblePlayers,
 } from '../turnSession.js';
 import type { GameConfig, GameState } from '../types.js';
 
@@ -48,6 +49,15 @@ describe('daily turn session', () => {
     s = r.session;
     expect(r.effect).toEqual({ type: 'completed', playerId: 'p1' });
     expect(currentPlayer(s)).toBe('p2');
+  });
+
+  it('removes a player eliminated after the daily queue opened', () => {
+    const session = startDailySession(game(), 1);
+    const state = game();
+    state.players = state.players.map((player) =>
+      player.id === 'p2' ? { ...player, status: 'eliminated' as const } : player,
+    );
+    expect(pruneIneligiblePlayers(session, state).queue).toEqual(['p1']);
   });
 
   it('throws if a non-front player tries to complete', () => {

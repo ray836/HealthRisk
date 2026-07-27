@@ -100,6 +100,7 @@ export function createGame(input: CreateGameInput): GameState {
     name: p.name,
     status: 'active',
     cards: [],
+    pendingEliminationReward: 0,
     pendingReinforcements: 0,
     consecutiveAutoResolvedDays: 0,
     standingOrdersNote: '',

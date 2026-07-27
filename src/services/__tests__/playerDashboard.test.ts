@@ -27,7 +27,7 @@ describe('buildPlayerDashboard', () => {
       seed: 7,
     });
     const player = game.players.find((p) => p.id === 'a')!;
-    player.pendingReinforcements = 9;
+    player.pendingReinforcements = 12;
     player.cards = [
       { id: 'one', territoryId: 'alaska', earnedDay: 0 },
       { id: 'two', territoryId: 'india', earnedDay: 0 },
@@ -46,6 +46,7 @@ describe('buildPlayerDashboard', () => {
       attacksMade: 0,
       startBonus: 5,
       startExerciseTroops: 4,
+      startEliminationTroops: 3,
       startContinents: [],
     };
     await repo.saveTurnState(turnState);
@@ -55,11 +56,12 @@ describe('buildPlayerDashboard', () => {
     expect(dashboard).toMatchObject({
       playerId: 'a',
       territoriesOwned: 21,
-      availableReinforcements: 9,
+      availableReinforcements: 12,
       turnStart: {
         exerciseTroops: 4,
         territoryAndContinentTroops: 5,
-        total: 9,
+        eliminationTroops: 3,
+        total: 12,
       },
       cards: {
         tradeSize: 3,

@@ -95,6 +95,62 @@ describe('TurnApi — full turn', () => {
     });
   });
 
+  it('announces an elimination, banks +3 for next turn, and skips the defeated seat', async () => {
+    const seeded = createGame({
+      id: 'g',
+      config: makeConfig(),
+      players: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }, { id: 'c', name: 'C' }],
+      seed: 7,
+    });
+    seeded.turnOrder = ['a', 'b', 'c'];
+    seeded.dayNumber = 1;
+    seeded.territories = TERRITORY_IDS.map((id) => ({
+      id,
+      owner: id === 'china' ? 'a' : id === 'india' ? 'b' : id === 'siam' ? 'c' : null,
+      armies: id === 'china' ? 12 : 1,
+    }));
+    seeded.players = seeded.players.map((player) =>
+      player.id === 'b'
+        ? { ...player, cards: [{ id: 'b-card', territoryId: 'india', earnedDay: 0 }] }
+        : player,
+    );
+    const repo = new InMemoryGameRepository({ games: [seeded] });
+    const api = new TurnApi({
+      repo,
+      onPlayerCompleted: (gameId, dayNumber, playerId) =>
+        markTurnComplete(repo, gameId, dayNumber, playerId),
+    });
+    await openDailySession(repo, 'g', 1);
+    await api.placeReinforcements('g', 1, 'a', [{ territoryId: 'china', count: 3 }]);
+
+    const attack = await api.attack('g', 1, 'a', {
+      fromId: 'china',
+      toId: 'india',
+      committedTroops: 14,
+      stopLoss: 14,
+    });
+    expect(attack.captured).toBe(true);
+
+    const game = (await repo.loadGame('g'))!;
+    expect(game.status).toBe('active');
+    expect(game.players.find((player) => player.id === 'a')!.pendingEliminationReward).toBe(3);
+    expect(game.players.find((player) => player.id === 'b')).toMatchObject({
+      status: 'eliminated',
+      cards: [],
+    });
+    expect(game.events).toEqual([
+      expect.objectContaining({
+        eliminatedByPlayerId: 'a',
+        eliminatedPlayerId: 'b',
+        rewardTroops: 3,
+      }),
+    ]);
+    expect((await repo.loadSession('g', 1))!.queue).toEqual(['a', 'c']);
+
+    await api.endTurn('g', 1, 'a');
+    expect((await api.turnView('g', 1))!.playerId).toBe('c');
+  });
+
   it('auto-advances to the attack phase once the bank is empty', async () => {
     const { repo, api } = setup();
     await openDailySession(repo, 'g', 1);

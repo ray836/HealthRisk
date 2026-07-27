@@ -23,6 +23,7 @@ import {
   completeTurn,
   expireWindow,
   currentPlayer,
+  pruneIneligiblePlayers,
   type DailySession,
 } from '../engine/turnSession.js';
 import type { GameRepository } from './repository.js';
@@ -78,7 +79,7 @@ export async function markTurnComplete(
   const { session: next, effect } = completeTurn(session, playerId);
   const { state } = applyTurnEffect(game, effect);
   await repo.saveGame(state);
-  await repo.saveSession(next);
+  await repo.saveSession(pruneIneligiblePlayers(next, state));
 }
 
 export interface WindowExpiryResult {
@@ -136,7 +137,7 @@ export async function handleWindowExpiry(
       ).state
     : state;
   await repo.saveGame(rewardedState);
-  await repo.saveSession(next);
+  await repo.saveSession(pruneIneligiblePlayers(next, rewardedState));
 
   return { playerId, usedFallback, report: autoReport };
 }

@@ -79,9 +79,14 @@ describe('orchestrator', () => {
     expect(game!.players.find((p) => p.id === 'a')!.cards).toEqual([
       expect.objectContaining({ territoryId: 'india', earnedDay: 1 }),
     ]);
+    expect(game!.players.find((p) => p.id === 'a')!.pendingEliminationReward).toBe(3);
+    expect(game!.players.find((p) => p.id === 'b')!.status).toBe('eliminated');
+    expect(game!.events).toEqual([
+      expect.objectContaining({ eliminatedByPlayerId: 'a', eliminatedPlayerId: 'b', rewardTroops: 3 }),
+    ]);
 
     const session = await repo.loadSession('g', 1);
-    expect(session!.queue).toEqual(['b']); // a left the line, no requeue
+    expect(session!.queue).toEqual([]); // a left and eliminated b is skipped
   });
 
   it('falls back to the defensive plan when the AI planner throws', async () => {

@@ -40,7 +40,7 @@ import {
   validateCardTrade,
 } from '../engine/cards.js';
 import { buildPlannerContext, type PlannerContext } from '../engine/planner.js';
-import { currentPlayer } from '../engine/turnSession.js';
+import { currentPlayer, pruneIneligiblePlayers } from '../engine/turnSession.js';
 import type { GameState, TerritoryCard } from '../engine/types.js';
 import type { GameRepository, TurnPhase, TurnState } from './repository.js';
 import { ensureTurnStarted } from './turnStart.js';
@@ -177,9 +177,11 @@ export class TurnApi {
     );
 
     let next = applyAttackResult(game, playerId, decl, result);
-    next = applyEliminations(next);
+    next = applyEliminations(next, playerId);
     next = checkWin(next);
     await this.repo.saveGame(next);
+    const session = await this.repo.loadSession(gameId, dayNumber);
+    if (session) await this.repo.saveSession(pruneIneligiblePlayers(session, next));
 
     turnState.phase = 'attack';
     turnState.attacksMade += 1;

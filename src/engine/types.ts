@@ -30,6 +30,8 @@ export interface Player {
   status: PlayerStatus;
   /** Conquest cards held for a future fixed-value reinforcement trade. */
   cards?: TerritoryCard[];
+  /** Fixed rewards from eliminations, released at the start of the next turn. */
+  pendingEliminationReward?: number;
   /** Troops banked from logged exercise, waiting to be placed next turn. */
   pendingReinforcements: number;
   /** Consecutive daily turns auto-resolved (drives admin/auto forfeit). */
@@ -115,6 +117,15 @@ export interface HealthRuleHistoryEntry {
   summary: string;
 }
 
+export interface PlayerEliminationEvent {
+  id: string;
+  type: 'player_eliminated';
+  dayNumber: number;
+  eliminatedPlayerId: PlayerId;
+  eliminatedByPlayerId: PlayerId;
+  rewardTroops: number;
+}
+
 export interface GameState {
   id: string;
   config: GameConfig;
@@ -129,4 +140,6 @@ export interface GameState {
   healthRulesVersion?: number;
   pendingHealthRuleProposal?: HealthRuleProposal;
   healthRuleHistory?: HealthRuleHistoryEntry[];
+  /** Persistent public events so every browser sees important game moments. */
+  events?: PlayerEliminationEvent[];
 }

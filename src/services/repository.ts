@@ -30,6 +30,8 @@ export interface TurnState {
   startBonus?: number;
   /** Exercise-earned troops already banked when this turn began. */
   startExerciseTroops?: number;
+  /** Fixed elimination rewards released when this turn began. */
+  startEliminationTroops?: number;
   /** Labels of continents the player controlled at turn start. */
   startContinents?: string[];
   /** First territory captured this turn; earns one card when the turn ends. */

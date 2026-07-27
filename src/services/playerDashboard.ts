@@ -32,6 +32,7 @@ export interface PlayerDashboard {
   turnStart: {
     exerciseTroops: number;
     territoryAndContinentTroops: number;
+    eliminationTroops: number;
     total: number;
   } | null;
   cards: {
@@ -70,6 +71,7 @@ export async function buildPlayerDashboard(
   const territories = game.territories.filter((t) => t.owner === playerId);
   const startBonus = turnState?.startBonus ?? 0;
   const startExerciseTroops = turnState?.startExerciseTroops ?? 0;
+  const startEliminationTroops = turnState?.startEliminationTroops ?? 0;
 
   return {
     playerId,
@@ -81,7 +83,8 @@ export async function buildPlayerDashboard(
       ? {
           exerciseTroops: startExerciseTroops,
           territoryAndContinentTroops: startBonus,
-          total: startExerciseTroops + startBonus,
+          eliminationTroops: startEliminationTroops,
+          total: startExerciseTroops + startBonus + startEliminationTroops,
         }
       : null,
     cards: {

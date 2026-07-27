@@ -44,6 +44,9 @@
       .players { margin:0; padding:0; display:grid; gap:7px; }
       .players li { list-style:none; display:grid; grid-template-columns:12px 1fr; gap:2px 8px; padding:9px; border-radius:8px; background:#222c38; border:1px solid #2d3b4c; }
       .players li .dot { grid-row:1 / 3; margin-top:4px; }
+      .players li.eliminated { background:#1a1c22; border-color:#4b3438; opacity:.78; }
+      .players li.eliminated .dot { filter:grayscale(.7); }
+      .playerStatusBadge { margin-left:6px; padding:1px 5px; border:1px solid #72464d; border-radius:999px; color:#f0a0a8; font-size:9px; font-weight:750; letter-spacing:.05em; text-transform:uppercase; }
       .playerMeta { grid-column:2; font-size:12px; color:var(--muted); }
       .dot { width:12px; height:12px; border-radius:3px; display:inline-block; }
       .continent { margin-bottom:14px; }
@@ -187,6 +190,10 @@
       @media (max-width:620px){ .cardDetailPanel{ grid-template-columns:1fr; max-height:calc(100vh - 32px); overflow:auto; } #cardDetailFace .territoryCard{ min-height:210px; } }
       #gameToast { position:fixed; top:68px; right:18px; z-index:60; max-width:320px; padding:11px 14px; border:1px solid #5984b5; border-radius:10px; background:#20344d; color:#f4f7fb; box-shadow:0 12px 32px rgba(0,0,0,.34); opacity:0; transform:translateY(-8px); pointer-events:none; transition:opacity .18s ease,transform .18s ease; }
       #gameToast.show { opacity:1; transform:translateY(0); }
+      #eliminationBanner { display:none; margin:12px 16px 0; padding:10px 14px; border:1px solid #804b55; border-radius:10px; background:linear-gradient(90deg,#351f26,#222632); color:#f5dce0; box-shadow:0 7px 22px rgba(0,0,0,.2); }
+      #eliminationBanner.show { display:flex; align-items:center; gap:9px; }
+      #eliminationBanner .eventIcon { font-size:20px; }
+      #eliminationBanner .eventReward { margin-left:auto; color:#ffd17a; font-weight:750; white-space:nowrap; }
     </style>
   </head>
   <body>
@@ -211,6 +218,7 @@
     </header>
 
     <div id="gameToast" role="status" aria-live="polite"></div>
+    <div id="eliminationBanner" role="status" aria-live="polite"></div>
     <svg width="0" height="0" aria-hidden="true" style="position:absolute"><defs id="cardMapDefs"></defs></svg>
 
     <main>
@@ -378,6 +386,8 @@
       let lastExpiryRefreshed = null;
       let toastTimer = null;
       let selectedCardId = null;
+      let eventGameId = null;
+      const seenGameEventIds = new Set();
       let gameId = localStorage.getItem('exriskGame');
       let token = localStorage.getItem('exriskToken');
       let currentUser = null;
@@ -828,7 +838,7 @@
             $('#fortifyTitle').textContent = `${pretty(from.id)} → ${pretty(t.id)}`;
             $('#fortifyHelp').textContent = `Move up to ${max} troops while leaving one behind.`;
             $('#fortifyCount').max = String(max);
-            $('#fortifyCount').value = '1';
+            $('#fortifyCount').value = String(max);
             $('#fortifyError').textContent = '';
             $('#fortifyOverlay').classList.add('show');
             $('#fortifyCount').focus();
@@ -1018,6 +1028,38 @@
           if ((game.startBonus || 0) > 0) msg += ` — +${game.startBonus} troops from territory/continent control`;
           log(msg);
         }
+        if (eventGameId !== game.id) {
+          eventGameId = game.id;
+          seenGameEventIds.clear();
+        }
+        const events = game.events || [];
+        const unseenEvents = events.filter((event) => !seenGameEventIds.has(event.id));
+        for (const event of unseenEvents) {
+          seenGameEventIds.add(event.id);
+          const eliminator = game.players.find((player) => player.id === event.eliminatedByPlayerId);
+          const eliminated = game.players.find((player) => player.id === event.eliminatedPlayerId);
+          const result = game.status === 'finished' ? 'victory secured' : `+${event.rewardTroops} troops next turn`;
+          log(`⚔ ${eliminator?.name || 'A player'} eliminated ${eliminated?.name || 'a player'} · ${result}`);
+        }
+        if (unseenEvents.length) {
+          const event = unseenEvents[unseenEvents.length - 1];
+          const eliminator = game.players.find((player) => player.id === event.eliminatedByPlayerId);
+          const eliminated = game.players.find((player) => player.id === event.eliminatedPlayerId);
+          const result = game.status === 'finished' ? 'game won!' : `+${event.rewardTroops} next turn`;
+          showToast(`${eliminator?.name || 'A player'} eliminated ${eliminated?.name || 'a player'} — ${result}`);
+        }
+        const latestElimination = events[events.length - 1];
+        const banner = $('#eliminationBanner');
+        if (latestElimination) {
+          const eliminator = game.players.find((player) => player.id === latestElimination.eliminatedByPlayerId);
+          const eliminated = game.players.find((player) => player.id === latestElimination.eliminatedPlayerId);
+          const result = game.status === 'finished' ? 'Victory secured' : `+${latestElimination.rewardTroops} next turn`;
+          banner.innerHTML = `<span class="eventIcon">⚔</span><span><b>${esc(eliminator?.name || 'A player')}</b> eliminated <b>${esc(eliminated?.name || 'a player')}</b></span><span class="eventReward">${result}</span>`;
+          banner.classList.add('show');
+        } else {
+          banner.classList.remove('show');
+          banner.textContent = '';
+        }
         // Win overlay.
         const ov = $('#winOverlay');
         if (game.status === 'finished') {
@@ -1048,15 +1090,18 @@
         };
         const player = game.players.find((p) => p.id === d.playerId);
         const isUp = game.currentPlayerId === d.playerId;
-        const turnLabel = isUp
-          ? (game.yourTurn ? `Your turn - ${game.phase}` : `${player.name}'s turn`)
-          : `Waiting for ${game.players.find((p) => p.id === game.currentPlayerId)?.name || 'the next turn'}`;
+        const turnLabel = game.status === 'finished'
+          ? (game.winnerId === d.playerId ? 'Victory' : 'Game over')
+          : isUp
+            ? (game.yourTurn ? `Your turn - ${game.phase}` : `${player.name}'s turn`)
+            : `Waiting for ${game.players.find((p) => p.id === game.currentPlayerId)?.name || 'the next turn'}`;
         const turnStart = d.turnStart
           ? `<details class="disclosure dashboardDisclosure" data-dashboard-section="reinforcements"${rememberedOpen('reinforcements', true) ? ' open' : ''}>
               <summary><span>Reinforcements</span><span class="summaryMeta">${d.availableReinforcements} available</span></summary>
               <div class="disclosureBody">
                 <div class="incomeRow"><span>Health-goal bank</span><b>+${d.turnStart.exerciseTroops}</b></div>
                 <div class="incomeRow"><span>Territory + continents</span><b>+${d.turnStart.territoryAndContinentTroops}</b></div>
+                ${d.turnStart.eliminationTroops ? `<div class="incomeRow"><span>Elimination reward</span><b>+${d.turnStart.eliminationTroops}</b></div>` : ''}
               </div>
             </details>`
           : `<details class="disclosure dashboardDisclosure" data-dashboard-section="reinforcements"${rememberedOpen('reinforcements', false) ? ' open' : ''}>
@@ -1176,8 +1221,12 @@
         renderExercise();
         renderHealthRuleControls();
         $('#dayPill').textContent = 'Day ' + game.dayNumber;
-        const cur = game.players.find((p) => p.id === game.currentPlayerId);
-        $('#turnPill').innerHTML = cur ? `Turn: <b style="color:${cur.color}">${cur.name}</b> · ${game.phase}` : 'Turn: —';
+        const cur = game.status === 'active' ? game.players.find((p) => p.id === game.currentPlayerId) : null;
+        $('#turnPill').innerHTML = game.status === 'finished'
+          ? 'Game over'
+          : cur
+            ? `Turn: <b style="color:${cur.color}">${cur.name}</b> · ${game.phase}`
+            : 'Turn: —';
         $('#statusPill').innerHTML = game.status === 'finished'
           ? `<span class="win">🏆 ${game.players.find((p) => p.id === game.winnerId)?.name} wins!</span>`
           : 'In progress';
@@ -1185,14 +1234,20 @@
         const mine = new Set(game.mySeats || []);
         $('#players').innerHTML = game.players.map((p) => {
           const owned = game.territories.filter((t) => t.owner === p.id).length;
-          const cur = p.id === game.currentPlayerId ? '▶ ' : '';
+          const cur = game.status === 'active' && p.id === game.currentPlayerId ? '▶ ' : '';
           const you = mine.has(p.id) ? ' <span style="color:#6ea8fe">(you)</span>' : '';
           const open = !p.claimed ? ' <span class="muted">· open seat</span>' : '';
-          return `<li><span class="dot" style="background:${p.color}"></span>
-            <div>${cur}<b>${p.name}</b>${you}${open}</div>
-            <div class="playerMeta">${owned} territories · ${p.pendingReinforcements} troops to place${p.status !== 'active' ? ' · ' + p.status : ''}</div></li>`;
+          const eliminated = p.status === 'eliminated';
+          const status = eliminated ? '<span class="playerStatusBadge">Eliminated</span>' : '';
+          const meta = eliminated
+            ? '0 territories · out of the game'
+            : `${owned} territories · ${p.pendingReinforcements} troops to place${p.pendingEliminationReward ? ` · +${p.pendingEliminationReward} next turn` : ''}${p.status !== 'active' ? ' · ' + p.status : ''}`;
+          return `<li class="${eliminated ? 'eliminated' : ''}"><span class="dot" style="background:${p.color}"></span>
+            <div>${cur}<b>${esc(p.name)}</b>${status}${you}${open}</div>
+            <div class="playerMeta">${meta}</div></li>`;
         }).join('');
-        $('#playersSummary').textContent = `${game.players.length} players · ${cur ? cur.name + ' active' : 'complete'}`;
+        const activePlayers = game.players.filter((player) => player.status !== 'eliminated' && player.status !== 'forfeited').length;
+        $('#playersSummary').textContent = `${activePlayers}/${game.players.length} active · ${cur ? cur.name + "'s turn" : 'complete'}`;
 
         const allowed = allowedModes();
         document.querySelectorAll('.modeBtn').forEach((b) => {

@@ -40,12 +40,19 @@ export async function ensureTurnStarted(
   if (await repo.loadTurnState(gameId, dayNumber, playerId)) return { started: false, bonus: null };
 
   const bonus = standardReinforcements(game, playerId);
+  const eliminationReward = player.pendingEliminationReward ?? 0;
   const players = game.players.map((p) =>
-    p.id === playerId ? { ...p, pendingReinforcements: p.pendingReinforcements + bonus.total } : p,
+    p.id === playerId
+      ? {
+          ...p,
+          pendingEliminationReward: 0,
+          pendingReinforcements: p.pendingReinforcements + bonus.total + eliminationReward,
+        }
+      : p,
   );
   await repo.saveGame({ ...game, players });
 
-  const newBank = player.pendingReinforcements + bonus.total;
+  const newBank = player.pendingReinforcements + bonus.total + eliminationReward;
   const turnState: TurnState = {
     gameId,
     dayNumber,
@@ -54,6 +61,7 @@ export async function ensureTurnStarted(
     attacksMade: 0,
     startBonus: bonus.total,
     startExerciseTroops: player.pendingReinforcements,
+    startEliminationTroops: eliminationReward,
     startContinents: bonus.continents.map((c) => c.label),
   };
   await repo.saveTurnState(turnState);
