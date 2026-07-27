@@ -37,7 +37,7 @@ export interface PublicUser {
 }
 const toPublic = (u: User): PublicUser => ({ id: u.id, username: u.username });
 
-const USERNAME_RE = /^[a-zA-Z0-9_]{3,24}$/;
+const USERNAME_RE = /^[a-zA-Z0-9_-]{3,24}$/;
 
 export async function signup(
   repo: GameRepository,
@@ -45,7 +45,7 @@ export async function signup(
   password: string,
 ): Promise<{ token: string; user: PublicUser }> {
   if (!USERNAME_RE.test(username)) {
-    throw new TurnError('bad_username', 'Username must be 3–24 letters, digits, or underscores');
+    throw new TurnError('bad_username', 'Username must be 3–24 letters, digits, underscores, or hyphens');
   }
   if (typeof password !== 'string' || password.length < 6) {
     throw new TurnError('bad_password', 'Password must be at least 6 characters');

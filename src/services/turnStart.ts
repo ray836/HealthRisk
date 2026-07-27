@@ -53,6 +53,7 @@ export async function ensureTurnStarted(
     phase: newBank > 0 ? 'reinforce' : 'attack',
     attacksMade: 0,
     startBonus: bonus.total,
+    startExerciseTroops: player.pendingReinforcements,
     startContinents: bonus.continents.map((c) => c.label),
   };
   await repo.saveTurnState(turnState);

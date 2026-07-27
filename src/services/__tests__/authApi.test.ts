@@ -19,6 +19,13 @@ describe('signup', () => {
     expect(await resolveToken(repo, token)).toMatchObject({ username: 'alice' });
   });
 
+  it('allows hyphens and underscores in usernames', async () => {
+    const repo = new InMemoryGameRepository();
+    await expect(signup(repo, 'ray-player_1', 'hunter2')).resolves.toMatchObject({
+      user: { username: 'ray-player_1' },
+    });
+  });
+
   it('rejects duplicate usernames and bad inputs', async () => {
     const repo = new InMemoryGameRepository();
     await signup(repo, 'alice', 'hunter2');

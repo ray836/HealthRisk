@@ -28,6 +28,8 @@ export interface TurnState {
   attacksMade: number;
   /** Standard reinforcements granted at turn start (territory + continent), for display. */
   startBonus?: number;
+  /** Exercise-earned troops already banked when this turn began. */
+  startExerciseTroops?: number;
   /** Labels of continents the player controlled at turn start. */
   startContinents?: string[];
 }

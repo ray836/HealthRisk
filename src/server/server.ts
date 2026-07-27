@@ -23,6 +23,7 @@ import { GameScheduler } from '../services/scheduling/gameScheduler.js';
 import { InProcessJobQueue } from '../services/scheduling/jobQueue.js';
 import { logExercise } from '../services/exerciseApi.js';
 import { ensureTurnStarted } from '../services/turnStart.js';
+import { buildPlayerDashboard } from '../services/playerDashboard.js';
 import { signup, login, logout, resolveToken, type PublicUser } from '../services/authApi.js';
 import { claimSeat, claimAllSeats, claimOpenSeat, seatFor } from '../services/membership.js';
 import { createGame } from '../engine/setup.js';
@@ -94,6 +95,13 @@ async function gameView(gameId: string, viewerId?: string) {
   const seatOwner = new Map(members.map((m) => [m.playerId, m.userId]));
   const mySeats = viewerId ? members.filter((m) => m.userId === viewerId).map((m) => m.playerId) : [];
   const yourTurn = !!playerId && mySeats.includes(playerId);
+  const dashboardPlayerId = yourTurn ? playerId : mySeats[0] ?? null;
+  const dashboardTurnState = dashboardPlayerId
+    ? await repo.loadTurnState(gameId, game.dayNumber, dashboardPlayerId)
+    : null;
+  const dashboard = dashboardPlayerId
+    ? await buildPlayerDashboard(repo, gameId, game.dayNumber, dashboardPlayerId, dashboardTurnState)
+    : null;
 
   return {
     id: game.id,
@@ -104,6 +112,7 @@ async function gameView(gameId: string, viewerId?: string) {
     currentPlayerId: playerId,
     mySeats,
     yourTurn,
+    dashboard,
     phase: turnState?.phase ?? 'reinforce',
     startBonus: turnState?.startBonus ?? 0,
     startContinents: turnState?.startContinents ?? [],
