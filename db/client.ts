@@ -11,7 +11,10 @@ import { drizzle as drizzlePglite, type PgliteDatabase } from 'drizzle-orm/pglit
 import { drizzle as drizzlePostgres, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { PGlite } from '@electric-sql/pglite';
 import postgres from 'postgres';
-import { DDL_STATEMENTS } from './store.js';
+import {
+  applyDatabaseMigrations,
+  type SqlMigrationAdapter,
+} from './migrations.js';
 
 /** Either driver's drizzle instance — both expose the same pg query builder. */
 export type AppDatabase = PgliteDatabase<Record<string, never>> | PostgresJsDatabase<Record<string, never>>;
@@ -19,22 +22,84 @@ export type AppDatabase = PgliteDatabase<Record<string, never>> | PostgresJsData
 export interface DbHandle {
   db: AppDatabase;
   kind: 'pglite' | 'postgres';
+  /** Credential-free description safe to write to application logs. */
   location: string;
+  persistent: boolean;
+  migrationVersion: number;
+  check: () => Promise<void>;
   close: () => Promise<void>;
 }
 
-export async function createDb(opts: { url?: string; dir?: string } = {}): Promise<DbHandle> {
+export interface CreateDbOptions {
+  url?: string;
+  dir?: string;
+  mode?: 'development' | 'test' | 'production';
+}
+
+export function describeDatabaseLocation(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const database = parsed.pathname.replace(/^\/+/, '') || '(default)';
+    return `${parsed.hostname}${parsed.port ? `:${parsed.port}` : ''}/${database}`;
+  } catch {
+    return 'configured Postgres';
+  }
+}
+
+export async function createDb(opts: CreateDbOptions = {}): Promise<DbHandle> {
   const url = opts.url ?? process.env.DATABASE_URL;
+  const mode = opts.mode ?? (process.env.NODE_ENV === 'production' ? 'production' : 'development');
+
+  if (mode === 'production' && !url) {
+    throw new Error(
+      'DATABASE_URL is required when NODE_ENV=production; refusing to start with a local PGlite store',
+    );
+  }
 
   if (url) {
-    const client = postgres(url);
-    for (const stmt of DDL_STATEMENTS) await client.unsafe(stmt);
-    return { db: drizzlePostgres(client), kind: 'postgres', location: url, close: () => client.end() };
+    const max = Math.max(1, Number(process.env.DATABASE_MAX_CONNECTIONS ?? 10) || 10);
+    const client = postgres(url, { max });
+    const adapter: SqlMigrationAdapter = {
+      execute: async (sql) => {
+        await client.unsafe(sql);
+      },
+      rows: async <T extends Record<string, unknown>>(sql: string) =>
+        (await client.unsafe(sql)) as unknown as T[],
+    };
+    const migrationVersion = await applyDatabaseMigrations(adapter);
+    return {
+      db: drizzlePostgres(client),
+      kind: 'postgres',
+      location: describeDatabaseLocation(url),
+      persistent: true,
+      migrationVersion,
+      check: async () => {
+        await client.unsafe('SELECT 1');
+      },
+      close: () => client.end(),
+    };
   }
 
   // Embedded PGlite. A path persists to disk; ':memory:' is ephemeral (tests).
   const dir = opts.dir ?? process.env.PGLITE_DIR ?? './.data';
   const pg = new PGlite(dir);
-  for (const stmt of DDL_STATEMENTS) await pg.exec(stmt);
-  return { db: drizzlePglite(pg), kind: 'pglite', location: dir, close: () => pg.close() };
+  const adapter: SqlMigrationAdapter = {
+    execute: async (sql) => {
+      await pg.exec(sql);
+    },
+    rows: async <T extends Record<string, unknown>>(sql: string) =>
+      (await pg.query<T>(sql)).rows,
+  };
+  const migrationVersion = await applyDatabaseMigrations(adapter);
+  return {
+    db: drizzlePglite(pg),
+    kind: 'pglite',
+    location: dir,
+    persistent: dir !== 'memory://' && dir !== ':memory:',
+    migrationVersion,
+    check: async () => {
+      await pg.query('SELECT 1');
+    },
+    close: () => pg.close(),
+  };
 }

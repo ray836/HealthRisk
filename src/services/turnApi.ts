@@ -140,13 +140,16 @@ export class TurnApi {
     if (err) throw fromValidation(err);
     const next = applyReinforcement(game, playerId, placements);
     await this.repo.saveGame(next);
+    turnState.reinforcementTroopsPlaced =
+      (turnState.reinforcementTroopsPlaced ?? 0) +
+      placements.reduce((total, placement) => total + placement.count, 0);
+    turnState.reinforcementPlacementsMade =
+      (turnState.reinforcementPlacementsMade ?? 0) + placements.length;
     const bank = next.players.find((p) => p.id === playerId)!.pendingReinforcements;
     // Reinforcements are mandatory and placed in full — once the bank is empty
     // the reinforce phase is over and the turn advances to attack automatically.
-    if (bank === 0) {
-      turnState.phase = 'attack';
-      await this.repo.saveTurnState(turnState);
-    }
+    if (bank === 0) turnState.phase = 'attack';
+    await this.repo.saveTurnState(turnState);
     return { remainingBank: bank };
   }
 
@@ -191,8 +194,16 @@ export class TurnApi {
 
     turnState.phase = 'attack';
     turnState.attacksMade += 1;
+    turnState.attackerLosses = (turnState.attackerLosses ?? 0) + result.totalAttackerLosses;
+    turnState.defenderLosses = (turnState.defenderLosses ?? 0) + result.totalDefenderLosses;
     if (result.captured && !turnState.capturedTerritoryId) {
       turnState.capturedTerritoryId = decl.toId;
+    }
+    if (result.captured) {
+      turnState.territoriesCaptured = [
+        ...(turnState.territoriesCaptured ?? []),
+        decl.toId,
+      ];
     }
     await this.repo.saveTurnState(turnState);
     return result;
@@ -219,6 +230,8 @@ export class TurnApi {
       `${gameId}:${dayNumber}:${playerId}:trade:${tradedCardIds}`,
     );
     await this.repo.saveGame(next);
+    turnState.cardsTraded = (turnState.cardsTraded ?? 0) + 1;
+    await this.repo.saveTurnState(turnState);
     const player = next.players.find((candidate) => candidate.id === playerId)!;
     return {
       remainingBank: player.pendingReinforcements,
@@ -246,6 +259,9 @@ export class TurnApi {
     );
     await this.repo.saveGame(next);
     turnState.phase = 'fortify';
+    turnState.fortifiedTroops = move.count;
+    turnState.fortifiedFromId = move.fromId;
+    turnState.fortifiedToId = move.toId;
     await this.repo.saveTurnState(turnState);
   }
 

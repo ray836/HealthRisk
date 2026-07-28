@@ -121,6 +121,11 @@ export class DrizzleGameRepository implements GameRepository {
       .values(member)
       .onConflictDoUpdate({ target: [members.gameId, members.playerId], set: { userId: member.userId } });
   }
+  async deleteMember(gameId: string, playerId: string): Promise<void> {
+    await this.db
+      .delete(members)
+      .where(and(eq(members.gameId, gameId), eq(members.playerId, playerId)));
+  }
   async getMemberByUser(gameId: string, userId: string): Promise<Member | null> {
     const rows = await this.db
       .select()
@@ -137,5 +142,8 @@ export class DrizzleGameRepository implements GameRepository {
   }
   async listMembers(gameId: string): Promise<Member[]> {
     return (await this.db.select().from(members).where(eq(members.gameId, gameId))) as Member[];
+  }
+  async listMembersForUser(userId: string): Promise<Member[]> {
+    return (await this.db.select().from(members).where(eq(members.userId, userId))) as Member[];
   }
 }

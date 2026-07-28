@@ -43,11 +43,26 @@
       #authStatus.success { color:#69d39b; }
       .players { margin:0; padding:0; display:grid; gap:7px; }
       .players li { list-style:none; display:grid; grid-template-columns:12px 1fr; gap:2px 8px; padding:9px; border-radius:8px; background:#222c38; border:1px solid #2d3b4c; }
-      .players li .dot { grid-row:1 / 3; margin-top:4px; }
+      .players li .dot { grid-row:1 / 4; margin-top:4px; }
       .players li.eliminated { background:#1a1c22; border-color:#4b3438; opacity:.78; }
       .players li.eliminated .dot { filter:grayscale(.7); }
       .playerStatusBadge { margin-left:6px; padding:1px 5px; border:1px solid #72464d; border-radius:999px; color:#f0a0a8; font-size:9px; font-weight:750; letter-spacing:.05em; text-transform:uppercase; }
       .playerMeta { grid-column:2; font-size:12px; color:var(--muted); }
+      .playersIntro { display:grid; gap:2px; margin:0 0 9px; padding:8px 9px; border:1px solid #30445a; border-radius:8px; background:#192431; }
+      .playersIntro b { color:#c9dcf4; font-size:11px; }
+      .playersIntro span { color:#8f9baa; font-size:10px; }
+      .playerHealth { grid-column:2; margin-top:6px; padding-top:6px; border-top:1px solid #314052; }
+      .playerHealthTop,.playerHealthFoot { display:flex; justify-content:space-between; gap:8px; font-size:10px; }
+      .playerHealthTop { color:#aebaca; }
+      .playerHealthTop b { color:#d6e1ee; }
+      .playerHealthTop strong { color:#9ec8ff; white-space:nowrap; }
+      .healthMomentumBar { height:6px; margin:5px 0 4px; overflow:hidden; border-radius:999px; background:#121923; box-shadow:inset 0 0 0 1px #2d3a4a; }
+      .healthMomentumBar > span { display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg,#4d91de,#7bb9ff); transition:width .25s ease; }
+      .playerHealthFoot { color:#7f8c9b; }
+      .playerHealth.goalMet .healthMomentumBar > span { background:linear-gradient(90deg,#43a978,#7bd7a3); }
+      .playerHealth.goalMet .playerHealthTop strong { color:#83d8a9; }
+      .playerHealth.notStarted .healthMomentumBar > span { background:#5a6674; }
+      .playerHealth.unavailable { color:#7f8c9b; font-size:10px; }
       .dot { width:12px; height:12px; border-radius:3px; display:inline-block; }
       .continent { margin-bottom:14px; }
       .continent h3 { margin:0 0 6px; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
@@ -67,6 +82,28 @@
       .muted { color:var(--muted); }
       .win { color:#3fae7a; font-weight:700; }
       #board { background:#181f28; border-color:#34465a; }
+      .lobbyShell { min-height:545px; display:grid; place-items:center; padding:24px; border:1px solid #263545; border-radius:9px; background:
+        radial-gradient(circle at 50% 18%,rgba(65,112,166,.22),transparent 42%),
+        linear-gradient(150deg,#101822,#0d131b); }
+      .lobbyCard { width:min(720px,100%); padding:28px; border:1px solid #49617f; border-radius:18px; background:linear-gradient(145deg,#202b39,#151c26); box-shadow:0 22px 60px rgba(0,0,0,.36); }
+      .lobbyEyebrow { color:#8ebcff; font-size:11px; font-weight:800; letter-spacing:.13em; text-transform:uppercase; }
+      .lobbyCard h2 { margin:5px 0 5px; font-size:28px; }
+      .lobbyCode { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:20px 0; padding:13px 15px; border:1px solid #435a76; border-radius:11px; background:#111a25; }
+      .lobbyCode span { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.08em; }
+      .lobbyCode code { font-size:18px; font-weight:800; color:#dbeaff; }
+      .lobbySeats { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:9px; margin:18px 0; }
+      .lobbySeat { display:grid; grid-template-columns:34px 1fr; gap:8px; align-items:center; padding:11px; border:1px solid #35465a; border-radius:10px; background:#151e29; }
+      .lobbySeat.open { border-style:dashed; opacity:.68; }
+      .lobbySeatIcon { display:grid; place-items:center; width:34px; height:34px; border-radius:50%; background:#24344a; font-weight:800; }
+      .lobbySeat small { display:block; color:var(--muted); }
+      .lobbySchedule { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:18px 0; }
+      .lobbySchedule div { padding:10px; border:1px solid #304156; border-radius:9px; background:#131c27; }
+      .lobbySchedule span { display:block; color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.06em; }
+      .lobbySchedule b { display:block; margin-top:3px; }
+      .lobbyActions { display:flex; justify-content:flex-end; gap:8px; margin-top:20px; }
+      .lobbyActions .primary { border-color:#5e8fc5; background:#294b70; }
+      .lobbyFootnote { margin:13px 0 0; color:var(--muted); font-size:11px; }
+      @media (max-width:620px){ .lobbyCard{padding:20px}.lobbySchedule{grid-template-columns:1fr}.lobbyActions{flex-direction:column-reverse}.lobbyActions button{width:100%} }
       #board svg { width:100%; height:auto; display:block; background:#0f151d; border:1px solid #263545; border-radius:9px; }
       #board svg .landBase { fill:#17212c; pointer-events:none; }
       #board svg .continentRegion { fill-opacity:.26; stroke:none; pointer-events:none; }
@@ -81,6 +118,11 @@
       #board svg .node { cursor:default; }
       #board svg .node.can { cursor:pointer; }
       #board svg .node.briefingChanged circle { stroke:#ffd166; stroke-width:3.5; filter:drop-shadow(0 0 6px rgba(255,209,102,.75)); }
+      #board svg .node.actionPulse circle { stroke:#8ed5ff; stroke-width:4; animation:actionPulse 1.1s ease-in-out 2; }
+      @keyframes actionPulse {
+        0%,100% { filter:drop-shadow(0 0 2px rgba(142,213,255,.35)); }
+        50% { filter:drop-shadow(0 0 10px rgba(142,213,255,1)); }
+      }
       #winOverlay { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(10,12,16,.82); z-index:50; }
       #winOverlay.show { display:flex; }
       #winOverlay .card { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:28px 40px; text-align:center; }
@@ -106,6 +148,14 @@
       #fortifyCount { width:100%; margin:16px 0; padding:10px; font:inherit; font-size:18px; }
       #fortifyError { min-height:1.4em; margin-bottom:10px; color:#ff8c82; font-size:12px; }
       .sectionLabel { margin:14px 0 7px; color:var(--muted); font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; }
+      .phaseRail { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; margin-bottom:10px; }
+      .phaseStep { padding:6px 3px; border:1px solid #303d4e; border-radius:7px; background:#171e27; color:#788493; font-size:9px; font-weight:750; text-align:center; text-transform:uppercase; }
+      .phaseStep.done { border-color:#315846; background:#182a23; color:#78c69c; }
+      .phaseStep.active { border-color:#649de0; background:#22354d; color:#b9d7ff; box-shadow:inset 0 -2px #6ea8fe; }
+      .turnSummaryBar { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:10px; }
+      .turnSummaryChip { padding:4px 7px; border:1px solid #354459; border-radius:999px; background:#19222e; color:#aeb9c7; font-size:10px; }
+      .turnSummaryChip b { color:#eef3fa; }
+      .turnSummaryChip.reward { border-color:#426b53; background:#1b3026; color:#84d4a7; }
       .actionGrid { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; }
       .actionGrid button { padding-inline:6px; }
       #myDashboard { display:grid; gap:10px; }
@@ -149,14 +199,78 @@
       .dashboardDisclosure .disclosureBody { margin-top:9px; padding-top:9px; }
       .turnCard #hint { margin:12px 0 0; min-height:0 !important; }
       details.activity summary { color:var(--muted); font-size:12px; }
-      #userPanelOverlay { position:fixed; inset:0; display:none; align-items:center; justify-content:flex-end; background:rgba(10,12,16,.64); z-index:45; }
+      #userPanelOverlay { position:fixed; inset:0; display:none; align-items:center; justify-content:flex-end; background:rgba(7,10,14,.7); backdrop-filter:blur(2px); z-index:45; }
       #userPanelOverlay.show { display:flex; }
-      #userPanel { width:min(390px, 100vw); height:100%; overflow:auto; background:var(--panel); border-left:1px solid var(--line); padding:22px; box-shadow:-12px 0 30px rgba(0,0,0,.28); }
-      #userPanel header { padding:0 0 18px; border:0; justify-content:space-between; }
+      #userPanel { width:min(430px,100vw); height:100%; overflow:auto; padding:0 18px 22px; background:#121821; border-left:1px solid #314156; box-shadow:-18px 0 46px rgba(0,0,0,.42); }
+      #userPanel header { position:sticky; top:0; z-index:2; margin:0 -18px 14px; padding:16px 18px; border:0; border-bottom:1px solid #2f3d4e; background:rgba(18,24,33,.96); backdrop-filter:blur(10px); justify-content:space-between; }
       #userPanel h2 { margin:0; font-size:18px; }
-      .userSection { padding:16px 0; border-top:1px solid var(--line); }
-      .userSection h3 { margin:0 0 5px; font-size:14px; }
+      #userPanelClose { width:38px; height:38px; padding:0; border-color:#3a4b60; border-radius:10px; background:#1e2834; }
+      .userIdentity { display:flex; align-items:center; gap:10px; min-width:0; }
+      .userAvatar { display:grid; place-items:center; width:38px; height:38px; flex:0 0 auto; border:1px solid #3f5874; border-radius:11px; background:#203149; font-size:18px; }
+      .userEyebrow { color:#8e9bac; font-size:9px; font-weight:750; letter-spacing:.1em; text-transform:uppercase; }
+      .userPanelBody { display:grid; gap:12px; }
+      .userSection { padding:15px; border:1px solid #2c394a; border-radius:12px; background:#1a222d; box-shadow:0 7px 18px rgba(0,0,0,.12); }
+      .userSection.healthSection { border-color:#3a5675; background:linear-gradient(145deg,#1d2b3c,#19222d); }
+      .userSection h3 { margin:0 0 3px; font-size:14px; }
       .userSection p { margin:0 0 12px; }
+      .userSectionHeading { display:flex; gap:10px; align-items:flex-start; margin-bottom:13px; }
+      .userSectionHeading p { margin:2px 0 0; font-size:11px; }
+      .userSectionIcon { display:grid; place-items:center; width:30px; height:30px; flex:0 0 auto; border:1px solid #3d536c; border-radius:9px; background:#223247; color:#9dc8ff; font-size:14px; }
+      .goalLogGrid { display:grid; gap:9px; }
+      .healthGoalPicker { position:relative; min-width:0; }
+      .goalPickerButton { display:grid; grid-template-columns:35px minmax(0,1fr) auto; gap:9px; align-items:center; width:100%; min-height:52px; padding:7px 10px; border-color:#425875; background:#172232; text-align:left; }
+      .goalPickerButton:hover,.goalPickerButton[aria-expanded="true"] { border-color:#6594ca; background:#1d2c3f; }
+      .goalPickerButton[aria-expanded="true"] { border-radius:9px 9px 5px 5px; box-shadow:0 0 0 2px rgba(101,148,202,.14); }
+      .goalPickerEmoji,.goalOptionEmoji { display:grid; place-items:center; flex:0 0 auto; border:1px solid #3d5571; border-radius:9px; background:#22344a; }
+      .goalPickerEmoji { width:35px; height:35px; font-size:18px; }
+      .goalPickerCopy { display:grid; min-width:0; }
+      .goalPickerCopy b { overflow:hidden; color:#edf3fa; font-size:13px; text-overflow:ellipsis; white-space:nowrap; }
+      .goalPickerCopy small { overflow:hidden; color:#8f9cad; font-size:10px; text-overflow:ellipsis; white-space:nowrap; }
+      .goalPickerCaret { color:#8fa6c2; font-size:17px; transition:transform .16s ease; }
+      .goalPickerButton[aria-expanded="true"] .goalPickerCaret { transform:rotate(180deg); }
+      .goalPickerMenu { position:absolute; top:calc(100% + 5px); left:0; right:0; z-index:8; display:none; gap:5px; max-height:min(380px,55vh); overflow:auto; padding:7px; border:1px solid #4d6684; border-radius:10px; background:#131c28; box-shadow:0 18px 38px rgba(0,0,0,.52); }
+      .goalPickerMenu.open { display:grid; }
+      .goalOption { display:grid; grid-template-columns:35px minmax(0,1fr) 18px; gap:9px; align-items:center; width:100%; padding:7px; border-color:transparent; background:transparent; text-align:left; }
+      .goalOption:hover { border-color:#344d68; background:#202f42; }
+      .goalOption[aria-selected="true"] { border-color:#4e7299; background:#243b55; }
+      .goalOptionEmoji { width:35px; height:35px; font-size:18px; }
+      .goalOptionCopy { display:grid; min-width:0; }
+      .goalOptionCopy b { color:#eef3f9; font-size:12px; }
+      .goalOptionCopy small { color:#8f9cad; font-size:9px; }
+      .goalOptionCheck { color:#8fc0f7; font-size:13px; text-align:center; }
+      .goalEntryRow { display:flex; gap:7px; align-items:center; }
+      .goalEntryRow #exUnits { width:82px !important; min-width:0; }
+      .goalEntryRow #exUnit { flex:1; white-space:nowrap; font-size:11px; }
+      .goalEntryRow #logBtn { margin-left:auto; border-color:#4b6f98; background:#29415e; }
+      #healthLogHelp { margin-top:9px; padding-top:9px; border-top:1px solid #304155; }
+      .settingRow { display:flex; justify-content:space-between; gap:12px; align-items:center; margin-bottom:11px; padding:10px 11px; border:1px solid #2e3b4b; border-radius:9px; background:#151c25; }
+      .settingRow label { display:flex; gap:7px; align-items:center; }
+      .settingRow select { min-width:54px; }
+      .drawerActions { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-top:11px; }
+      .drawerActions #newBtn { border-color:#4f7096; background:#2a4059; }
+      .drawerActions button:only-child { grid-column:1 / -1; }
+      .currentGameSection { border-color:#456385; background:linear-gradient(145deg,#1d2d40,#182330); }
+      .currentGameMeta { display:flex; flex-wrap:wrap; gap:5px; margin:0 0 11px; }
+      .currentGameMeta span { padding:3px 7px; border:1px solid #3a4e66; border-radius:999px; background:#172332; color:#9dabbc; font-size:9px; }
+      .gameCodeBox { padding:10px; border:1px solid #3b5069; border-radius:9px; background:#121b27; }
+      .gameCodeLabel { display:block; margin-bottom:5px; color:#8392a4; font-size:9px; font-weight:750; letter-spacing:.08em; text-transform:uppercase; }
+      .gameCodeRow { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:7px; align-items:center; }
+      .gameCodeRow code { overflow:hidden; color:#dceaff; font:700 15px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace; letter-spacing:.04em; text-overflow:ellipsis; white-space:nowrap; }
+      .gameCodeRow button { padding:5px 9px; }
+      .practiceShortcut { margin-top:11px; padding:9px 10px; border:1px solid #304156; border-radius:9px; background:#17212d; }
+      .practiceShortcut summary { color:#c6d3e2; font-size:11px; font-weight:700; cursor:pointer; }
+      .practiceShortcut p { margin:7px 0 9px; font-size:10px; }
+      .practiceLaunchRow { display:flex; justify-content:space-between; gap:8px; align-items:center; }
+      .practiceLaunchRow label { display:flex; gap:6px; align-items:center; color:#8e9aaa; font-size:10px; }
+      .returnGameButton { width:100%; margin-top:11px; border-color:#4d7098; background:#29415e; }
+      .joinRow { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; }
+      .joinRow #joinCode { width:100% !important; min-width:0; }
+      .userPanelFooter { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:3px 2px 0; color:#7f8b99; font-size:10px; }
+      .userPanelFooter #logoutBtn { padding:6px 9px; background:transparent; }
+      @media (max-width:480px) {
+        #userPanel { width:100%; }
+        .goalEntryRow #exUnits { width:76px !important; }
+      }
       .ruleEditor { display:grid; gap:10px; margin:10px 0; }
       .ruleCard { padding:12px; border:1px solid #343b47; border-radius:10px; background:#171b22; }
       .ruleCardTop { display:flex; gap:8px; align-items:center; margin-bottom:9px; }
@@ -213,6 +327,25 @@
       #eliminationBanner.show { display:flex; align-items:center; gap:9px; }
       #eliminationBanner .eventIcon { font-size:20px; }
       #eliminationBanner .eventReward { margin-left:auto; color:#ffd17a; font-weight:750; white-space:nowrap; }
+      .feedbackOverlay { position:fixed; inset:0; display:none; align-items:center; justify-content:center; padding:16px; background:rgba(8,11,16,.76); backdrop-filter:blur(3px); z-index:48; }
+      .feedbackOverlay.show { display:flex; }
+      .feedbackCard { width:min(470px,calc(100vw - 32px)); padding:22px; border:1px solid #506884; border-radius:16px; background:linear-gradient(145deg,#202b39,#151b24); box-shadow:0 22px 60px rgba(0,0,0,.48); }
+      .feedbackCard .eyebrow { color:#8ebcff; font-size:10px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+      .feedbackCard h2 { margin:3px 0 4px; font-size:25px; }
+      .feedbackCard p { margin:0; }
+      .resultStats { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; margin:17px 0 12px; }
+      .resultStat { padding:10px 6px; border:1px solid #35475b; border-radius:9px; background:#141d27; text-align:center; }
+      .resultStat b { display:block; font-size:18px; }
+      .resultStat span { display:block; color:var(--muted); font-size:9px; letter-spacing:.05em; text-transform:uppercase; }
+      .resultMessage { margin:10px 0 16px !important; padding:10px 11px; border-left:3px solid #6ea8fe; border-radius:0 8px 8px 0; background:#182638; color:#cdd8e5; }
+      .resultMessage.capture { border-left-color:#5fc590; background:#193126; color:#aee6c6; }
+      .resultActions { display:flex; justify-content:flex-end; }
+      .resultActions button { min-width:145px; border-color:#4d6f97; background:#29415e; }
+      .reviewRows { display:grid; gap:7px; margin:16px 0; }
+      .reviewRow { display:flex; justify-content:space-between; gap:12px; padding-bottom:7px; border-bottom:1px solid #303d4d; }
+      .reviewRow span { color:var(--muted); }
+      .reviewNotice { margin:12px 0 !important; padding:10px; border:1px solid #5a6a7e; border-radius:8px; background:#1a2430; color:#cbd5e1; }
+      .reviewNotice.warning { border-color:#81683e; background:#302719; color:#f2d59c; }
     </style>
   </head>
   <body>
@@ -249,11 +382,19 @@
 
         <details class="panel sideCard disclosure" id="playersDisclosure">
           <summary><span>Players</span><span class="summaryMeta" id="playersSummary"></span></summary>
-          <div class="disclosureBody"><ul class="players" id="players"></ul></div>
+          <div class="disclosureBody">
+            <div class="playersIntro">
+              <b>Health momentum today</b>
+              <span>Daily totals are shared with game members. Workouts, diet entries, and quantities stay private.</span>
+            </div>
+            <ul class="players" id="players"></ul>
+          </div>
         </details>
 
         <section class="panel sideCard turnCard">
         <div class="sectionLabel" style="margin-top:0">Turn actions</div>
+        <div class="phaseRail" id="phaseRail"></div>
+        <div class="turnSummaryBar" id="turnSummaryBar"></div>
         <div class="actionGrid">
           <button id="mReinforce" class="modeBtn" data-mode="reinforce">Reinforce</button>
           <button id="mAttack" class="modeBtn" data-mode="attack">Attack</button>
@@ -338,26 +479,91 @@
       </div>
     </div>
 
+    <div id="battleResultOverlay" class="feedbackOverlay">
+      <div class="feedbackCard" role="dialog" aria-modal="true" aria-labelledby="battleResultTitle">
+        <div class="eyebrow" id="battleResultEyebrow">Battle result</div>
+        <h2 id="battleResultTitle"></h2>
+        <p class="muted" id="battleResultRoute"></p>
+        <div class="resultStats">
+          <div class="resultStat"><b id="battleAttackerLosses"></b><span>Your losses</span></div>
+          <div class="resultStat"><b id="battleDefenderLosses"></b><span>Enemy losses</span></div>
+          <div class="resultStat"><b id="battleSurvivors"></b><span>Attackers left</span></div>
+        </div>
+        <p class="resultMessage" id="battleResultMessage"></p>
+        <div class="resultActions">
+          <button id="battleContinue">Review the map</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="endTurnOverlay" class="feedbackOverlay">
+      <div class="feedbackCard" role="dialog" aria-modal="true" aria-labelledby="endTurnTitle">
+        <div class="eyebrow">Daily move review</div>
+        <h2 id="endTurnTitle">Finish your turn?</h2>
+        <p class="muted">Your move is normally final until tomorrow.</p>
+        <div class="reviewRows" id="endTurnReviewRows"></div>
+        <p class="reviewNotice" id="endTurnNotice"></p>
+        <div class="row">
+          <button id="endTurnConfirm">Finish turn</button>
+          <button id="endTurnCancel">Keep playing</button>
+        </div>
+      </div>
+    </div>
+
     <div id="userPanelOverlay">
       <aside id="userPanel">
-        <header><div><div class="muted" style="font-size:12px">Signed in as</div><h2 id="panelWhoami"></h2></div><button id="userPanelClose" aria-label="Close user panel">✕</button></header>
-        <section class="userSection">
-          <h3>Health goals</h3>
-          <p class="muted">Log a goal to bank troops for the current player.</p>
-          <div class="row">
-            <select id="exKey"></select>
-            <input id="exUnits" type="number" min="1" value="1" style="width:60px" />
-            <span id="exUnit" class="muted"></span>
-            <button id="logBtn">Log goal</button>
+        <header>
+          <div class="userIdentity">
+            <span class="userAvatar">👤</span>
+            <div><div class="userEyebrow">Account &amp; game setup</div><h2 id="panelWhoami"></h2></div>
+          </div>
+          <button id="userPanelClose" aria-label="Close user panel">✕</button>
+        </header>
+        <div class="userPanelBody">
+        <section class="userSection healthSection">
+          <div class="userSectionHeading">
+            <span class="userSectionIcon">♥</span>
+            <div><h3>Log health progress</h3><p class="muted">Add today’s activity to the current player’s troop bank.</p></div>
+          </div>
+          <div class="goalLogGrid">
+            <div class="healthGoalPicker">
+              <button id="exPickerBtn" class="goalPickerButton" type="button" aria-haspopup="listbox" aria-expanded="false" disabled>
+                <span class="goalPickerEmoji" id="exPickerEmoji">✨</span>
+                <span class="goalPickerCopy"><b id="exPickerLabel">Choose a health goal</b><small id="exPickerMeta">Start or join a game first</small></span>
+                <span class="goalPickerCaret">⌄</span>
+              </button>
+              <div id="exPickerMenu" class="goalPickerMenu" role="listbox" aria-label="Health goals"></div>
+              <select id="exKey" hidden aria-hidden="true" tabindex="-1"></select>
+            </div>
+            <div class="goalEntryRow">
+              <input id="exUnits" type="number" min="1" value="1" style="width:60px" disabled />
+              <span id="exUnit" class="muted"></span>
+              <button id="logBtn" disabled>Log goal</button>
+            </div>
           </div>
           <div id="healthLogHelp" class="muted" style="font-size:11px;margin-top:8px"></div>
         </section>
-        <section class="userSection">
-          <h3>Start a game</h3>
-          <p class="muted">Practice lets you control every player locally.</p>
-          <div class="row">
+        <section id="currentGameSection" class="userSection currentGameSection" style="display:none"></section>
+        <section id="newGameSection" class="userSection">
+          <div class="userSectionHeading">
+            <span class="userSectionIcon">＋</span>
+            <div><h3>Start a new game</h3><p class="muted">Use practice mode to control every player locally.</p></div>
+          </div>
+          <div class="settingRow">
             <label class="muted">Players <select id="newCount"><option>2</option><option>3</option><option>4</option></select></label>
             <label class="muted"><input type="checkbox" id="practiceChk" checked /> Practice mode</label>
+          </div>
+          <div class="settingRow">
+            <label class="muted">Future game days start <input id="dailyStartTime" type="time" value="19:00" /></label>
+            <label class="muted">Time zone
+              <select id="gameTimezone">
+                <option value="America/Los_Angeles">Pacific</option>
+                <option value="America/Denver">Mountain</option>
+                <option value="America/Chicago">Central</option>
+                <option value="America/New_York">Eastern</option>
+                <option value="UTC">UTC</option>
+              </select>
+            </label>
           </div>
           <details class="panelDetails">
             <summary>Health rules</summary>
@@ -373,22 +579,26 @@
             <label class="muted">Mid-game changes
               <select id="governance">
                 <option value="creator">Creator decides</option>
-                <option value="vote">Players vote</option>
-              </select>
+              <option value="vote">Players vote</option>
+            </select>
             </label>
           </details>
-          <div class="row">
+          <div class="drawerActions">
             <button id="newBtn">New game</button>
             <button id="loadRulesBtn" type="button" style="display:none">Load current rules</button>
             <button id="proposeRulesBtn" type="button" style="display:none">Propose changes</button>
           </div>
         </section>
         <section id="healthVoteSection" class="userSection" style="display:none"></section>
-        <section class="userSection">
-          <h3>Join a game</h3>
-          <div class="row"><input id="joinCode" placeholder="game code" style="width:140px" /><button id="joinBtn">Join game</button></div>
+        <section id="joinGameSection" class="userSection">
+          <div class="userSectionHeading">
+            <span class="userSectionIcon">→</span>
+            <div><h3>Join an existing game</h3><p class="muted">Enter the game code shared by its creator.</p></div>
+          </div>
+          <div class="joinRow"><input id="joinCode" placeholder="Game code" style="width:140px" /><button id="joinBtn">Join game</button></div>
         </section>
-        <section class="userSection"><button id="logoutBtn">Log out</button></section>
+        <footer class="userPanelFooter"><span>Your health details stay private.</span><button id="logoutBtn">Log out</button></footer>
+        </div>
       </aside>
     </div>
 
@@ -408,10 +618,13 @@
       let eventGameId = null;
       let localActivity = [];
       let briefingHighlightIds = new Set();
+      let recentActionIds = new Set();
+      let recentActionTimer = null;
       const seenGameEventIds = new Set();
       let gameId = localStorage.getItem('exriskGame');
       let token = localStorage.getItem('exriskToken');
       let currentUser = null;
+      let activeMultiplayerGameId = null;
       let ruleDraft = [
         { key:'running', label:'Running', category:'movement', trackingType:'quantity', unitLabel:'mile', troopsPerUnit:1, dailyUnitCap:5 },
         { key:'cycling', label:'Cycling', category:'movement', trackingType:'quantity', unitLabel:'mile', troopsPerUnit:.25, dailyUnitCap:40 },
@@ -624,6 +837,157 @@
         toastTimer = setTimeout(() => toast.classList.remove('show'), 3600);
       }
 
+      function markRecentAction(territoryIds) {
+        recentActionIds = new Set(territoryIds);
+        clearTimeout(recentActionTimer);
+        recentActionTimer = setTimeout(() => {
+          recentActionIds.clear();
+          if (game) render();
+        }, 2300);
+      }
+
+      function turnSummary() {
+        return game?.dashboard?.turnSummary || {
+          reinforcementsPlaced: 0,
+          placementsMade: 0,
+          attacksMade: 0,
+          attackerLosses: 0,
+          defenderLosses: 0,
+          territoriesCaptured: [],
+          cardsTraded: 0,
+          cardPending: false,
+          fortification: null,
+        };
+      }
+
+      function renderTurnExperience() {
+        const rail = $('#phaseRail');
+        const summaryRoot = $('#turnSummaryBar');
+        if (!game?.yourTurn || game.status !== 'active') {
+          rail.innerHTML = ['Reinforce', 'Attack', 'Fortify', 'Finish']
+            .map((label) => `<span class="phaseStep">${label}</span>`)
+            .join('');
+          summaryRoot.innerHTML = '';
+          return;
+        }
+
+        const reinforceDone = game.phase !== 'reinforce';
+        const fortifySelected = game.phase === 'attack' && mode === 'fortify';
+        const fortifyDone = game.phase === 'fortify';
+        const steps = [
+          { label:'Reinforce', done:reinforceDone, active:game.phase === 'reinforce' },
+          { label:'Attack', done:fortifyDone, active:game.phase === 'attack' && !fortifySelected },
+          { label:'Fortify', done:fortifyDone, active:fortifySelected },
+          { label:'Finish', done:false, active:fortifyDone },
+        ];
+        rail.innerHTML = steps.map((step) =>
+          `<span class="phaseStep${step.done ? ' done' : ''}${step.active ? ' active' : ''}">${step.done ? '✓ ' : ''}${step.label}</span>`
+        ).join('');
+
+        const summary = turnSummary();
+        const chips = [
+          `<span class="turnSummaryChip"><b>${summary.reinforcementsPlaced}</b> placed</span>`,
+          `<span class="turnSummaryChip"><b>${summary.attacksMade}</b> attack${summary.attacksMade === 1 ? '' : 's'}</span>`,
+          `<span class="turnSummaryChip"><b>${summary.territoriesCaptured.length}</b> captured</span>`,
+        ];
+        if (summary.fortification) {
+          chips.push(`<span class="turnSummaryChip"><b>${summary.fortification.count}</b> fortified</span>`);
+        }
+        if (summary.cardPending) {
+          chips.push('<span class="turnSummaryChip reward">Card ready</span>');
+        }
+        summaryRoot.innerHTML = chips.join('');
+      }
+
+      function closeBattleResult() {
+        $('#battleResultOverlay').classList.remove('show');
+      }
+
+      function showBattleResult(target, result) {
+        $('#battleResultEyebrow').textContent = result.captured ? 'Territory captured' : 'Battle resolved';
+        $('#battleResultTitle').textContent = result.captured
+          ? `${pretty(target.toId)} is yours`
+          : `Attack stopped`;
+        $('#battleResultRoute').textContent = `${pretty(target.fromId)} → ${pretty(target.toId)} · ${result.rounds.length} round${result.rounds.length === 1 ? '' : 's'}`;
+        $('#battleAttackerLosses').textContent = `−${result.totalAttackerLosses}`;
+        $('#battleDefenderLosses').textContent = `−${result.totalDefenderLosses}`;
+        $('#battleSurvivors').textContent = result.survivingAttackers;
+        const message = $('#battleResultMessage');
+        message.classList.toggle('capture', result.captured);
+        message.textContent = result.captured
+          ? `Captured ${pretty(target.toId)}. Review the map before choosing your next move; your conquest card is awarded when you finish the turn.`
+          : result.endReason === 'stop_loss'
+            ? 'Your stop-loss was reached. Review the map before deciding whether to attack again or fortify.'
+            : 'The defenders held. Review the map before deciding whether to attack again or fortify.';
+        $('#battleResultOverlay').classList.add('show');
+        $('#battleContinue').focus();
+      }
+
+      function closeEndTurnReview() {
+        $('#endTurnOverlay').classList.remove('show');
+      }
+
+      function openEndTurnReview() {
+        if (!game?.yourTurn || game.status !== 'active') return;
+        const summary = turnSummary();
+        const captured = summary.territoriesCaptured.length
+          ? summary.territoriesCaptured.map(pretty).join(', ')
+          : 'None';
+        const fortification = summary.fortification
+          ? `${summary.fortification.count} troops · ${pretty(summary.fortification.fromId)} → ${pretty(summary.fortification.toId)}`
+          : 'None';
+        $('#endTurnReviewRows').innerHTML = `
+          <div class="reviewRow"><span>Reinforcements placed</span><b>${summary.reinforcementsPlaced}</b></div>
+          <div class="reviewRow"><span>Attacks</span><b>${summary.attacksMade}</b></div>
+          <div class="reviewRow"><span>Battle losses</span><b>${summary.attackerLosses} yours · ${summary.defenderLosses} enemy</b></div>
+          <div class="reviewRow"><span>Territories captured</span><b>${esc(captured)}</b></div>
+          <div class="reviewRow"><span>Fortification</span><b>${esc(fortification)}</b></div>`;
+        const notice = $('#endTurnNotice');
+        notice.classList.remove('warning');
+        if (myBank() > 0) {
+          notice.textContent = `${myBank()} reinforcements are still unplaced and will be lost if you finish now.`;
+          notice.classList.add('warning');
+          $('#endTurnConfirm').textContent = `Finish and lose ${myBank()}`;
+        } else if (summary.cardPending) {
+          const cardTerritory = summary.territoriesCaptured[0];
+          notice.textContent = cardTerritory
+            ? `Finishing awards your conquest card for ${pretty(cardTerritory)}.`
+            : 'Finishing awards the conquest card you earned this turn.';
+          $('#endTurnConfirm').textContent = 'Finish and collect card';
+        } else if (!summary.fortification && game.phase === 'attack') {
+          notice.textContent = 'Fortifying is optional. You can keep playing if you still want to move troops.';
+          $('#endTurnConfirm').textContent = 'Finish turn';
+        } else {
+          notice.textContent = 'Your daily move is ready to submit.';
+          $('#endTurnConfirm').textContent = 'Finish turn';
+        }
+        $('#endTurnOverlay').classList.add('show');
+        $('#endTurnConfirm').focus();
+      }
+
+      async function finishTurn() {
+        $('#endTurnConfirm').disabled = true;
+        try {
+          const data = await post(`/api/games/${gameId}/end`);
+          if (data.cardAwarded) {
+            const territory = pretty(data.cardAwarded.territoryId);
+            showToast(`Conquest card earned: ${territory}`);
+            log(`Earned a conquest card for ${territory}`);
+          }
+          game = data.game;
+          fromSel = null;
+          mode = 'reinforce';
+          closeEndTurnReview();
+          log('Ended turn');
+          render();
+        } catch (error) {
+          closeEndTurnReview();
+          log('✋ ' + error.message);
+        } finally {
+          $('#endTurnConfirm').disabled = false;
+        }
+      }
+
       function readHealthRulesEditor() {
         const exercises = [...document.querySelectorAll('.ruleCard')].map((card) => {
           const value = (field) => card.querySelector(`[data-field="${field}"]`).value;
@@ -702,13 +1066,25 @@
       }
 
       async function post(path, body) {
+        const payload = { ...(body || {}) };
+        if (
+          game &&
+          path.startsWith(`/api/games/${game.id}/`) &&
+          !path.endsWith('/join')
+        ) {
+          payload.revision = game.revision;
+        }
         const r = await fetch(path, {
           method: 'POST',
           headers: { 'content-type': 'application/json', ...authHeaders() },
-          body: JSON.stringify(body || {}),
+          body: JSON.stringify(payload),
         });
         const data = await r.json();
         if (!r.ok) {
+          if (data.error === 'stale_game') {
+            await refresh();
+            showToast('The game changed in another browser. You are viewing the latest version.');
+          }
           if (path.startsWith('/api/auth/')) {
             const status = $('#authStatus');
             status.textContent = data.message || data.error || 'Authentication failed';
@@ -727,16 +1103,26 @@
           $('#whoami').textContent = '👤 ' + currentUser.username;
           $('#panelWhoami').textContent = currentUser.username;
         }
+        renderGameAccess();
       }
 
+      function openUserPanel() {
+        $('#userPanel').scrollTop = 0;
+        $('#userPanelOverlay').classList.add('show');
+      }
       function closeUserPanel() { $('#userPanelOverlay').classList.remove('show'); }
 
       async function loadMe() {
-        if (!token) { currentUser = null; return; }
+        if (!token) { currentUser = null; activeMultiplayerGameId = null; return; }
         const r = await fetch('/api/auth/me', { headers: authHeaders() });
         const d = await r.json();
         currentUser = d.user;
-        if (!currentUser) { token = null; localStorage.removeItem('exriskToken'); }
+        activeMultiplayerGameId = d.activeMultiplayerGameId ?? null;
+        if (!currentUser) {
+          token = null;
+          activeMultiplayerGameId = null;
+          localStorage.removeItem('exriskToken');
+        }
       }
 
       async function doAuth(kind) {
@@ -760,6 +1146,7 @@
         try {
           const d = await post('/api/auth/' + kind, { username, password });
           token = d.token; currentUser = d.user; localStorage.setItem('exriskToken', token);
+          await loadMe();
           $('#authPass').value = '';
           status.textContent = kind === 'signup' ? 'Account created.' : 'Logged in.';
           status.className = 'success';
@@ -774,26 +1161,72 @@
 
       async function doLogout() {
         try { await post('/api/auth/logout'); } catch {}
-        token = null; currentUser = null; localStorage.removeItem('exriskToken');
+        token = null; currentUser = null; activeMultiplayerGameId = null; localStorage.removeItem('exriskToken');
         updateAuthUI();
         closeUserPanel();
         if (gameId) await refresh(); else if (game) render();
         log('Logged out');
       }
 
-      async function newGame() {
+      async function newGame(options = {}) {
         if (!currentUser) { log('✋ Log in first'); return; }
-        const healthRules = readHealthRulesEditor();
-        const data = await post('/api/games', {
-          players: Number($('#newCount').value),
-          practice: $('#practiceChk').checked,
-          healthRules,
-          healthRuleGovernance: $('#governance').value,
-        });
-        gameId = data.id; localStorage.setItem('exriskGame', gameId);
-        game = data; fromSel = null; mode = 'reinforce'; lastTurnKey = null; render();
+        const practice = options.practice ?? $('#practiceChk').checked;
+        const players = options.players ?? Number($('#newCount').value);
+        try {
+          const healthRules = readHealthRulesEditor();
+          const data = await post('/api/games', {
+            players,
+            practice,
+            healthRules,
+            healthRuleGovernance: $('#governance').value,
+            dailyStartMinuteOfDay: (() => {
+              const [hours, minutes] = $('#dailyStartTime').value.split(':').map(Number);
+              return hours * 60 + minutes;
+            })(),
+            timezone: $('#gameTimezone').value,
+          });
+          gameId = data.id;
+          localStorage.setItem('exriskGame', gameId);
+          game = data;
+          activeMultiplayerGameId = data.activeMultiplayerGameId ?? null;
+          fromSel = null;
+          mode = 'reinforce';
+          lastTurnKey = null;
+          render();
+          closeUserPanel();
+          log('New game ' + gameId + (practice ? ' (practice — you control all seats)' : ' — share this code so others can Join'));
+        } catch (error) {
+          showToast(error.message);
+          log('✋ ' + error.message);
+        }
+      }
+
+      async function switchToGame(nextGameId) {
+        if (!nextGameId) return;
+        gameId = nextGameId;
+        localStorage.setItem('exriskGame', gameId);
+        fromSel = null;
+        mode = 'reinforce';
+        lastTurnKey = null;
+        await refresh();
         closeUserPanel();
-        log('New game ' + gameId + ($('#practiceChk').checked ? ' (practice — you control all seats)' : ' — share this code so others can Join'));
+      }
+
+      async function copyGameCode(code) {
+        if (!code) return;
+        try {
+          await navigator.clipboard.writeText(code);
+        } catch {
+          const field = document.createElement('textarea');
+          field.value = code;
+          field.style.position = 'fixed';
+          field.style.opacity = '0';
+          document.body.appendChild(field);
+          field.select();
+          document.execCommand('copy');
+          field.remove();
+        }
+        showToast('Game code copied');
       }
 
       async function proposeRules() {
@@ -838,10 +1271,15 @@
         try {
           const d = await post('/api/games/' + code + '/join');
           gameId = code; localStorage.setItem('exriskGame', gameId);
-          game = d.game; fromSel = null; lastTurnKey = null; render();
+          game = d.game;
+          activeMultiplayerGameId = game.activeMultiplayerGameId ?? null;
+          fromSel = null; lastTurnKey = null; render();
           closeUserPanel();
           log('Joined ' + code + ' as ' + d.seat);
-        } catch (e) { log('✋ ' + e.message); }
+        } catch (e) {
+          showToast(e.message);
+          log('✋ ' + e.message);
+        }
       }
 
       async function refresh() {
@@ -850,10 +1288,109 @@
           const r = await fetch('/api/games/' + gameId, { headers: authHeaders() });
           if (!r.ok) return;
           game = await r.json();
+          activeMultiplayerGameId = game.activeMultiplayerGameId ?? null;
           render();
         } catch {
           if (game) $('#statusPill').textContent = 'Reconnecting...';
         }
+      }
+
+      async function startLobby() {
+        if (!gameId || !game?.isCreator || game.status !== 'setup') return;
+        try {
+          const data = await post(`/api/games/${gameId}/start`);
+          game = data.game;
+          fromSel = null;
+          lastTurnKey = null;
+          showToast('Game started — the first daily move is open');
+          render();
+        } catch (error) {
+          showToast(error.message);
+        }
+      }
+
+      async function leaveCurrentGame() {
+        if (!gameId || !(game?.mySeats || []).length) return;
+        const creatorCancelling = game.status === 'setup' && game.isCreator;
+        const forfeiting = game.status === 'active';
+        const warning = creatorCancelling
+          ? 'Cancel this lobby for everyone?'
+          : forfeiting
+            ? 'Leave this game and forfeit your territories? This cannot be undone.'
+            : 'Leave this lobby?';
+        if (!confirm(warning)) return;
+        try {
+          const data = await post(`/api/games/${gameId}/leave`);
+          game = data.game;
+          activeMultiplayerGameId = data.activeMultiplayerGameId ?? null;
+          showToast(creatorCancelling ? 'Lobby cancelled' : forfeiting ? 'You forfeited the game' : 'You left the lobby');
+          render();
+          closeUserPanel();
+        } catch (error) {
+          showToast(error.message);
+        }
+      }
+
+      function formatClock(minutes) {
+        const hour24 = Math.floor(minutes / 60) % 24;
+        const minute = minutes % 60;
+        const suffix = hour24 >= 12 ? 'PM' : 'AM';
+        const hour = hour24 % 12 || 12;
+        return `${hour}:${String(minute).padStart(2, '0')} ${suffix}`;
+      }
+
+      function formatWindow(minutes) {
+        const hours = minutes / 60;
+        return Number.isInteger(hours) ? `${hours} hours` : `${minutes} minutes`;
+      }
+
+      function timezoneLabel(timezone) {
+        return ({
+          'America/Los_Angeles': 'Pacific',
+          'America/Denver': 'Mountain',
+          'America/Chicago': 'Central',
+          'America/New_York': 'Eastern',
+          UTC: 'UTC',
+        })[timezone] || timezone;
+      }
+
+      function renderLobby() {
+        const cancelled = game.status === 'cancelled';
+        const joined = game.claimedPlayerCount ?? game.players.filter((player) => player.claimed).length;
+        const full = joined === game.players.length;
+        const seats = game.players.map((player, index) => `
+          <div class="lobbySeat${player.claimed ? '' : ' open'}">
+            <span class="lobbySeatIcon" style="${player.claimed ? `color:${player.color}` : ''}">${player.claimed ? '✓' : index + 1}</span>
+            <div><b>${player.claimed ? esc(player.name) : 'Open seat'}</b><small>${player.claimed ? (index === 0 ? 'Game creator' : 'Ready') : 'Waiting for a player'}</small></div>
+          </div>`).join('');
+        const actions = cancelled
+          ? '<button id="lobbyNewGameBtn" class="primary" type="button">Start another game</button>'
+          : `
+            ${(game.mySeats || []).length ? `<button id="lobbyLeaveBtn" type="button">${game.isCreator ? 'Cancel lobby' : 'Leave lobby'}</button>` : ''}
+            ${game.isCreator ? `<button id="lobbyStartBtn" class="primary" type="button"${full ? '' : ' disabled'}>Start game</button>` : ''}
+          `;
+        $('#board').innerHTML = `<div class="lobbyShell"><div class="lobbyCard">
+          <div class="lobbyEyebrow">${cancelled ? 'Lobby closed' : 'Multiplayer waiting room'}</div>
+          <h2>${cancelled ? 'This game was cancelled' : full ? 'Everyone is ready' : `Waiting for ${game.players.length - joined} more`}</h2>
+          <p class="muted">${cancelled ? 'No moves were made and this lobby no longer occupies a game slot.' : game.isCreator ? 'Share the invite code, then start when every seat is filled.' : 'The creator will start the game after every player joins.'}</p>
+          <div class="lobbyCode"><div><span>Invite code</span><code>${esc(game.id)}</code></div>${cancelled ? '' : '<button id="lobbyCopyBtn" type="button">Copy</button>'}</div>
+          <div class="lobbySeats">${seats}</div>
+          ${cancelled ? '' : `<div class="lobbySchedule">
+            <div><span>Future game days begin</span><b>${formatClock(game.schedule.dailyStartMinuteOfDay)} ${timezoneLabel(game.schedule.timezone)}</b></div>
+            <div><span>Your move window</span><b>${formatWindow(game.schedule.playerWindowMinutes)}</b></div>
+            <div><span>Missed deadline</span><b>Defensive auto-move</b></div>
+          </div>`}
+          <div class="lobbyActions">${actions}</div>
+          ${cancelled ? '' : '<p class="lobbyFootnote">Health progress counts until your move deadline. Your exercise details stay private; other players only see the resulting daily progress.</p>'}
+        </div></div>`;
+        const copy = $('#lobbyCopyBtn');
+        if (copy) copy.onclick = () => copyGameCode(game.id);
+        const start = $('#lobbyStartBtn');
+        if (start) start.onclick = startLobby;
+        const leave = $('#lobbyLeaveBtn');
+        if (leave) leave.onclick = leaveCurrentGame;
+        const again = $('#lobbyNewGameBtn');
+        if (again) again.onclick = openUserPanel;
       }
 
       function terr(id) { return game.territories.find((t) => t.id === id); }
@@ -956,6 +1493,7 @@
           });
           game = d.game;
           log(`Reinforced ${pretty(target)} +${n}`);
+          markRecentAction([target]);
           closeReinforceDialog();
           render();
         } catch (e) {
@@ -997,9 +1535,11 @@
           game = d.game;
           const result = d.result;
           log(`${pretty(target.fromId)} → ${pretty(target.toId)}: ${result.endReason}${result.captured ? ' (captured!)' : ''} — you lost ${result.totalAttackerLosses}, they lost ${result.totalDefenderLosses} over ${result.rounds.length} round(s)`);
+          markRecentAction([target.fromId, target.toId]);
           fromSel = null;
           closeAttackDialog();
           render();
+          showBattleResult(target, result);
         } catch (e) {
           $('#attackError').textContent = e.message;
         } finally {
@@ -1032,6 +1572,7 @@
           });
           game = d.game;
           log(`Fortified ${pretty(target.fromId)} → ${pretty(target.toId)} (${count})`);
+          markRecentAction([target.fromId, target.toId]);
           fromSel = null;
           closeFortifyDialog();
           render();
@@ -1062,15 +1603,77 @@
         return '';
       }
 
+      function exerciseEmoji(exercise) {
+        const key = String(exercise?.key || '').toLowerCase();
+        const label = String(exercise?.label || '').toLowerCase();
+        if (key.includes('run') || label.includes('run')) return '🏃';
+        if (key.includes('cycl') || label.includes('cycl')) return '🚴';
+        if (key.includes('lift') || label.includes('weight')) return '🏋️';
+        if (key.includes('vegetable') || label.includes('vegetable')) return '🥦';
+        if (key.includes('meal') || label.includes('meal')) return '🥗';
+        if (key.includes('sleep') || label.includes('sleep')) return '😴';
+        return exercise?.category === 'nutrition'
+          ? '🍎'
+          : exercise?.category === 'recovery'
+            ? '🌙'
+            : '⚡';
+      }
+
+      function exerciseRewardLabel(exercise) {
+        if (!exercise) return '';
+        const amount = Number.isInteger(exercise.troopsPerUnit)
+          ? exercise.troopsPerUnit
+          : Number(exercise.troopsPerUnit.toFixed(2));
+        if (exercise.trackingType === 'checkbox') {
+          return `${amount} troop${amount === 1 ? '' : 's'} when completed`;
+        }
+        return `${amount} troop${amount === 1 ? '' : 's'} per ${exercise.unitLabel}`;
+      }
+
+      function exercisePickerMeta(exercise) {
+        if (!exercise) return '';
+        const reward = exerciseRewardLabel(exercise);
+        if (exercise.trackingType === 'checkbox') return `${reward} · once daily`;
+        const cap = exercise.dailyUnitCap;
+        return cap === null
+          ? reward
+          : `${reward} · ${cap} ${exercise.unitLabel}${cap === 1 ? '' : 's'} max`;
+      }
+
+      function closeExercisePicker() {
+        $('#exPickerMenu').classList.remove('open');
+        $('#exPickerBtn').setAttribute('aria-expanded', 'false');
+      }
+
       function renderExercise() {
         const sel = $('#exKey');
         const exs = game.exercises || [];
         const previous = sel.value;
         sel.innerHTML = exs.map((e) =>
-          `<option value="${esc(e.key)}">${pretty(e.category)} - ${esc(e.label)}</option>`
+          `<option value="${esc(e.key)}">${esc(e.label)}</option>`
         ).join('');
         if (exs.some((e) => e.key === previous)) sel.value = previous;
         const cur = exs.find((e) => e.key === sel.value) || exs[0];
+        if (cur) sel.value = cur.key;
+        $('#exPickerEmoji').textContent = exerciseEmoji(cur);
+        $('#exPickerLabel').textContent = cur?.label || 'Choose a health goal';
+        $('#exPickerMeta').textContent = cur ? exercisePickerMeta(cur) : 'No goals configured';
+        const menu = $('#exPickerMenu');
+        menu.innerHTML = exs.map((exercise) => {
+          const selected = exercise.key === cur?.key;
+          return `<button class="goalOption" type="button" role="option" aria-selected="${selected}" data-ex-key="${esc(exercise.key)}">
+            <span class="goalOptionEmoji">${exerciseEmoji(exercise)}</span>
+            <span class="goalOptionCopy"><b>${esc(exercise.label)}</b><small>${esc(exercisePickerMeta(exercise))}</small></span>
+            <span class="goalOptionCheck">${selected ? '✓' : ''}</span>
+          </button>`;
+        }).join('');
+        menu.querySelectorAll('.goalOption').forEach((option) => {
+          option.onclick = () => {
+            sel.value = option.dataset.exKey;
+            closeExercisePicker();
+            renderExercise();
+          };
+        });
         const checkbox = cur?.trackingType === 'checkbox';
         $('#exUnits').style.display = checkbox ? 'none' : '';
         $('#exUnit').textContent = cur && !checkbox ? cur.unitLabel + '(s)' : '';
@@ -1078,12 +1681,13 @@
         const progress = game.dashboard?.exercise?.progress?.find((item) => item.key === cur?.key);
         const completed = checkbox && (progress?.unitsLogged ?? 0) >= 1;
         $('#healthLogHelp').textContent = cur
-          ? `${pretty(cur.category)}: ${cur.troopsPerUnit} troop${cur.troopsPerUnit === 1 ? '' : 's'} per ${cur.unitLabel}${completed ? ' - completed today' : ''}`
+          ? `${exercisePickerMeta(cur)}${completed ? ' · completed today' : ''}`
           : '';
         const active = !!game.yourTurn && game.status === 'active';
         $('#logBtn').disabled = !active || completed;
         $('#exKey').disabled = !active;
         $('#exUnits').disabled = !active;
+        $('#exPickerBtn').disabled = !active;
       }
 
       // Live window countdown; when it hits 0 the server auto-resolves, so we
@@ -1095,8 +1699,11 @@
         if (!exp || game.status !== 'active' || !game.currentPlayerId) { pill.style.display = 'none'; return; }
         const ms = new Date(exp).getTime() - Date.now();
         const s = Math.max(0, Math.ceil(ms / 1000));
-        pill.textContent = `⏳ ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-        pill.style.color = ms < 15000 ? '#e05c4b' : '';
+        pill.textContent = s >= 3600
+          ? `⏳ ${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`
+          : `⏳ ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+        pill.title = 'Move and health-progress deadline';
+        pill.style.color = ms < 15 * 60 * 1000 ? '#e05c4b' : '';
         pill.style.display = '';
         if (ms <= 0 && lastExpiryRefreshed !== exp) {
           lastExpiryRefreshed = exp;
@@ -1110,6 +1717,7 @@
           seenGameEventIds.clear();
           localActivity = [];
           briefingHighlightIds.clear();
+          recentActionIds.clear();
           lastTurnKey = null;
         }
         // Log once when a new turn begins.
@@ -1118,6 +1726,9 @@
           lastTurnKey = key;
           fromSel = null; // clear stale selection from the previous player
           briefingHighlightIds.clear();
+          recentActionIds.clear();
+          closeBattleResult();
+          closeEndTurnReview();
           if (mode !== 'reinforce') mode = 'reinforce';
           const who = game.players.find((p) => p.id === game.currentPlayerId);
           let msg = `— ${who.name}'s turn (day ${game.dayNumber})`;
@@ -1165,7 +1776,15 @@
         const d = game.dashboard;
         if (!d) {
           delete root.dataset.playerId;
-          root.innerHTML = `<div class="dashEmpty">${currentUser ? 'Join a game to see your position.' : 'Log in to see your position.'}</div>`;
+          root.innerHTML = `<div class="dashEmpty">${
+            game?.status === 'setup'
+              ? 'Your position will appear when the creator starts the game.'
+              : game?.status === 'cancelled'
+                ? 'This lobby was cancelled.'
+                : currentUser
+                  ? 'Join a game to see your position.'
+                  : 'Log in to see your position.'
+          }</div>`;
           if (selectedCardId) closeCardDetails();
           return;
         }
@@ -1271,7 +1890,7 @@
           <div class="dashHero">
             <div class="eyebrow">${player ? player.name : 'Your position'}</div>
             <div class="value">${turnLabel}</div>
-            <div class="sub">${d.controlledContinents.length ? `Controls ${continents}` : 'No complete continent yet'}</div>
+            <div class="sub">${d.controlledContinents.length ? `Controls ${continents}` : 'No complete continent yet'}${isUp && game.windowExpiresAt ? ` · Move & health cutoff ${new Date(game.windowExpiresAt).toLocaleString([], { weekday:'short', hour:'numeric', minute:'2-digit' })}` : ''}</div>
           </div>
           <div class="dashStats">
             <div class="dashStat"><b>${d.territoriesOwned}</b><span>Territories</span></div>
@@ -1318,6 +1937,89 @@
         }
       }
 
+      function renderGameAccess() {
+        const currentSection = $('#currentGameSection');
+        const newSection = $('#newGameSection');
+        const joinSection = $('#joinGameSection');
+        const lockedGameId = game?.activeMultiplayerGameId ?? activeMultiplayerGameId;
+        const hasActiveMultiplayerGame = !!currentUser && !!lockedGameId;
+
+        newSection.style.display = hasActiveMultiplayerGame ? 'none' : '';
+        joinSection.style.display = hasActiveMultiplayerGame ? 'none' : '';
+        if (!hasActiveMultiplayerGame) {
+          currentSection.style.display = 'none';
+          currentSection.innerHTML = '';
+          return;
+        }
+
+        activeMultiplayerGameId = lockedGameId;
+        currentSection.style.display = '';
+        const practiceShortcutOpen = currentSection.querySelector('.practiceShortcut')?.open ?? false;
+        const viewingMultiplayerGame = game?.id === lockedGameId && !game?.practice;
+        const viewingPractice = !!game?.practice;
+        if (viewingMultiplayerGame) {
+          const currentPlayer = game.players.find((player) => player.id === game.currentPlayerId);
+          const inLobby = game.status === 'setup';
+          const turnStatus = inLobby
+            ? `${game.claimedPlayerCount}/${game.players.length} players joined`
+            : game.yourTurn
+              ? `Your turn · ${pretty(game.phase)}`
+              : `Waiting for ${currentPlayer?.name || 'the next player'}`;
+          currentSection.innerHTML = `
+            <div class="userSectionHeading">
+              <span class="userSectionIcon">🎮</span>
+              <div><h3>${inLobby ? 'Multiplayer waiting room' : 'Current multiplayer game'}</h3><p class="muted">${inLobby ? 'This lobby occupies your multiplayer slot until you leave or it starts.' : 'Finish or forfeit this game before starting or joining another.'}</p></div>
+            </div>
+            <div class="currentGameMeta">
+              <span>${inLobby ? 'Not started' : `Day ${game.dayNumber}`}</span>
+              <span>${game.players.length} players</span>
+              <span>${esc(turnStatus)}</span>
+            </div>
+            <div class="gameCodeBox">
+              <span class="gameCodeLabel">Invite code</span>
+              <div class="gameCodeRow"><code>${esc(lockedGameId)}</code><button id="copyGameCodeBtn" type="button">Copy</button></div>
+            </div>
+            <button id="leaveCurrentGameBtn" type="button">${inLobby && game.isCreator ? 'Cancel lobby' : inLobby ? 'Leave lobby' : 'Leave & forfeit'}</button>
+            <details class="practiceShortcut"${practiceShortcutOpen ? ' open' : ''}>
+              <summary>Open a separate practice sandbox</summary>
+              <p class="muted">Practice does not affect this multiplayer game.</p>
+              <div class="practiceLaunchRow">
+                <label>Players <select id="currentPracticeCount"><option>2</option><option>3</option><option>4</option></select></label>
+                <button id="startPracticeBtn" type="button">Start practice</button>
+              </div>
+            </details>`;
+        } else {
+          currentSection.innerHTML = `
+            <div class="userSectionHeading">
+              <span class="userSectionIcon">${viewingPractice ? '🧪' : '🎮'}</span>
+              <div><h3>${viewingPractice ? 'Practice sandbox' : 'Active multiplayer game'}</h3>
+                <p class="muted">${viewingPractice
+                  ? 'Your multiplayer game is still active while you practice.'
+                  : 'Resume your active game before starting or joining another.'}</p>
+              </div>
+            </div>
+            <div class="gameCodeBox">
+              <span class="gameCodeLabel">Multiplayer game code</span>
+              <div class="gameCodeRow"><code>${esc(lockedGameId)}</code><button id="copyGameCodeBtn" type="button">Copy</button></div>
+            </div>
+            <button id="resumeMultiplayerBtn" class="returnGameButton" type="button">Return to multiplayer game</button>`;
+        }
+
+        const copyButton = $('#copyGameCodeBtn');
+        if (copyButton) copyButton.onclick = () => copyGameCode(lockedGameId);
+        const practiceButton = $('#startPracticeBtn');
+        if (practiceButton) {
+          practiceButton.onclick = () => newGame({
+            practice: true,
+            players: Number($('#currentPracticeCount').value),
+          });
+        }
+        const resumeButton = $('#resumeMultiplayerBtn');
+        if (resumeButton) resumeButton.onclick = () => switchToGame(lockedGameId);
+        const leaveButton = $('#leaveCurrentGameBtn');
+        if (leaveButton) leaveButton.onclick = leaveCurrentGame;
+      }
+
       function renderHealthRuleControls() {
         const loadButton = $('#loadRulesBtn');
         const proposeButton = $('#proposeRulesBtn');
@@ -1350,8 +2052,11 @@
               : ''}
           </div>`;
         }
-        section.innerHTML = `<h3>Current game rules</h3>
-          <p class="muted">${game.exercises.length} goals - ${caps || 'no category caps'} - overall cap ${game.dailyTotalTroopCap}. Mid-game changes: ${game.healthRuleGovernance === 'vote' ? 'majority vote' : 'creator decides'}.</p>
+        section.innerHTML = `<div class="userSectionHeading">
+            <span class="userSectionIcon">⚙</span>
+            <div><h3>Current game rules</h3><p class="muted">The health settings active for this game.</p></div>
+          </div>
+          <p class="muted">${game.exercises.length} goals · ${caps || 'no category caps'} · overall cap ${game.dailyTotalTroopCap}. Mid-game changes: ${game.healthRuleGovernance === 'vote' ? 'majority vote' : 'creator decides'}.</p>
           ${proposalHtml}`;
         if ($('#approveRulesBtn')) $('#approveRulesBtn').onclick = () => voteRules(true);
         if ($('#rejectRulesBtn')) $('#rejectRulesBtn').onclick = () => voteRules(false);
@@ -1364,17 +2069,30 @@
         renderGameActivity();
         renderDashboard();
         renderExercise();
+        renderGameAccess();
         renderHealthRuleControls();
-        $('#dayPill').textContent = 'Day ' + game.dayNumber;
+        $('#dayPill').textContent = game.status === 'setup'
+          ? 'Lobby'
+          : game.status === 'cancelled'
+            ? 'Closed'
+            : 'Day ' + game.dayNumber;
         const cur = game.status === 'active' ? game.players.find((p) => p.id === game.currentPlayerId) : null;
-        $('#turnPill').innerHTML = game.status === 'finished'
-          ? 'Game over'
-          : cur
-            ? `Turn: <b style="color:${cur.color}">${cur.name}</b> · ${game.phase}`
-            : 'Turn: —';
-        $('#statusPill').innerHTML = game.status === 'finished'
-          ? `<span class="win">🏆 ${game.players.find((p) => p.id === game.winnerId)?.name} wins!</span>`
-          : 'In progress';
+        $('#turnPill').innerHTML = game.status === 'setup'
+          ? `${game.claimedPlayerCount}/${game.players.length} joined`
+          : game.status === 'cancelled'
+            ? 'No game in progress'
+            : game.status === 'finished'
+              ? 'Game over'
+              : cur
+                ? `Turn: <b style="color:${cur.color}">${cur.name}</b> · ${game.phase}`
+                : 'Turn: —';
+        $('#statusPill').innerHTML = game.status === 'setup'
+          ? 'Waiting room'
+          : game.status === 'cancelled'
+            ? 'Cancelled'
+            : game.status === 'finished'
+              ? `<span class="win">🏆 ${game.players.find((p) => p.id === game.winnerId)?.name} wins!</span>`
+              : 'In progress';
 
         const mine = new Set(game.mySeats || []);
         $('#players').innerHTML = game.players.map((p) => {
@@ -1384,15 +2102,40 @@
           const open = !p.claimed ? ' <span class="muted">· open seat</span>' : '';
           const eliminated = p.status === 'eliminated';
           const status = eliminated ? '<span class="playerStatusBadge">Eliminated</span>' : '';
-          const meta = eliminated
-            ? '0 territories · out of the game'
-            : `${owned} territories · ${p.pendingReinforcements} troops to place${p.pendingEliminationReward ? ` · +${p.pendingEliminationReward} next turn` : ''}${p.status !== 'active' ? ' · ' + p.status : ''}`;
+          const meta = game.status === 'setup'
+            ? (p.claimed ? 'Ready to play' : 'Invite a player to fill this seat')
+            : eliminated
+              ? '0 territories · out of the game'
+              : `${owned} territories · ${p.pendingReinforcements} troops to place${p.pendingEliminationReward ? ` · +${p.pendingEliminationReward} next turn` : ''}${p.status !== 'active' ? ' · ' + p.status : ''}`;
+          const health = p.healthProgress;
+          const healthStatus = health?.status === 'goal_met'
+            ? 'Daily goal met'
+            : health?.status === 'in_progress'
+              ? 'Building momentum'
+              : 'Not started yet';
+          const healthClass = health?.status === 'goal_met'
+            ? 'goalMet'
+            : health?.status === 'not_started'
+              ? 'notStarted'
+              : '';
+          const healthHtml = game.status === 'setup' || game.status === 'cancelled'
+            ? ''
+            : health
+              ? `<div class="playerHealth ${healthClass}">
+                <div class="playerHealthTop"><span><b>Health</b> · ${healthStatus}</span><strong>${health.troopsEarned}/${health.dailyCap} troops</strong></div>
+                <div class="healthMomentumBar" role="progressbar" aria-label="${esc(p.name)} health progress" aria-valuemin="0" aria-valuemax="${health.dailyCap}" aria-valuenow="${health.troopsEarned}"><span style="width:${health.percent}%"></span></div>
+                <div class="playerHealthFoot"><span>${health.goalsCompleted}/${health.goalsTracked} goals complete</span><span>${health.percent}%</span></div>
+              </div>`
+              : '<div class="playerHealth unavailable">Health progress is visible to game members.</div>';
           return `<li class="${eliminated ? 'eliminated' : ''}"><span class="dot" style="background:${p.color}"></span>
             <div>${cur}<b>${esc(p.name)}</b>${status}${you}${open}</div>
-            <div class="playerMeta">${meta}</div></li>`;
+            <div class="playerMeta">${meta}</div>
+            ${healthHtml}</li>`;
         }).join('');
         const activePlayers = game.players.filter((player) => player.status !== 'eliminated' && player.status !== 'forfeited').length;
-        $('#playersSummary').textContent = `${activePlayers}/${game.players.length} active · ${cur ? cur.name + "'s turn" : 'complete'}`;
+        $('#playersSummary').textContent = game.status === 'setup'
+          ? `${game.claimedPlayerCount}/${game.players.length} joined`
+          : `${activePlayers}/${game.players.length} active · ${cur ? cur.name + "'s turn" : 'complete'}`;
 
         const allowed = allowedModes();
         document.querySelectorAll('.modeBtn').forEach((b) => {
@@ -1403,6 +2146,12 @@
         $('#endBtn').disabled = !game.yourTurn || game.status !== 'active';
         $('#expireBtn').disabled = !(game.mySeats || []).length || game.status !== 'active';
         $('#hint').textContent = hintText();
+        renderTurnExperience();
+
+        if (game.status === 'setup' || game.status === 'cancelled') {
+          renderLobby();
+          return;
+        }
 
         // Adjacency edges (each undirected pair once).
         const seen = new Set(), edges = [];
@@ -1440,7 +2189,8 @@
           const sw = sel ? 3 : can ? 2 : 1;
           const op = can || sel ? 1 : 0.78;
           const changed = briefingHighlightIds.has(t.id);
-          return `<g class="node${can ? ' can' : ''}${changed ? ' briefingChanged' : ''}" data-id="${t.id}" opacity="${op}">
+          const recent = recentActionIds.has(t.id);
+          return `<g class="node${can ? ' can' : ''}${changed ? ' briefingChanged' : ''}${recent ? ' actionPulse' : ''}" data-id="${t.id}" opacity="${op}">
             <text class="tlabel" x="${x}" y="${y - 18}" text-anchor="middle">${pretty(t.id)}</text>
             <circle cx="${x}" cy="${y}" r="13.5" fill="${t.color}" stroke="${stroke}" stroke-width="${sw}"/>
             <text class="tcount" x="${x}" y="${y + 4.5}" text-anchor="middle">${t.armies}</text>
@@ -1470,7 +2220,7 @@
             : `${pretty(t.id)} cannot be selected during ${game.phase}.`;
         }
       });
-      $('#newBtn').onclick = newGame;
+      $('#newBtn').onclick = () => newGame();
       $('#winNew').onclick = newGame;
       $('#reinforceConfirm').onclick = confirmReinforcement;
       $('#reinforceCancel').onclick = closeReinforceDialog;
@@ -1502,7 +2252,16 @@
         if (e.key === 'Enter') confirmFortify();
         if (e.key === 'Escape') { closeFortifyDialog(); fromSel = null; render(); }
       };
-      $('#exKey').onchange = renderExercise;
+      $('#exPickerBtn').onclick = (event) => {
+        event.stopPropagation();
+        const opening = !$('#exPickerMenu').classList.contains('open');
+        $('#exPickerMenu').classList.toggle('open', opening);
+        $('#exPickerBtn').setAttribute('aria-expanded', String(opening));
+      };
+      $('#exPickerMenu').onclick = (event) => event.stopPropagation();
+      document.addEventListener('click', (event) => {
+        if (!event.target.closest('.healthGoalPicker')) closeExercisePicker();
+      });
       $('#logBtn').onclick = async () => {
         try {
           const selectedGoal = game.exercises.find((e) => e.key === $('#exKey').value);
@@ -1510,25 +2269,20 @@
           const d = await post(`/api/games/${gameId}/exercise`, { exerciseKey: $('#exKey').value, units });
           game = d.game;
           const label = (game.exercises.find((e) => e.key === $('#exKey').value) || {}).label;
-          log(`🏃 Logged ${units} ${label} → +${d.deltaTroops} troops (day total ${d.dayTotal}/${game.dailyTotalTroopCap}${d.totalCapApplied ? ' — capped' : ''})`);
+          log(`${exerciseEmoji(selectedGoal)} Logged ${units} ${label} → +${d.deltaTroops} troops (day total ${d.dayTotal}/${game.dailyTotalTroopCap}${d.totalCapApplied ? ' — capped' : ''})`);
           render();
         } catch (e) { log('✋ ' + e.message); }
       };
       document.querySelectorAll('.modeBtn').forEach((b) => (b.onclick = () => setMode(b.dataset.mode)));
-      $('#endBtn').onclick = async () => {
-        try {
-          const data = await post(`/api/games/${gameId}/end`);
-          if (data.cardAwarded) {
-            const territory = pretty(data.cardAwarded.territoryId);
-            showToast(`Conquest card earned: ${territory}`);
-            log(`Earned a conquest card for ${territory}`);
-          }
-          game = data.game;
-          fromSel = null;
-          mode = 'reinforce';
-          log('Ended turn');
-          render();
-        } catch (error) { log('✋ ' + error.message); }
+      $('#endBtn').onclick = openEndTurnReview;
+      $('#endTurnConfirm').onclick = finishTurn;
+      $('#endTurnCancel').onclick = closeEndTurnReview;
+      $('#endTurnOverlay').onclick = (event) => {
+        if (event.target === $('#endTurnOverlay')) closeEndTurnReview();
+      };
+      $('#battleContinue').onclick = closeBattleResult;
+      $('#battleResultOverlay').onclick = (event) => {
+        if (event.target === $('#battleResultOverlay')) closeBattleResult();
       };
       $('#expireBtn').onclick = async () => { try { const d = await post(`/api/games/${gameId}/expire`); game = d.game; fromSel = null; log('Auto-resolved current player (defensive)'); render(); } catch (e) { log('✋ ' + e.message); } };
 
@@ -1552,15 +2306,18 @@
       };
       $('#loadRulesBtn').onclick = loadCurrentRules;
       $('#proposeRulesBtn').onclick = proposeRules;
-      $('#userPanelBtn').onclick = () => $('#userPanelOverlay').classList.add('show');
+      $('#userPanelBtn').onclick = openUserPanel;
       $('#userPanelClose').onclick = closeUserPanel;
       $('#userPanelOverlay').onclick = (e) => { if (e.target === $('#userPanelOverlay')) closeUserPanel(); };
       $('#cardDetailClose').onclick = closeCardDetails;
       $('#cardDetailOverlay').onclick = (e) => { if (e.target === $('#cardDetailOverlay')) closeCardDetails(); };
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
+          closeExercisePicker();
           closeUserPanel();
           closeCardDetails();
+          closeBattleResult();
+          closeEndTurnReview();
         }
       });
       $('#authPass').onkeydown = (e) => { if (e.key === 'Enter') doAuth('login'); };

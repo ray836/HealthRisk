@@ -74,7 +74,7 @@ export const members = pgTable(
   (t) => ({ pk: primaryKey({ columns: [t.gameId, t.playerId] }) }),
 );
 
-/** Idempotent DDL to bootstrap the store (no migration tooling needed for the demo). */
+/** Initial snapshot-store schema, applied by db/migrations.ts as migration 1. */
 export const DDL_STATEMENTS: string[] = [
   `CREATE TABLE IF NOT EXISTS er_games (
      id text PRIMARY KEY,

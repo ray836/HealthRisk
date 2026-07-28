@@ -72,6 +72,13 @@ export async function ensureTurnStarted(
     startEliminationTroops: eliminationReward,
     startContinents: bonus.continents.map((c) => c.label),
     briefingEventCount: game.events?.length ?? 0,
+    reinforcementTroopsPlaced: 0,
+    reinforcementPlacementsMade: 0,
+    attackerLosses: 0,
+    defenderLosses: 0,
+    territoriesCaptured: [],
+    cardsTraded: 0,
+    fortifiedTroops: 0,
   };
   await repo.saveTurnState(turnState);
   return { started: true, bonus };

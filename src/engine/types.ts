@@ -185,6 +185,13 @@ export type GameEvent =
 
 export interface GameState {
   id: string;
+  /**
+   * Monotonic browser-visible version. Mutating requests include the revision
+   * they were rendered from so a second tab cannot silently replay old moves.
+   */
+  revision?: number;
+  /** Practice games are private hot-seat sandboxes and do not occupy a multiplayer slot. */
+  practice?: boolean;
   config: GameConfig;
   players: Player[];
   territories: Territory[];
@@ -192,7 +199,7 @@ export interface GameState {
   turnOrder: PlayerId[];
   /** Increments each daily session; day 0 is the first turn window. */
   dayNumber: number;
-  status: 'setup' | 'active' | 'finished';
+  status: 'setup' | 'active' | 'finished' | 'cancelled';
   winnerId?: PlayerId;
   healthRulesVersion?: number;
   pendingHealthRuleProposal?: HealthRuleProposal;

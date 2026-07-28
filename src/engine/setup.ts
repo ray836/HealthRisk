@@ -108,6 +108,7 @@ export function createGame(input: CreateGameInput): GameState {
 
   return {
     id,
+    revision: 1,
     config,
     players: playerRecords,
     territories,

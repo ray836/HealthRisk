@@ -28,7 +28,7 @@ import {
 } from '../orchestrator.js';
 import type { GameRepository } from '../repository.js';
 import type { JobQueue } from './jobQueue.js';
-import { nextWindowStart, windowDeadline } from './time.js';
+import { nextDayWindowStart, nextWindowStart, windowDeadline } from './time.js';
 
 export const JOB_SESSION_OPEN = 'exercise-risk:session_open';
 export const JOB_PLAYER_WINDOW = 'exercise-risk:player_window';
@@ -70,7 +70,8 @@ export class GameScheduler {
     this.clock = deps.clock ?? systemClock;
     this.nextDayOpenAt =
       deps.nextDayOpenAt ??
-      ((config, now) => nextWindowStart(config.timezone, config.windowStartMinuteOfDay, now));
+      ((config, now) =>
+        nextDayWindowStart(config.timezone, config.windowStartMinuteOfDay, now));
   }
 
   /** Arm the current front player's window (public entry for the server on open). */
@@ -84,6 +85,7 @@ export class GameScheduler {
       const { gameId, dayNumber } = data as SessionOpenData;
       await openDailySession(this.repo, gameId, dayNumber);
       await this.advance(gameId, dayNumber);
+      await this.bumpRevision(gameId);
     });
 
     this.queue.work(JOB_PLAYER_WINDOW, async (data) => {
@@ -92,6 +94,7 @@ export class GameScheduler {
       if (!session || currentPlayer(session) !== playerId) return; // stale timer
       await handleWindowExpiry(this.repo, this.planner, gameId, dayNumber);
       await this.advance(gameId, dayNumber);
+      await this.bumpRevision(gameId);
     });
   }
 
@@ -120,7 +123,7 @@ export class GameScheduler {
   /** Schedule the next thing: this day's next player, or next day's open. */
   private async advance(gameId: string, dayNumber: number): Promise<void> {
     const game = await this.repo.loadGame(gameId);
-    if (!game || game.status === 'finished') return; // game over; stop scheduling
+    if (!game || game.status !== 'active') return; // lobby/game over; stop scheduling
     const session = await this.repo.loadSession(gameId, dayNumber);
     if (!session) return;
 
@@ -142,5 +145,10 @@ export class GameScheduler {
         dayNumber: dayNumber + 1,
       } satisfies SessionOpenData);
     }
+  }
+
+  private async bumpRevision(gameId: string): Promise<void> {
+    const game = await this.repo.loadGame(gameId);
+    if (game) await this.repo.saveGame({ ...game, revision: (game.revision ?? 0) + 1 });
   }
 }

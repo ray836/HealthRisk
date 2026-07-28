@@ -61,10 +61,21 @@ describe('TurnApi — full turn', () => {
     const r = await api.placeReinforcements('g', 1, 'a', [{ territoryId: 'china', count: 3 }]);
     expect(r.remainingBank).toBe(0);
     expect((await repo.loadGame('g'))!.territories.find((t) => t.id === 'china')!.armies).toBe(15);
+    expect(await repo.loadTurnState('g', 1, 'a')).toMatchObject({
+      reinforcementTroopsPlaced: 3,
+      reinforcementPlacementsMade: 1,
+    });
 
     const result = await api.attack('g', 1, 'a', { fromId: 'china', toId: 'india', committedTroops: 14, stopLoss: 14 });
     expect(result.captured).toBe(true);
     expect((await repo.loadGame('g'))!.territories.find((t) => t.id === 'india')!.owner).toBe('a');
+    expect(await repo.loadTurnState('g', 1, 'a')).toMatchObject({
+      attacksMade: 1,
+      attackerLosses: result.totalAttackerLosses,
+      defenderLosses: result.totalDefenderLosses,
+      territoriesCaptured: ['india'],
+      capturedTerritoryId: 'india',
+    });
 
     // reinforcing after an attack is rejected
     await expect(api.placeReinforcements('g', 1, 'a', [{ territoryId: 'china', count: 1 }])).rejects.toMatchObject({
@@ -73,6 +84,11 @@ describe('TurnApi — full turn', () => {
 
     await api.fortify('g', 1, 'a', { fromId: 'mongolia', toId: 'china', count: 4 });
     expect((await repo.loadGame('g'))!.territories.find((t) => t.id === 'mongolia')!.armies).toBe(1);
+    expect(await repo.loadTurnState('g', 1, 'a')).toMatchObject({
+      fortifiedTroops: 4,
+      fortifiedFromId: 'mongolia',
+      fortifiedToId: 'china',
+    });
 
     // no attack or second fortify after fortifying
     await expect(api.attack('g', 1, 'a', { fromId: 'china', toId: 'siam', committedTroops: 3, stopLoss: 2 })).rejects.toMatchObject({
@@ -258,6 +274,7 @@ describe('TurnApi — full turn', () => {
 
     const trade = await api.tradeCards('g', 2, 'a');
     expect(trade).toEqual({ remainingBank: 6, remainingCards: 0, troopsAwarded: 3 });
+    expect(await repo.loadTurnState('g', 2, 'a')).toMatchObject({ cardsTraded: 1 });
     await api.placeReinforcements('g', 2, 'a', [{ territoryId: 'china', count: 6 }]);
     expect((await api.turnView('g', 2))!.phase).toBe('attack');
   });

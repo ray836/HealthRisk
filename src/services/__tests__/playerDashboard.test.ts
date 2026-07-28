@@ -72,6 +72,17 @@ describe('buildPlayerDashboard', () => {
         isFirstTurn: true,
         hasChanges: false,
       },
+      turnSummary: {
+        reinforcementsPlaced: 0,
+        placementsMade: 0,
+        attacksMade: 0,
+        attackerLosses: 0,
+        defenderLosses: 0,
+        territoriesCaptured: [],
+        cardsTraded: 0,
+        cardPending: false,
+        fortification: null,
+      },
       exercise: {
         totalTroops: 4,
         dailyCap: 8,

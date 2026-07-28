@@ -36,6 +36,16 @@ export interface TurnState {
   startContinents?: string[];
   /** Event-log length at turn start, freezing the daily briefing for this turn. */
   briefingEventCount?: number;
+  /** Interactive actions accumulated during this turn for refresh-safe UI feedback. */
+  reinforcementTroopsPlaced?: number;
+  reinforcementPlacementsMade?: number;
+  attackerLosses?: number;
+  defenderLosses?: number;
+  territoriesCaptured?: TerritoryId[];
+  cardsTraded?: number;
+  fortifiedTroops?: number;
+  fortifiedFromId?: TerritoryId;
+  fortifiedToId?: TerritoryId;
   /** First territory captured this turn; earns one card when the turn ends. */
   capturedTerritoryId?: TerritoryId;
   /** Recorded after the deterministic conquest-card award is applied. */
@@ -83,9 +93,11 @@ export interface GameRepository {
   getToken(token: string): Promise<AuthToken | null>;
   deleteToken(token: string): Promise<void>;
   setMember(member: Member): Promise<void>;
+  deleteMember(gameId: string, playerId: string): Promise<void>;
   getMemberByUser(gameId: string, userId: string): Promise<Member | null>;
   getMemberBySeat(gameId: string, playerId: string): Promise<Member | null>;
   listMembers(gameId: string): Promise<Member[]>;
+  listMembersForUser(userId: string): Promise<Member[]>;
 }
 
 /** Deep-ish clone so callers can't mutate stored state by reference. */
@@ -179,6 +191,9 @@ export class InMemoryGameRepository implements GameRepository {
   async setMember(member: Member): Promise<void> {
     this.members.set(`${member.gameId}:${member.playerId}`, clone(member));
   }
+  async deleteMember(gameId: string, playerId: string): Promise<void> {
+    this.members.delete(`${gameId}:${playerId}`);
+  }
   async getMemberByUser(gameId: string, userId: string): Promise<Member | null> {
     for (const m of this.members.values()) if (m.gameId === gameId && m.userId === userId) return clone(m);
     return null;
@@ -189,5 +204,8 @@ export class InMemoryGameRepository implements GameRepository {
   }
   async listMembers(gameId: string): Promise<Member[]> {
     return [...this.members.values()].filter((m) => m.gameId === gameId).map(clone);
+  }
+  async listMembersForUser(userId: string): Promise<Member[]> {
+    return [...this.members.values()].filter((m) => m.userId === userId).map(clone);
   }
 }
