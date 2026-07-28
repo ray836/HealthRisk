@@ -59,9 +59,10 @@ export const users = pgTable('er_users', {
 });
 
 export const authTokens = pgTable('er_auth_tokens', {
-  token: text('token').primaryKey(),
+  tokenHash: text('token').primaryKey(),
   userId: text('user_id').notNull(),
   createdAt: text('created_at').notNull(),
+  expiresAt: text('expires_at').notNull(),
 });
 
 export const members = pgTable(

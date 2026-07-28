@@ -34,6 +34,8 @@ import {
   type HealthRulesInput,
 } from '../services/healthRules.js';
 import { signup, login, logout, resolveToken, type PublicUser } from '../services/authApi.js';
+import { SESSION_TTL_MS } from '../services/authApi.js';
+import { AuthRateLimiter } from '../services/authRateLimit.js';
 import { claimSeat, claimAllSeats, claimOpenSeat, seatFor } from '../services/membership.js';
 import { createGame } from '../engine/setup.js';
 import { CONTINENTS, CONTINENT_OF, NEIGHBORS } from '../engine/map.js';
@@ -49,6 +51,7 @@ const SUPPORTED_TIMEZONES = new Set([
   'America/New_York',
   'UTC',
 ]);
+const SESSION_COOKIE = 'exrisk_session';
 
 // Assigned in main() before the server accepts requests.
 let repo: GameRepository;
@@ -186,6 +189,7 @@ async function gameView(gameId: string, viewerId?: string) {
 }
 
 const app = express();
+if (process.env.TRUST_PROXY === '1') app.set('trust proxy', 1);
 app.use(express.json());
 
 /** Load-balancer/readiness probe. Never returns credentials or game data. */
@@ -208,9 +212,67 @@ function bearer(req: express.Request): string | undefined {
   return h?.startsWith('Bearer ') ? h.slice(7) : undefined;
 }
 
+function cookieSession(req: express.Request): string | undefined {
+  const cookie = req.header('cookie');
+  if (!cookie) return undefined;
+  for (const part of cookie.split(';')) {
+    const [name, ...value] = part.trim().split('=');
+    if (name === SESSION_COOKIE) return value.join('=') || undefined;
+  }
+  return undefined;
+}
+
+function sessionToken(req: express.Request): string | undefined {
+  return bearer(req) ?? cookieSession(req);
+}
+
+function setSessionCookie(res: express.Response, token: string): void {
+  const parts = [
+    `${SESSION_COOKIE}=${token}`,
+    'HttpOnly',
+    'SameSite=Lax',
+    'Path=/',
+    `Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`,
+  ];
+  if (process.env.NODE_ENV === 'production') parts.push('Secure');
+  res.setHeader('Set-Cookie', parts.join('; '));
+}
+
+function clearSessionCookie(res: express.Response): void {
+  const parts = [
+    `${SESSION_COOKIE}=`,
+    'HttpOnly',
+    'SameSite=Lax',
+    'Path=/',
+    'Max-Age=0',
+    'Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+  ];
+  if (process.env.NODE_ENV === 'production') parts.push('Secure');
+  res.setHeader('Set-Cookie', parts.join('; '));
+}
+
+const authRateLimiter = new AuthRateLimiter();
+
+function consumeAuthAttempt(
+  req: express.Request,
+  res: express.Response,
+  action: 'login' | 'signup',
+): string {
+  const key = `${action}:${req.ip}`;
+  const limit = authRateLimiter.consume(key);
+  if (!limit.allowed) {
+    res.setHeader('Retry-After', String(limit.retryAfterSeconds));
+    throw new TurnError(
+      'auth_rate_limited',
+      'Too many attempts. Please wait before trying again.',
+    );
+  }
+  return key;
+}
+
 // Resolve the bearer token to a user (best-effort) on every request.
 app.use((req, _res, next) => {
-  resolveToken(repo, bearer(req))
+  resolveToken(repo, sessionToken(req))
     .then((user) => {
       (req as express.Request & { user: PublicUser | null }).user = user;
       next();
@@ -296,6 +358,8 @@ const asyncH =
         const code =
           err.code === 'unauthorized'
             ? 401
+            : err.code === 'auth_rate_limited'
+              ? 429
             : err.code === 'not_your_turn' || err.code === 'stale_game'
               ? 409
               : 400;
@@ -311,19 +375,36 @@ const asyncH =
 app.post(
   '/api/auth/signup',
   asyncH(async (req, res) => {
-    res.json(await signup(repo, String(req.body?.username ?? ''), String(req.body?.password ?? '')));
+    const rateKey = consumeAuthAttempt(req, res, 'signup');
+    const result = await signup(
+      repo,
+      String(req.body?.username ?? ''),
+      String(req.body?.password ?? ''),
+    );
+    authRateLimiter.reset(rateKey);
+    setSessionCookie(res, result.token);
+    res.json(result);
   }),
 );
 app.post(
   '/api/auth/login',
   asyncH(async (req, res) => {
-    res.json(await login(repo, String(req.body?.username ?? ''), String(req.body?.password ?? '')));
+    const rateKey = consumeAuthAttempt(req, res, 'login');
+    const result = await login(
+      repo,
+      String(req.body?.username ?? ''),
+      String(req.body?.password ?? ''),
+    );
+    authRateLimiter.reset(rateKey);
+    setSessionCookie(res, result.token);
+    res.json(result);
   }),
 );
 app.post(
   '/api/auth/logout',
   asyncH(async (req, res) => {
-    await logout(repo, bearer(req));
+    await logout(repo, sessionToken(req));
+    clearSessionCookie(res);
     res.json({ ok: true });
   }),
 );

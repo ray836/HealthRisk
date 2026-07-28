@@ -35,6 +35,17 @@ export const DATABASE_MIGRATIONS: DatabaseMigration[] = [
       'CREATE INDEX IF NOT EXISTS er_games_updated_idx ON er_games (updated_at)',
     ],
   },
+  {
+    version: 3,
+    name: 'expiring_hashed_sessions',
+    statements: [
+      'ALTER TABLE er_auth_tokens ADD COLUMN IF NOT EXISTS expires_at text',
+      // Pre-migration tokens were plaintext and permanent. Revoke them once
+      // instead of carrying insecure browser sessions forward.
+      'DELETE FROM er_auth_tokens',
+      'ALTER TABLE er_auth_tokens ALTER COLUMN expires_at SET NOT NULL',
+    ],
+  },
 ];
 
 export const LATEST_DATABASE_VERSION =
@@ -79,4 +90,3 @@ export async function applyDatabaseMigrations(
 
   return LATEST_DATABASE_VERSION;
 }
-

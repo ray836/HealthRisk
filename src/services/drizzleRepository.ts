@@ -108,12 +108,12 @@ export class DrizzleGameRepository implements GameRepository {
   async createToken(token: AuthToken): Promise<void> {
     await this.db.insert(authTokens).values(token);
   }
-  async getToken(token: string): Promise<AuthToken | null> {
-    const rows = await this.db.select().from(authTokens).where(eq(authTokens.token, token));
+  async getToken(tokenHash: string): Promise<AuthToken | null> {
+    const rows = await this.db.select().from(authTokens).where(eq(authTokens.tokenHash, tokenHash));
     return rows.length ? (rows[0] as AuthToken) : null;
   }
-  async deleteToken(token: string): Promise<void> {
-    await this.db.delete(authTokens).where(eq(authTokens.token, token));
+  async deleteToken(tokenHash: string): Promise<void> {
+    await this.db.delete(authTokens).where(eq(authTokens.tokenHash, tokenHash));
   }
   async setMember(member: Member): Promise<void> {
     await this.db

@@ -89,7 +89,12 @@ describe('DrizzleGameRepository (PGlite in-memory)', () => {
     expect((await repo.getUserById('u1'))!.username).toBe('alice');
     expect(await repo.getUserByUsername('nobody')).toBeNull();
 
-    await repo.createToken({ token: 'tok1', userId: 'u1', createdAt: 'now' });
+    await repo.createToken({
+      tokenHash: 'tok1',
+      userId: 'u1',
+      createdAt: 'now',
+      expiresAt: 'later',
+    });
     expect((await repo.getToken('tok1'))!.userId).toBe('u1');
     await repo.deleteToken('tok1');
     expect(await repo.getToken('tok1')).toBeNull();

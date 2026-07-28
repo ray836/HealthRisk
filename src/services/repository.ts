@@ -60,11 +60,12 @@ export interface User {
   createdAt: string;
 }
 
-/** A bearer session token → user. */
+/** A stored session digest → user. The raw bearer token is never persisted. */
 export interface AuthToken {
-  token: string;
+  tokenHash: string;
   userId: string;
   createdAt: string;
+  expiresAt: string;
 }
 
 /** Which user owns a given seat (player) in a game. */
@@ -90,8 +91,8 @@ export interface GameRepository {
   getUserByUsername(username: string): Promise<User | null>;
   getUserById(id: string): Promise<User | null>;
   createToken(token: AuthToken): Promise<void>;
-  getToken(token: string): Promise<AuthToken | null>;
-  deleteToken(token: string): Promise<void>;
+  getToken(tokenHash: string): Promise<AuthToken | null>;
+  deleteToken(tokenHash: string): Promise<void>;
   setMember(member: Member): Promise<void>;
   deleteMember(gameId: string, playerId: string): Promise<void>;
   getMemberByUser(gameId: string, userId: string): Promise<Member | null>;
@@ -179,14 +180,14 @@ export class InMemoryGameRepository implements GameRepository {
     return u ? clone(u) : null;
   }
   async createToken(token: AuthToken): Promise<void> {
-    this.tokens.set(token.token, clone(token));
+    this.tokens.set(token.tokenHash, clone(token));
   }
-  async getToken(token: string): Promise<AuthToken | null> {
-    const t = this.tokens.get(token);
+  async getToken(tokenHash: string): Promise<AuthToken | null> {
+    const t = this.tokens.get(tokenHash);
     return t ? clone(t) : null;
   }
-  async deleteToken(token: string): Promise<void> {
-    this.tokens.delete(token);
+  async deleteToken(tokenHash: string): Promise<void> {
+    this.tokens.delete(tokenHash);
   }
   async setMember(member: Member): Promise<void> {
     this.members.set(`${member.gameId}:${member.playerId}`, clone(member));
