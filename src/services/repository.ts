@@ -34,6 +34,8 @@ export interface TurnState {
   startEliminationTroops?: number;
   /** Labels of continents the player controlled at turn start. */
   startContinents?: string[];
+  /** Event-log length at turn start, freezing the daily briefing for this turn. */
+  briefingEventCount?: number;
   /** First territory captured this turn; earns one card when the turn ends. */
   capturedTerritoryId?: TerritoryId;
   /** Recorded after the deterministic conquest-card award is applied. */

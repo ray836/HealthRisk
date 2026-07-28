@@ -10,6 +10,7 @@ import { ownedContinents } from '../engine/bonus.js';
 import { CARD_TRADE_REINFORCEMENTS, CARD_TRADE_SIZE } from '../engine/cards.js';
 import type { HealthCategory, HealthTrackingType, TerritoryCard } from '../engine/types.js';
 import type { GameRepository, TurnState } from './repository.js';
+import { buildDailyBriefing, type DailyBriefing } from './dailyBriefing.js';
 
 export interface ExerciseProgress {
   key: string;
@@ -41,6 +42,8 @@ export interface PlayerDashboard {
     tradeReward: number;
     canTrade: boolean;
   };
+  /** Frozen at turn start; null while this player has no turn snapshot today. */
+  briefing: DailyBriefing | null;
   exercise: {
     totalTroops: number;
     dailyCap: number;
@@ -93,6 +96,9 @@ export async function buildPlayerDashboard(
       tradeReward: CARD_TRADE_REINFORCEMENTS,
       canTrade: turnState?.phase === 'reinforce' && (player.cards?.length ?? 0) >= CARD_TRADE_SIZE,
     },
+    briefing: turnState
+      ? buildDailyBriefing(game, playerId, turnState.briefingEventCount ?? game.events?.length ?? 0)
+      : null,
     exercise: {
       totalTroops: exercise.total,
       dailyCap: game.config.dailyTotalTroopCap,

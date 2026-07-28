@@ -34,6 +34,11 @@ import {
 import { validateFortify, applyFortify, type FortifyMove } from '../engine/fortify.js';
 import { applyEliminations, checkWin } from '../engine/game.js';
 import {
+  recordAttackEvent,
+  recordCardsTradedEvent,
+  recordFortifiedEvent,
+} from '../engine/gameEvents.js';
+import {
   applyCardTrade,
   awardConquestCard,
   CARD_TRADE_REINFORCEMENTS,
@@ -177,6 +182,7 @@ export class TurnApi {
     );
 
     let next = applyAttackResult(game, playerId, decl, result);
+    next = recordAttackEvent(game, next, playerId, decl, result, `${combatId}:event`);
     next = applyEliminations(next, playerId);
     next = checkWin(next);
     await this.repo.saveGame(next);
@@ -201,7 +207,17 @@ export class TurnApi {
     const error = validateCardTrade(game, playerId);
     if (error) throw new TurnError(error.code, error.message);
 
-    const next = applyCardTrade(game, playerId);
+    const tradedCardIds = (game.players.find((player) => player.id === playerId)?.cards ?? [])
+      .slice(0, 3)
+      .map((card) => card.id)
+      .join(':');
+    let next = applyCardTrade(game, playerId);
+    next = recordCardsTradedEvent(
+      next,
+      playerId,
+      CARD_TRADE_REINFORCEMENTS,
+      `${gameId}:${dayNumber}:${playerId}:trade:${tradedCardIds}`,
+    );
     await this.repo.saveGame(next);
     const player = next.players.find((candidate) => candidate.id === playerId)!;
     return {
@@ -221,7 +237,13 @@ export class TurnApi {
     }
     const err = validateFortify(game, playerId, move);
     if (err) throw fromValidation(err);
-    const next = applyFortify(game, move);
+    let next = applyFortify(game, move);
+    next = recordFortifiedEvent(
+      next,
+      playerId,
+      move,
+      `${gameId}:${dayNumber}:${playerId}:fortify`,
+    );
     await this.repo.saveGame(next);
     turnState.phase = 'fortify';
     await this.repo.saveTurnState(turnState);

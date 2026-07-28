@@ -68,6 +68,10 @@ describe('buildPlayerDashboard', () => {
         tradeReward: 3,
         canTrade: true,
       },
+      briefing: {
+        isFirstTurn: true,
+        hasChanges: false,
+      },
       exercise: {
         totalTroops: 4,
         dailyCap: 8,

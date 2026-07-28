@@ -34,11 +34,19 @@ describe('conquest cards', () => {
     expect(first.awarded).toBe(true);
     expect(first.card).toMatchObject({ territoryId: 'india', earnedDay: 2 });
     expect(first.state.players.find((player) => player.id === 'a')!.cards).toHaveLength(1);
+    expect(first.state.events).toContainEqual(
+      expect.objectContaining({
+        type: 'conquest_card_earned',
+        playerId: 'a',
+        territoryId: 'india',
+      }),
+    );
 
     const retry = awardConquestCard(first.state, 'a', 2, 'brazil');
     expect(retry.awarded).toBe(false);
     expect(retry.card.territoryId).toBe('india');
     expect(retry.state.players.find((player) => player.id === 'a')!.cards).toHaveLength(1);
+    expect(retry.state.events).toHaveLength(1);
   });
 
   it('trades exactly three cards for a fixed three troops', () => {

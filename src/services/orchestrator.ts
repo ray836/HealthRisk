@@ -17,6 +17,7 @@
 import { buildPlannerContext, type TurnPlanner } from '../engine/planner.js';
 import { applyTurnEffect } from '../engine/game.js';
 import { awardConquestCard } from '../engine/cards.js';
+import { recordTurnCompletedEvent } from '../engine/gameEvents.js';
 import type { TurnPlanReport } from '../engine/turnPlan.js';
 import {
   startDailySession,
@@ -78,8 +79,9 @@ export async function markTurnComplete(
 
   const { session: next, effect } = completeTurn(session, playerId);
   const { state } = applyTurnEffect(game, effect);
-  await repo.saveGame(state);
-  await repo.saveSession(pruneIneligiblePlayers(next, state));
+  const completedState = recordTurnCompletedEvent(state, playerId, 'completed');
+  await repo.saveGame(completedState);
+  await repo.saveSession(pruneIneligiblePlayers(next, completedState));
 }
 
 export interface WindowExpiryResult {
@@ -136,8 +138,9 @@ export async function handleWindowExpiry(
         firstCapture.declaration.toId,
       ).state
     : state;
-  await repo.saveGame(rewardedState);
-  await repo.saveSession(pruneIneligiblePlayers(next, rewardedState));
+  const completedState = recordTurnCompletedEvent(rewardedState, playerId, 'auto_resolved');
+  await repo.saveGame(completedState);
+  await repo.saveSession(pruneIneligiblePlayers(next, completedState));
 
   return { playerId, usedFallback, report: autoReport };
 }

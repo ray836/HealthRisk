@@ -57,7 +57,13 @@
       .terr .armies { font-weight:700; font-size:15px; }
       .terr.dim { opacity:.4; }
       .terr.sel { outline:3px solid #ffd166; }
-      #log { white-space:pre-wrap; font-family:ui-monospace,monospace; font-size:12px; color:var(--muted); max-height:180px; overflow:auto; }
+      #log { display:grid; gap:10px; max-height:310px; overflow:auto; }
+      .activityDay { display:grid; gap:5px; }
+      .activityDayTitle { position:sticky; top:0; padding:3px 0; background:#151b23; color:#89b9f0; font-size:10px; font-weight:750; letter-spacing:.09em; text-transform:uppercase; }
+      .activityEvent { display:grid; grid-template-columns:18px 1fr; gap:6px; color:#c4ccd7; font-size:11px; line-height:1.35; }
+      .activityEvent .eventIcon { text-align:center; }
+      .activitySession { padding-bottom:8px; border-bottom:1px solid #293746; }
+      .activityEmpty { color:var(--muted); font-size:11px; }
       .muted { color:var(--muted); }
       .win { color:#3fae7a; font-weight:700; }
       #board { background:#181f28; border-color:#34465a; }
@@ -74,6 +80,7 @@
       #board svg .tcount { fill:#0c0e12; font-weight:700; font-size:13px; pointer-events:none; }
       #board svg .node { cursor:default; }
       #board svg .node.can { cursor:pointer; }
+      #board svg .node.briefingChanged circle { stroke:#ffd166; stroke-width:3.5; filter:drop-shadow(0 0 6px rgba(255,209,102,.75)); }
       #winOverlay { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(10,12,16,.82); z-index:50; }
       #winOverlay.show { display:flex; }
       #winOverlay .card { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:28px 40px; text-align:center; }
@@ -118,6 +125,18 @@
       .progress { height:5px; margin-top:4px; overflow:hidden; border-radius:999px; background:#343a44; }
       .progress > span { display:block; height:100%; border-radius:inherit; background:#4b8fe0; }
       .dashEmpty { color:var(--muted); font-size:12px; }
+      .briefingDisclosure { background:linear-gradient(145deg,#243246,#1f2937); border-color:#446487; }
+      .briefingDisclosure[open] { background:linear-gradient(145deg,#293a50,#222d3c); border-color:#5b7fa8; }
+      .briefingGrid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+      .briefingStat { padding:7px 5px; border:1px solid #3a4b60; border-radius:7px; background:#17212d; text-align:center; }
+      .briefingStat b { display:block; font-size:15px; }
+      .briefingStat span { color:var(--muted); font-size:9px; letter-spacing:.04em; text-transform:uppercase; }
+      .briefingStat.gain b { color:#77d5a6; }
+      .briefingStat.loss b { color:#ff9a91; }
+      .briefingNotes { display:grid; gap:5px; margin-top:9px; }
+      .briefingNote { display:grid; grid-template-columns:18px 1fr; gap:5px; color:#cbd3dd; font-size:11px; }
+      .briefingFooter { display:flex; justify-content:space-between; gap:8px; align-items:center; margin-top:9px; }
+      .briefingFooter .muted { font-size:10px; }
       details.disclosure { overflow:hidden; }
       details.disclosure > summary { display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:pointer; list-style:none; font-weight:700; }
       details.disclosure > summary::-webkit-details-marker { display:none; }
@@ -248,7 +267,7 @@
         </section>
 
         <details class="panel sideCard disclosure activity">
-          <summary><span>Game activity</span><span class="summaryMeta">Recent events</span></summary>
+          <summary><span>Game activity</span><span class="summaryMeta" id="activitySummary">Recent events</span></summary>
           <div class="disclosureBody"><div id="log"></div></div>
         </details>
       </aside>
@@ -387,6 +406,8 @@
       let toastTimer = null;
       let selectedCardId = null;
       let eventGameId = null;
+      let localActivity = [];
+      let briefingHighlightIds = new Set();
       const seenGameEventIds = new Set();
       let gameId = localStorage.getItem('exriskGame');
       let token = localStorage.getItem('exriskToken');
@@ -527,7 +548,74 @@
         $('#cardDetailOverlay').classList.add('show');
         $('#cardDetailClose').focus();
       }
-      const log = (msg) => { $('#log').textContent = msg + '\n' + $('#log').textContent; };
+      const playerName = (playerId) => game?.players.find((player) => player.id === playerId)?.name || 'A player';
+      function eventPresentation(event) {
+        if (event.type === 'attack_resolved') {
+          const target = pretty(event.toId);
+          if (event.captured) {
+            return { icon:'⚔', text:`${playerName(event.playerId)} captured ${target}` };
+          }
+          return {
+            icon:'🛡',
+            text:`${playerName(event.playerId)} attacked ${target} (${event.attackerLosses} / ${event.defenderLosses} lost)`,
+          };
+        }
+        if (event.type === 'fortified') {
+          return { icon:'↔', text:`${playerName(event.playerId)} moved ${event.count} troops to ${pretty(event.toId)}` };
+        }
+        if (event.type === 'cards_traded') {
+          return { icon:'🃏', text:`${playerName(event.playerId)} traded cards for +${event.troopsAwarded} troops` };
+        }
+        if (event.type === 'conquest_card_earned') {
+          return { icon:'🎴', text:`${playerName(event.playerId)} earned a conquest card` };
+        }
+        if (event.type === 'player_eliminated') {
+          return {
+            icon:'⚔',
+            text:`${playerName(event.eliminatedByPlayerId)} eliminated ${playerName(event.eliminatedPlayerId)} (+${event.rewardTroops} next turn)`,
+          };
+        }
+        if (event.type === 'turn_completed') {
+          return event.resolution === 'auto_resolved'
+            ? { icon:'⏳', text:`${playerName(event.playerId)} missed their window; turn auto-resolved` }
+            : { icon:'✓', text:`${playerName(event.playerId)} finished their turn` };
+        }
+        return { icon:'•', text:'Game updated' };
+      }
+      function renderGameActivity() {
+        const root = $('#log');
+        if (!root) return;
+        const persisted = game?.events || [];
+        const parts = [];
+        if (localActivity.length) {
+          parts.push(`<div class="activityDay activitySession">
+            <div class="activityDayTitle">This browser</div>
+            ${localActivity.slice(0, 6).map((entry) =>
+              `<div class="activityEvent"><span class="eventIcon">•</span><span>${esc(entry.message)}</span></div>`
+            ).join('')}
+          </div>`);
+        }
+        let lastDay = null;
+        for (const event of [...persisted].reverse().slice(0, 80)) {
+          if (event.dayNumber !== lastDay) {
+            if (lastDay !== null) parts.push('</div>');
+            lastDay = event.dayNumber;
+            parts.push(`<div class="activityDay"><div class="activityDayTitle">Day ${event.dayNumber}</div>`);
+          }
+          const item = eventPresentation(event);
+          parts.push(`<div class="activityEvent"><span class="eventIcon">${item.icon}</span><span>${esc(item.text)}</span></div>`);
+        }
+        if (lastDay !== null) parts.push('</div>');
+        if (!parts.length) parts.push('<div class="activityEmpty">Gameplay events will appear here as turns are played.</div>');
+        root.innerHTML = parts.join('');
+        $('#activitySummary').textContent = persisted.length
+          ? `${persisted.length} event${persisted.length === 1 ? '' : 's'} · Day ${game.dayNumber}`
+          : 'No events yet';
+      }
+      const log = (msg) => {
+        localActivity.unshift({ message: msg, dayNumber: game?.dayNumber ?? null });
+        renderGameActivity();
+      };
       function showToast(message) {
         const toast = $('#gameToast');
         toast.textContent = message;
@@ -1017,38 +1105,39 @@
       }
 
       function renderMeta() {
+        if (eventGameId !== game.id) {
+          eventGameId = game.id;
+          seenGameEventIds.clear();
+          localActivity = [];
+          briefingHighlightIds.clear();
+          lastTurnKey = null;
+        }
         // Log once when a new turn begins.
         const key = `${gameId}:${game.dayNumber}:${game.currentPlayerId}`;
         if (game.currentPlayerId && key !== lastTurnKey) {
           lastTurnKey = key;
           fromSel = null; // clear stale selection from the previous player
+          briefingHighlightIds.clear();
           if (mode !== 'reinforce') mode = 'reinforce';
           const who = game.players.find((p) => p.id === game.currentPlayerId);
           let msg = `— ${who.name}'s turn (day ${game.dayNumber})`;
           if ((game.startBonus || 0) > 0) msg += ` — +${game.startBonus} troops from territory/continent control`;
           log(msg);
         }
-        if (eventGameId !== game.id) {
-          eventGameId = game.id;
-          seenGameEventIds.clear();
-        }
         const events = game.events || [];
         const unseenEvents = events.filter((event) => !seenGameEventIds.has(event.id));
         for (const event of unseenEvents) {
           seenGameEventIds.add(event.id);
-          const eliminator = game.players.find((player) => player.id === event.eliminatedByPlayerId);
-          const eliminated = game.players.find((player) => player.id === event.eliminatedPlayerId);
-          const result = game.status === 'finished' ? 'victory secured' : `+${event.rewardTroops} troops next turn`;
-          log(`⚔ ${eliminator?.name || 'A player'} eliminated ${eliminated?.name || 'a player'} · ${result}`);
         }
-        if (unseenEvents.length) {
-          const event = unseenEvents[unseenEvents.length - 1];
+        const unseenEliminations = unseenEvents.filter((event) => event.type === 'player_eliminated');
+        if (unseenEliminations.length) {
+          const event = unseenEliminations[unseenEliminations.length - 1];
           const eliminator = game.players.find((player) => player.id === event.eliminatedByPlayerId);
           const eliminated = game.players.find((player) => player.id === event.eliminatedPlayerId);
           const result = game.status === 'finished' ? 'game won!' : `+${event.rewardTroops} next turn`;
           showToast(`${eliminator?.name || 'A player'} eliminated ${eliminated?.name || 'a player'} — ${result}`);
         }
-        const latestElimination = events[events.length - 1];
+        const latestElimination = [...events].reverse().find((event) => event.type === 'player_eliminated');
         const banner = $('#eliminationBanner');
         if (latestElimination) {
           const eliminator = game.players.find((player) => player.id === latestElimination.eliminatedByPlayerId);
@@ -1095,6 +1184,52 @@
           : isUp
             ? (game.yourTurn ? `Your turn - ${game.phase}` : `${player.name}'s turn`)
             : `Waiting for ${game.players.find((p) => p.id === game.currentPlayerId)?.name || 'the next turn'}`;
+        const briefing = d.briefing;
+        let briefingBlock = '';
+        if (briefing) {
+          const periodLabel = briefing.isFirstTurn
+            ? `Game start → Day ${briefing.throughDay}`
+            : briefing.fromDay === briefing.throughDay
+              ? `Earlier on Day ${briefing.throughDay}`
+              : `Day ${briefing.fromDay} → Day ${briefing.throughDay}`;
+          const changeCount = briefing.territoryGains.length + briefing.territoryLosses.length;
+          const continentNotes = [
+            ...briefing.continentsGained.map((id) => ({ icon:'◆', text:`Gained control of ${pretty(id)}` })),
+            ...briefing.continentsLost.map((id) => ({ icon:'◇', text:`Lost control of ${pretty(id)}` })),
+          ];
+          const eventNotes = [...briefing.notableEvents]
+            .slice(-4)
+            .map((event) => eventPresentation(event));
+          const notes = [...continentNotes, ...eventNotes].slice(0, 5);
+          const briefingTitle = briefing.isFirstTurn ? 'Game so far' : 'Since your last turn';
+          const briefingSummary = changeCount
+            ? `${changeCount} land change${changeCount === 1 ? '' : 's'}`
+            : briefing.notableEvents.length
+              ? `${briefing.notableEvents.length} update${briefing.notableEvents.length === 1 ? '' : 's'}`
+              : 'All quiet';
+          briefingBlock = `
+            <details class="disclosure dashboardDisclosure briefingDisclosure" data-dashboard-section="briefing"${rememberedOpen('briefing', briefing.hasChanges) ? ' open' : ''}>
+              <summary><span>${briefingTitle}</span><span class="summaryMeta">${briefingSummary}</span></summary>
+              <div class="disclosureBody">
+                <div class="briefingGrid">
+                  <div class="briefingStat gain"><b>+${briefing.territoryGains.length}</b><span>Land gained</span></div>
+                  <div class="briefingStat loss"><b>−${briefing.territoryLosses.length}</b><span>Land lost</span></div>
+                  <div class="briefingStat"><b>${briefing.attacksAgainstYou}</b><span>Attacks on you</span></div>
+                </div>
+                <div class="briefingNotes">
+                  ${notes.length
+                    ? notes.map((note) => `<div class="briefingNote"><span>${note.icon}</span><span>${esc(note.text)}</span></div>`).join('')
+                    : '<div class="briefingNote"><span>✓</span><span>No public board changes while you were away.</span></div>'}
+                </div>
+                <div class="briefingFooter">
+                  <span class="muted">${periodLabel}</span>
+                  ${briefing.changedTerritoryIds.length
+                    ? `<button id="showBriefingChanges" type="button">Show on map</button>`
+                    : ''}
+                </div>
+              </div>
+            </details>`;
+        }
         const turnStart = d.turnStart
           ? `<details class="disclosure dashboardDisclosure" data-dashboard-section="reinforcements"${rememberedOpen('reinforcements', true) ? ' open' : ''}>
               <summary><span>Reinforcements</span><span class="summaryMeta">${d.availableReinforcements} available</span></summary>
@@ -1143,6 +1278,7 @@
             <div class="dashStat"><b>${d.armiesOnBoard}</b><span>Armies</span></div>
             <div class="dashStat"><b>${d.availableReinforcements}</b><span>To place</span></div>
           </div>
+          ${briefingBlock}
           ${turnStart}
           <details class="disclosure dashboardDisclosure" data-dashboard-section="cards"${rememberedOpen('cards', d.cards.hand.length >= d.cards.tradeSize) ? ' open' : ''}>
             <summary><span>Conquest cards</span><span class="summaryMeta">${d.cards.hand.length}/${d.cards.tradeSize}</span></summary>
@@ -1172,6 +1308,14 @@
         });
         const tradeButton = $('#tradeCardsBtn');
         if (tradeButton) tradeButton.onclick = tradeCards;
+        const showBriefingChanges = $('#showBriefingChanges');
+        if (showBriefingChanges) {
+          showBriefingChanges.onclick = () => {
+            briefingHighlightIds = new Set(briefing.changedTerritoryIds);
+            render();
+            $('#hint').textContent = 'Gold rings show territory changes since your last turn.';
+          };
+        }
       }
 
       function renderHealthRuleControls() {
@@ -1217,6 +1361,7 @@
         if (!game) return;
         syncMode();
         renderMeta();
+        renderGameActivity();
         renderDashboard();
         renderExercise();
         renderHealthRuleControls();
@@ -1294,7 +1439,8 @@
           const stroke = sel ? '#ffd166' : can ? '#eef1f6' : 'transparent';
           const sw = sel ? 3 : can ? 2 : 1;
           const op = can || sel ? 1 : 0.78;
-          return `<g class="node${can ? ' can' : ''}" data-id="${t.id}" opacity="${op}">
+          const changed = briefingHighlightIds.has(t.id);
+          return `<g class="node${can ? ' can' : ''}${changed ? ' briefingChanged' : ''}" data-id="${t.id}" opacity="${op}">
             <text class="tlabel" x="${x}" y="${y - 18}" text-anchor="middle">${pretty(t.id)}</text>
             <circle cx="${x}" cy="${y}" r="13.5" fill="${t.color}" stroke="${stroke}" stroke-width="${sw}"/>
             <text class="tcount" x="${x}" y="${y + 4.5}" text-anchor="middle">${t.armies}</text>

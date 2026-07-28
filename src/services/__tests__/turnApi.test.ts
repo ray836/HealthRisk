@@ -138,13 +138,14 @@ describe('TurnApi — full turn', () => {
       status: 'eliminated',
       cards: [],
     });
-    expect(game.events).toEqual([
+    expect(game.events).toEqual(expect.arrayContaining([
       expect.objectContaining({
         eliminatedByPlayerId: 'a',
         eliminatedPlayerId: 'b',
         rewardTroops: 3,
       }),
-    ]);
+      expect.objectContaining({ type: 'attack_resolved', playerId: 'a', toId: 'india', captured: true }),
+    ]));
     expect((await repo.loadSession('g', 1))!.queue).toEqual(['a', 'c']);
 
     await api.endTurn('g', 1, 'a');

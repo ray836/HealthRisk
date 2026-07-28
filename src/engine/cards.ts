@@ -7,6 +7,7 @@
  */
 
 import type { GameState, PlayerId, TerritoryCard, TerritoryId } from './types.js';
+import { appendGameEvent } from './gameEvents.js';
 
 export const CARD_TRADE_SIZE = 3;
 export const CARD_TRADE_REINFORCEMENTS = 3;
@@ -48,15 +49,22 @@ export function awardConquestCard(
   const existing = hand.find((candidate) => candidate.id === card.id);
   if (existing) return { state, card: existing, awarded: false };
 
-  return {
-    state: {
+  const next = {
       ...state,
       players: state.players.map((candidate) =>
         candidate.id === playerId
           ? { ...candidate, cards: [...hand, card] }
           : candidate,
       ),
-    },
+    };
+  return {
+    state: appendGameEvent(next, {
+      id: `${card.id}:earned`,
+      type: 'conquest_card_earned',
+      dayNumber,
+      playerId,
+      territoryId,
+    }),
     card,
     awarded: true,
   };
