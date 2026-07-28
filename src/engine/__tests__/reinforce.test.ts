@@ -103,6 +103,17 @@ describe('reinforcement placement', () => {
     expect(err?.code).toBe('not_owner');
   });
 
+  it('rejects empty or malformed placement counts before they can corrupt game totals', () => {
+    const s = stateWith(5);
+    expect(validateReinforcement(s, 'p1', [])?.code).toBe('bad_placements');
+    for (const count of [undefined, Number.NaN, Number.POSITIVE_INFINITY, 1.5, 0, -1]) {
+      const placements = [{ territoryId: 'alaska', count }] as unknown as Parameters<
+        typeof validateReinforcement
+      >[2];
+      expect(validateReinforcement(s, 'p1', placements)?.code).toBe('bad_count');
+    }
+  });
+
   it('applies placements and debits the bank', () => {
     const s = stateWith(5);
     const err = validateReinforcement(s, 'p1', [{ territoryId: 'alaska', count: 3 }]);

@@ -1165,10 +1165,15 @@
 
       async function doLogout() {
         try { await post('/api/auth/logout'); } catch {}
+        const hadVisibleGame = !!game;
+        game = null;
         token = null; currentUser = null; activeMultiplayerGameId = null;
         updateAuthUI();
         closeUserPanel();
-        if (gameId) await refresh(); else if (game) render();
+        if (hadVisibleGame) {
+          window.location.reload();
+          return;
+        }
         log('Logged out');
       }
 
@@ -1290,7 +1295,13 @@
         if (!gameId) return;
         try {
           const r = await fetch('/api/games/' + gameId, { headers: authHeaders() });
-          if (!r.ok) return;
+          if (!r.ok) {
+            if ((r.status === 401 || r.status === 403) && game) {
+              game = null;
+              window.location.reload();
+            }
+            return;
+          }
           game = await r.json();
           activeMultiplayerGameId = game.activeMultiplayerGameId ?? null;
           render();
@@ -1857,7 +1868,7 @@
           ? `<details class="disclosure dashboardDisclosure" data-dashboard-section="reinforcements"${rememberedOpen('reinforcements', true) ? ' open' : ''}>
               <summary><span>Reinforcements</span><span class="summaryMeta">${d.availableReinforcements} available</span></summary>
               <div class="disclosureBody">
-                <div class="incomeRow"><span>Health-goal bank</span><b>+${d.turnStart.exerciseTroops}</b></div>
+                <div class="incomeRow"><span>Health goals today</span><b>+${d.turnStart.healthTroopsToday ?? d.exercise.totalTroops}</b></div>
                 <div class="incomeRow"><span>Territory + continents</span><b>+${d.turnStart.territoryAndContinentTroops}</b></div>
                 ${d.turnStart.eliminationTroops ? `<div class="incomeRow"><span>Elimination reward</span><b>+${d.turnStart.eliminationTroops}</b></div>` : ''}
               </div>

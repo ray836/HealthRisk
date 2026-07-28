@@ -32,6 +32,8 @@ export interface PlayerDashboard {
   availableReinforcements: number;
   turnStart: {
     exerciseTroops: number;
+    /** Live total earned from health goals today, including progress logged after turn start. */
+    healthTroopsToday: number;
     territoryAndContinentTroops: number;
     eliminationTroops: number;
     total: number;
@@ -100,6 +102,7 @@ export async function buildPlayerDashboard(
     turnStart: turnState
       ? {
           exerciseTroops: startExerciseTroops,
+          healthTroopsToday: exercise.total,
           territoryAndContinentTroops: startBonus,
           eliminationTroops: startEliminationTroops,
           total: startExerciseTroops + startBonus + startEliminationTroops,

@@ -41,7 +41,8 @@ import { claimSeat, claimAllSeats, claimOpenSeat, seatFor } from '../services/me
 import { createGame } from '../engine/setup.js';
 import { CONTINENTS, CONTINENT_OF, NEIGHBORS } from '../engine/map.js';
 import { currentPlayer } from '../engine/turnSession.js';
-import type { GameConfig, GameState, HealthRuleGovernance } from '../engine/types.js';
+import type { ReinforcePlacement } from '../engine/reinforce.js';
+import type { GameConfig, GameState, HealthRuleGovernance, TerritoryId } from '../engine/types.js';
 
 const PLAYER_COLORS = ['#e05c4b', '#4b8fe0', '#3fae7a', '#c98a2b', '#8a63d2', '#d0518f'];
 const PRACTICE_WINDOW_MINUTES = 20;
@@ -291,6 +292,33 @@ function requireUser(req: express.Request): PublicUser {
   return u;
 }
 
+function reinforcementPlacements(value: unknown): ReinforcePlacement[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new TurnError('bad_placements', 'Provide at least one reinforcement placement');
+  }
+  return value.map((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      throw new TurnError('bad_placements', 'Each reinforcement placement needs a territory and count');
+    }
+    const placement = entry as Record<string, unknown>;
+    if (
+      typeof placement.territoryId !== 'string' ||
+      placement.territoryId.length === 0 ||
+      !Number.isSafeInteger(placement.count) ||
+      Number(placement.count) <= 0
+    ) {
+      throw new TurnError(
+        'bad_placements',
+        'Each reinforcement placement needs a territory and a positive whole-number count',
+      );
+    }
+    return {
+      territoryId: placement.territoryId as TerritoryId,
+      count: Number(placement.count),
+    };
+  });
+}
+
 /**
  * The seat to act on: the current front-of-line seat, which the authenticated
  * user must own. Works for normal play (you own one seat, act when it's up) and
@@ -362,9 +390,11 @@ const asyncH =
             ? 401
             : err.code === 'auth_rate_limited'
               ? 429
-            : err.code === 'not_your_turn' || err.code === 'stale_game'
-              ? 409
-              : 400;
+              : err.code === 'no_seat'
+                ? 403
+                : err.code === 'not_your_turn' || err.code === 'stale_game'
+                  ? 409
+                  : 400;
         res.status(code).json({ error: err.code, message: err.message });
       } else {
         console.error(err);
@@ -607,7 +637,13 @@ app.post(
 app.get(
   '/api/games/:id',
   asyncH(async (req, res) => {
-    const view = await gameView((req.params.id as string), currentUser(req)?.id);
+    const user = requireUser(req);
+    const id = req.params.id as string;
+    if (!(await repo.loadGame(id))) return res.status(404).json({ error: 'no_game' });
+    if (!(await seatFor(repo, id, user.id))) {
+      throw new TurnError('no_seat', 'Join this game before viewing it');
+    }
+    const view = await gameView(id, user.id);
     if (!view) return res.status(404).json({ error: 'no_game' });
     res.json(view);
   }),
@@ -617,9 +653,10 @@ app.post(
   '/api/games/:id/reinforce',
   asyncH(async (req, res) => {
     const id = req.params.id as string;
+    const placements = reinforcementPlacements(req.body?.placements);
     const out = await mutateGame(req, id, async () => {
       const { day, playerId } = await actingSeat(req, id);
-      return api.placeReinforcements(id, day, playerId, req.body.placements ?? []);
+      return api.placeReinforcements(id, day, playerId, placements);
     });
     res.json({ ...out, game: await gameView(id, currentUser(req)?.id) });
   }),

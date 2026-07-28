@@ -93,9 +93,14 @@ export function validateReinforcement(
 ): ValidationError | null {
   const player = state.players.find((p) => p.id === playerId);
   if (!player) return { code: 'no_player', message: 'Unknown player' };
+  if (!Array.isArray(placements) || placements.length === 0) {
+    return { code: 'bad_placements', message: 'At least one reinforcement placement is required' };
+  }
   let sum = 0;
   for (const p of placements) {
-    if (p.count <= 0) return { code: 'bad_count', message: 'Placement count must be positive' };
+    if (!p || !Number.isSafeInteger(p.count) || p.count <= 0) {
+      return { code: 'bad_count', message: 'Placement count must be a positive whole number' };
+    }
     const terr = state.territories.find((t) => t.id === p.territoryId);
     if (!terr) return { code: 'no_territory', message: `Unknown territory ${p.territoryId}` };
     if (terr.owner !== playerId) return { code: 'not_owner', message: `You do not own ${p.territoryId}` };
