@@ -78,6 +78,10 @@ export function completeTurn(
     ...session,
     queue: session.queue.slice(1),
     completed: [...session.completed, playerId],
+    // The next player receives a fresh window when the scheduler advances.
+    // Clearing this prevents restart recovery from inheriting the prior
+    // player's deadline if the process stops between these two operations.
+    windowExpiresAt: undefined,
   };
   return { session: next, effect: { type: 'completed', playerId } };
 }
@@ -96,6 +100,7 @@ export function expireWindow(session: DailySession): { session: DailySession; ef
     ...session,
     queue: session.queue.slice(1),
     autoResolved: [...session.autoResolved, playerId],
+    windowExpiresAt: undefined,
   };
   return { session: next, effect: { type: 'auto_resolved', playerId } };
 }

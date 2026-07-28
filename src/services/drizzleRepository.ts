@@ -27,6 +27,11 @@ export class DrizzleGameRepository implements GameRepository {
     return rows.length ? (rows[0].state as GameState) : null;
   }
 
+  async listGames(): Promise<GameState[]> {
+    const rows = await this.db.select().from(games);
+    return rows.map((row: { state: GameState }) => row.state);
+  }
+
   async saveGame(state: GameState): Promise<void> {
     await this.db
       .insert(games)

@@ -77,6 +77,8 @@ export interface Member {
 
 export interface GameRepository {
   loadGame(gameId: string): Promise<GameState | null>;
+  /** All persisted games, used to restore active schedules after a restart. */
+  listGames(): Promise<GameState[]>;
   saveGame(state: GameState): Promise<void>;
   loadSession(gameId: string, dayNumber: number): Promise<DailySession | null>;
   saveSession(session: DailySession): Promise<void>;
@@ -131,6 +133,10 @@ export class InMemoryGameRepository implements GameRepository {
   async loadGame(gameId: string): Promise<GameState | null> {
     const g = this.games.get(gameId);
     return g ? clone(g) : null;
+  }
+
+  async listGames(): Promise<GameState[]> {
+    return [...this.games.values()].map(clone);
   }
 
   async saveGame(state: GameState): Promise<void> {

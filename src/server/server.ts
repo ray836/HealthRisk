@@ -21,6 +21,7 @@ import { TurnApi, TurnError } from '../services/turnApi.js';
 import { openDailySession, handleWindowExpiry, systemClock } from '../services/orchestrator.js';
 import { GameScheduler } from '../services/scheduling/gameScheduler.js';
 import { InProcessJobQueue } from '../services/scheduling/jobQueue.js';
+import { PgBossJobQueue } from '../services/scheduling/pgBossJobQueue.js';
 import { logExercise } from '../services/exerciseApi.js';
 import { ensureTurnStarted } from '../services/turnStart.js';
 import { buildPlayerDashboard } from '../services/playerDashboard.js';
@@ -58,6 +59,7 @@ let repo: GameRepository;
 let api: TurnApi;
 let scheduler: GameScheduler;
 let database: DbHandle | null = null;
+let durableSchedulerQueue: PgBossJobQueue | null = null;
 
 // Auto-resolution here uses the deterministic defensive fallback (a planner that
 // throws) so the demo never needs API credits. Swap in createAiPlanner() to use
@@ -798,15 +800,28 @@ async function main() {
   }
   api = new TurnApi({ repo, onPlayerCompleted });
 
-  // Real turn-window timers. In-process setTimeout queue fits the embedded
-  // store; completed game days resume at the configured local start tomorrow.
+  // Hosted Postgres uses pg-boss so daily deadlines survive restarts. Local
+  // PGlite keeps zero-setup setTimeout timers, then reconstructs them from the
+  // persisted session deadline whenever the app starts again.
+  const queue =
+    database?.kind === 'postgres' && process.env.DATABASE_URL
+      ? (durableSchedulerQueue = new PgBossJobQueue(process.env.DATABASE_URL))
+      : new InProcessJobQueue();
   scheduler = new GameScheduler({
     repo,
     planner: throwingPlanner,
-    queue: new InProcessJobQueue(),
+    queue,
     clock: systemClock,
   });
   scheduler.register();
+  if (durableSchedulerQueue) {
+    await durableSchedulerQueue.start();
+    console.log('Turn scheduler: pg-boss (durable)');
+  } else {
+    console.log('Turn scheduler: in-process (startup recovery enabled)');
+  }
+  const recoveredGames = await scheduler.recoverActiveGames();
+  if (recoveredGames) console.log(`Turn scheduler: restored ${recoveredGames} active game(s)`);
 
   const port = Number(process.env.PORT ?? 3000);
   const httpServer = app.listen(port, () => {
@@ -819,6 +834,7 @@ async function main() {
     shuttingDown = true;
     console.log(`${signal}: closing Exercise Risk`);
     await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+    await durableSchedulerQueue?.stop();
     await database?.close();
   };
   process.once('SIGINT', () => {

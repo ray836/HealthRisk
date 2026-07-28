@@ -34,6 +34,7 @@ describe('DrizzleGameRepository (PGlite in-memory)', () => {
     await repo.saveGame(g);
     const loaded = await repo.loadGame('g1');
     expect(loaded).toEqual(g);
+    expect((await repo.listGames()).map((game) => game.id)).toContain('g1');
 
     // Upsert: saving again overwrites.
     const changed = { ...g, dayNumber: 3, status: 'finished' as const, winnerId: 'a' };
