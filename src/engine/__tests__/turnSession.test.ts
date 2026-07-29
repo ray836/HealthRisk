@@ -45,10 +45,12 @@ describe('daily turn session', () => {
 
   it('a completed turn leaves the queue', () => {
     let s = startDailySession(game(), 1);
+    s = { ...s, windowExpiresAt: '2026-01-01T01:00:00.000Z' };
     const r = completeTurn(s, 'p1');
     s = r.session;
     expect(r.effect).toEqual({ type: 'completed', playerId: 'p1' });
     expect(currentPlayer(s)).toBe('p2');
+    expect(s.windowExpiresAt).toBeUndefined();
   });
 
   it('removes a player eliminated after the daily queue opened', () => {
@@ -67,6 +69,7 @@ describe('daily turn session', () => {
 
   it('a missed window auto-resolves immediately with no requeue', () => {
     let s = startDailySession(game(), 1);
+    s = { ...s, windowExpiresAt: '2026-01-01T01:00:00.000Z' };
     const r = expireWindow(s); // p1 misses their single window
     s = r.session;
     expect(r.effect).toEqual({ type: 'auto_resolved', playerId: 'p1' });
@@ -74,6 +77,7 @@ describe('daily turn session', () => {
     // p1 does NOT go to the back of the line; they leave the queue entirely.
     expect(s.queue).toEqual(['p2']);
     expect(currentPlayer(s)).toBe('p2');
+    expect(s.windowExpiresAt).toBeUndefined();
   });
 
   it('mixes completed and missed turns until the queue empties', () => {

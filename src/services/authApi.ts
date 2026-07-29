@@ -9,13 +9,20 @@
  * users to the seats they control.
  */
 
-import { randomBytes, randomUUID, scrypt as scryptCb, timingSafeEqual } from 'node:crypto';
+import {
+  createHash,
+  randomBytes,
+  randomUUID,
+  scrypt as scryptCb,
+  timingSafeEqual,
+} from 'node:crypto';
 import { promisify } from 'node:util';
 import type { GameRepository, User } from './repository.js';
 import { TurnError } from './turnApi.js';
 
 const scrypt = promisify(scryptCb);
 const KEYLEN = 64;
+export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16).toString('hex');
@@ -47,8 +54,8 @@ export async function signup(
   if (!USERNAME_RE.test(username)) {
     throw new TurnError('bad_username', 'Username must be 3–24 letters, digits, underscores, or hyphens');
   }
-  if (typeof password !== 'string' || password.length < 6) {
-    throw new TurnError('bad_password', 'Password must be at least 6 characters');
+  if (typeof password !== 'string' || password.length < 8 || password.length > 128) {
+    throw new TurnError('bad_password', 'Password must be 8–128 characters');
   }
   if (await repo.getUserByUsername(username)) {
     throw new TurnError('username_taken', 'That username is taken');
@@ -78,20 +85,40 @@ export async function login(
 }
 
 async function issueToken(repo: GameRepository, userId: string): Promise<string> {
-  const token = randomBytes(32).toString('hex');
-  await repo.createToken({ token, userId, createdAt: new Date().toISOString() });
+  const token = randomBytes(32).toString('base64url');
+  const createdAt = new Date();
+  await repo.createToken({
+    tokenHash: sessionTokenHash(token),
+    userId,
+    createdAt: createdAt.toISOString(),
+    expiresAt: new Date(createdAt.getTime() + SESSION_TTL_MS).toISOString(),
+  });
   return token;
 }
 
+export function sessionTokenHash(token: string): string {
+  return createHash('sha256').update(token, 'utf8').digest('hex');
+}
+
 /** Resolve a bearer token to its user, or null. */
-export async function resolveToken(repo: GameRepository, token: string | undefined): Promise<PublicUser | null> {
+export async function resolveToken(
+  repo: GameRepository,
+  token: string | undefined,
+  now = new Date(),
+): Promise<PublicUser | null> {
   if (!token) return null;
-  const record = await repo.getToken(token);
+  const tokenHash = sessionTokenHash(token);
+  const record = await repo.getToken(tokenHash);
   if (!record) return null;
+  const expiry = Date.parse(record.expiresAt);
+  if (!Number.isFinite(expiry) || expiry <= now.getTime()) {
+    await repo.deleteToken(tokenHash);
+    return null;
+  }
   const user = await repo.getUserById(record.userId);
   return user ? toPublic(user) : null;
 }
 
 export async function logout(repo: GameRepository, token: string | undefined): Promise<void> {
-  if (token) await repo.deleteToken(token);
+  if (token) await repo.deleteToken(sessionTokenHash(token));
 }

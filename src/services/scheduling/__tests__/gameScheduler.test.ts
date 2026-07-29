@@ -4,8 +4,10 @@ import { FakeJobQueue } from '../jobQueue.js';
 import { GameScheduler, JOB_SESSION_OPEN, JOB_PLAYER_WINDOW } from '../gameScheduler.js';
 import { createGame } from '../../../engine/setup.js';
 import { TERRITORY_IDS } from '../../../engine/map.js';
+import { currentPlayer } from '../../../engine/turnSession.js';
 import type { TurnPlanner } from '../../../engine/planner.js';
 import type { GameConfig, GameState } from '../../../engine/types.js';
+import { openDailySession } from '../../orchestrator.js';
 
 const config: GameConfig = {
   exercises: [],
@@ -108,5 +110,56 @@ describe('GameScheduler daily cycle', () => {
     // session_open fires but advance sees a finished game and schedules nothing further.
     await queue.runDue(new Date(nowMs));
     expect(queue.pending()).toHaveLength(0);
+  });
+
+  it('recovers an overdue persisted deadline without granting extra time', async () => {
+    const repo = new InMemoryGameRepository({ games: [makeGame()] });
+    await openDailySession(repo, 'g', 1);
+    const persistedDeadline = '2026-01-16T00:05:00.000Z';
+    const session = (await repo.loadSession('g', 1))!;
+    await repo.saveSession({ ...session, windowExpiresAt: persistedDeadline });
+
+    const queue = new FakeJobQueue();
+    const nowMs = Date.parse('2026-01-16T00:10:00Z');
+    const scheduler = new GameScheduler({
+      repo,
+      planner: noopPlanner,
+      queue,
+      clock: { now: () => new Date(nowMs) },
+    });
+    scheduler.register();
+
+    expect(await scheduler.recoverActiveGames()).toBe(1);
+    const recovered = queue.pending();
+    expect(recovered).toHaveLength(1);
+    expect(recovered[0]!.name).toBe(JOB_PLAYER_WINDOW);
+    expect(new Date(recovered[0]!.runAt).toISOString()).toBe(persistedDeadline);
+
+    await queue.runDue(new Date(nowMs));
+    expect(currentPlayer((await repo.loadSession('g', 1))!)).toBe('b');
+    expect((await repo.loadGame('g'))!.players.find((player) => player.id === 'a')!.status)
+      .toBe('auto_piloted');
+  });
+
+  it('treats a duplicate session-open delivery as a no-op after arming the window', async () => {
+    const repo = new InMemoryGameRepository({ games: [makeGame()] });
+    const queue = new FakeJobQueue();
+    const nowMs = Date.parse('2026-01-16T00:00:00Z');
+    const scheduler = new GameScheduler({
+      repo,
+      planner: noopPlanner,
+      queue,
+      clock: { now: () => new Date(nowMs) },
+    });
+    scheduler.register();
+
+    const payload = { gameId: 'g', dayNumber: 1 };
+    await queue.schedule(JOB_SESSION_OPEN, new Date(nowMs), payload);
+    await queue.schedule(JOB_SESSION_OPEN, new Date(nowMs), payload);
+    await queue.runDue(new Date(nowMs));
+
+    const playerWindows = queue.pending().filter((job) => job.name === JOB_PLAYER_WINDOW);
+    expect(playerWindows).toHaveLength(1);
+    expect((playerWindows[0]!.data as { playerId: string }).playerId).toBe('a');
   });
 });

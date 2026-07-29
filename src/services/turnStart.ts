@@ -37,7 +37,15 @@ export async function ensureTurnStarted(
   if (!player || player.status === 'eliminated' || player.status === 'forfeited') {
     return { started: false, bonus: null };
   }
-  if (await repo.loadTurnState(gameId, dayNumber, playerId)) return { started: false, bonus: null };
+  const existingTurnState = await repo.loadTurnState(gameId, dayNumber, playerId);
+  if (existingTurnState) {
+    // Backfill games whose current turn began before briefings were introduced.
+    if (existingTurnState.briefingEventCount === undefined) {
+      existingTurnState.briefingEventCount = game.events?.length ?? 0;
+      await repo.saveTurnState(existingTurnState);
+    }
+    return { started: false, bonus: null };
+  }
 
   const bonus = standardReinforcements(game, playerId);
   const eliminationReward = player.pendingEliminationReward ?? 0;
@@ -63,6 +71,14 @@ export async function ensureTurnStarted(
     startExerciseTroops: player.pendingReinforcements,
     startEliminationTroops: eliminationReward,
     startContinents: bonus.continents.map((c) => c.label),
+    briefingEventCount: game.events?.length ?? 0,
+    reinforcementTroopsPlaced: 0,
+    reinforcementPlacementsMade: 0,
+    attackerLosses: 0,
+    defenderLosses: 0,
+    territoriesCaptured: [],
+    cardsTraded: 0,
+    fortifiedTroops: 0,
   };
   await repo.saveTurnState(turnState);
   return { started: true, bonus };

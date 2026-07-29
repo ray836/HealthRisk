@@ -11,8 +11,11 @@
 export interface JobQueue {
   /** Register a handler for a job name. Call before scheduling/starting. */
   work(name: string, handler: (data: unknown) => Promise<void>): void;
-  /** Schedule `data` to run under `name` at `runAt`. Returns a job id. */
-  schedule(name: string, runAt: Date, data: unknown): Promise<string>;
+  /**
+   * Schedule `data` to run under `name` at `runAt`. `uniqueKey` makes repeated
+   * recovery/advance calls reuse one pending logical job.
+   */
+  schedule(name: string, runAt: Date, data: unknown, uniqueKey?: string): Promise<string>;
   /** Best-effort cancel of a scheduled job. Missing/already-run ids are a no-op. */
   cancel(id: string): Promise<void>;
 }
@@ -27,6 +30,8 @@ export interface JobQueue {
 export class InProcessJobQueue implements JobQueue {
   private handlers = new Map<string, (data: unknown) => Promise<void>>();
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
+  private uniqueJobs = new Map<string, string>();
+  private uniqueKeyById = new Map<string, string>();
   private seq = 0;
 
   constructor(private now: () => number = () => Date.now()) {}
@@ -35,16 +40,25 @@ export class InProcessJobQueue implements JobQueue {
     this.handlers.set(name, handler);
   }
 
-  async schedule(name: string, runAt: Date, data: unknown): Promise<string> {
+  async schedule(name: string, runAt: Date, data: unknown, uniqueKey?: string): Promise<string> {
+    const compoundKey = uniqueKey ? `${name}:${uniqueKey}` : undefined;
+    const existingId = compoundKey ? this.uniqueJobs.get(compoundKey) : undefined;
+    if (existingId) return existingId;
+
     const id = `job-${this.seq++}`;
     const delay = Math.max(0, runAt.getTime() - this.now());
     const timer = setTimeout(() => {
       this.timers.delete(id);
+      this.releaseUniqueKey(id);
       const handler = this.handlers.get(name);
       if (handler) handler(data).catch((err) => console.error(`job ${name} failed:`, err));
     }, delay);
     if (typeof timer.unref === 'function') timer.unref();
     this.timers.set(id, timer);
+    if (compoundKey) {
+      this.uniqueJobs.set(compoundKey, id);
+      this.uniqueKeyById.set(id, compoundKey);
+    }
     return id;
   }
 
@@ -53,7 +67,15 @@ export class InProcessJobQueue implements JobQueue {
     if (timer) {
       clearTimeout(timer);
       this.timers.delete(id);
+      this.releaseUniqueKey(id);
     }
+  }
+
+  private releaseUniqueKey(id: string): void {
+    const compoundKey = this.uniqueKeyById.get(id);
+    if (!compoundKey) return;
+    this.uniqueKeyById.delete(id);
+    if (this.uniqueJobs.get(compoundKey) === id) this.uniqueJobs.delete(compoundKey);
   }
 }
 
@@ -62,6 +84,7 @@ interface FakeJob {
   name: string;
   runAt: number;
   data: unknown;
+  uniqueKey?: string;
   cancelled: boolean;
 }
 
@@ -80,9 +103,14 @@ export class FakeJobQueue implements JobQueue {
     this.handlers.set(name, handler);
   }
 
-  async schedule(name: string, runAt: Date, data: unknown): Promise<string> {
+  async schedule(name: string, runAt: Date, data: unknown, uniqueKey?: string): Promise<string> {
+    const existing = uniqueKey
+      ? this.jobs.find((job) => !job.cancelled && job.name === name && job.uniqueKey === uniqueKey)
+      : undefined;
+    if (existing) return existing.id;
+
     const id = `job-${this.seq++}`;
-    this.jobs.push({ id, name, runAt: runAt.getTime(), data, cancelled: false });
+    this.jobs.push({ id, name, runAt: runAt.getTime(), data, uniqueKey, cancelled: false });
     return id;
   }
 

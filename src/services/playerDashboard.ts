@@ -10,6 +10,7 @@ import { ownedContinents } from '../engine/bonus.js';
 import { CARD_TRADE_REINFORCEMENTS, CARD_TRADE_SIZE } from '../engine/cards.js';
 import type { HealthCategory, HealthTrackingType, TerritoryCard } from '../engine/types.js';
 import type { GameRepository, TurnState } from './repository.js';
+import { buildDailyBriefing, type DailyBriefing } from './dailyBriefing.js';
 
 export interface ExerciseProgress {
   key: string;
@@ -31,6 +32,8 @@ export interface PlayerDashboard {
   availableReinforcements: number;
   turnStart: {
     exerciseTroops: number;
+    /** Live total earned from health goals today, including progress logged after turn start. */
+    healthTroopsToday: number;
     territoryAndContinentTroops: number;
     eliminationTroops: number;
     total: number;
@@ -41,6 +44,23 @@ export interface PlayerDashboard {
     tradeReward: number;
     canTrade: boolean;
   };
+  /** Frozen at turn start; null while this player has no turn snapshot today. */
+  briefing: DailyBriefing | null;
+  turnSummary: {
+    reinforcementsPlaced: number;
+    placementsMade: number;
+    attacksMade: number;
+    attackerLosses: number;
+    defenderLosses: number;
+    territoriesCaptured: string[];
+    cardsTraded: number;
+    cardPending: boolean;
+    fortification: {
+      fromId: string;
+      toId: string;
+      count: number;
+    } | null;
+  } | null;
   exercise: {
     totalTroops: number;
     dailyCap: number;
@@ -82,6 +102,7 @@ export async function buildPlayerDashboard(
     turnStart: turnState
       ? {
           exerciseTroops: startExerciseTroops,
+          healthTroopsToday: exercise.total,
           territoryAndContinentTroops: startBonus,
           eliminationTroops: startEliminationTroops,
           total: startExerciseTroops + startBonus + startEliminationTroops,
@@ -93,6 +114,31 @@ export async function buildPlayerDashboard(
       tradeReward: CARD_TRADE_REINFORCEMENTS,
       canTrade: turnState?.phase === 'reinforce' && (player.cards?.length ?? 0) >= CARD_TRADE_SIZE,
     },
+    briefing: turnState
+      ? buildDailyBriefing(game, playerId, turnState.briefingEventCount ?? game.events?.length ?? 0)
+      : null,
+    turnSummary: turnState
+      ? {
+          reinforcementsPlaced: turnState.reinforcementTroopsPlaced ?? 0,
+          placementsMade: turnState.reinforcementPlacementsMade ?? 0,
+          attacksMade: turnState.attacksMade,
+          attackerLosses: turnState.attackerLosses ?? 0,
+          defenderLosses: turnState.defenderLosses ?? 0,
+          territoriesCaptured: turnState.territoriesCaptured ?? [],
+          cardsTraded: turnState.cardsTraded ?? 0,
+          cardPending: !!turnState.capturedTerritoryId && !turnState.conquestCardAwarded,
+          fortification:
+            turnState.fortifiedTroops &&
+            turnState.fortifiedFromId &&
+            turnState.fortifiedToId
+              ? {
+                  fromId: turnState.fortifiedFromId,
+                  toId: turnState.fortifiedToId,
+                  count: turnState.fortifiedTroops,
+                }
+              : null,
+        }
+      : null,
     exercise: {
       totalTroops: exercise.total,
       dailyCap: game.config.dailyTotalTroopCap,

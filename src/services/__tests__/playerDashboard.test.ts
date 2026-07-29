@@ -59,6 +59,7 @@ describe('buildPlayerDashboard', () => {
       availableReinforcements: 12,
       turnStart: {
         exerciseTroops: 4,
+        healthTroopsToday: 4,
         territoryAndContinentTroops: 5,
         eliminationTroops: 3,
         total: 12,
@@ -67,6 +68,21 @@ describe('buildPlayerDashboard', () => {
         tradeSize: 3,
         tradeReward: 3,
         canTrade: true,
+      },
+      briefing: {
+        isFirstTurn: true,
+        hasChanges: false,
+      },
+      turnSummary: {
+        reinforcementsPlaced: 0,
+        placementsMade: 0,
+        attacksMade: 0,
+        attackerLosses: 0,
+        defenderLosses: 0,
+        territoriesCaptured: [],
+        cardsTraded: 0,
+        cardPending: false,
+        fortification: null,
       },
       exercise: {
         totalTroops: 4,
@@ -79,6 +95,36 @@ describe('buildPlayerDashboard', () => {
       expect.objectContaining({ key: 'running', unitsLogged: 3, countedUnits: 3, troopsEarned: 3 }),
       expect.objectContaining({ key: 'lifting', unitsLogged: 30, countedUnits: 30, troopsEarned: 1 }),
     ]);
+  });
+
+  it('reports health troops logged after turn start as live reinforcement income', async () => {
+    const game = createGame({
+      id: 'g',
+      config,
+      players: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }],
+      seed: 5,
+    });
+    const repo = new InMemoryGameRepository({ games: [game] });
+    await repo.saveExerciseLog('g', 0, 'a', [{ exerciseKey: 'running', units: 2 }]);
+    const turnState: TurnState = {
+      gameId: 'g',
+      dayNumber: 0,
+      playerId: 'a',
+      phase: 'reinforce',
+      attacksMade: 0,
+      startBonus: 3,
+      startExerciseTroops: 0,
+      startEliminationTroops: 0,
+      startContinents: [],
+    };
+
+    const dashboard = await buildPlayerDashboard(repo, 'g', 0, 'a', turnState);
+
+    expect(dashboard?.turnStart).toMatchObject({
+      exerciseTroops: 0,
+      healthTroopsToday: 2,
+      territoryAndContinentTroops: 3,
+    });
   });
 
   it('clips displayed counted units at the exercise cap', async () => {

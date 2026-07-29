@@ -34,6 +34,18 @@ export interface TurnState {
   startEliminationTroops?: number;
   /** Labels of continents the player controlled at turn start. */
   startContinents?: string[];
+  /** Event-log length at turn start, freezing the daily briefing for this turn. */
+  briefingEventCount?: number;
+  /** Interactive actions accumulated during this turn for refresh-safe UI feedback. */
+  reinforcementTroopsPlaced?: number;
+  reinforcementPlacementsMade?: number;
+  attackerLosses?: number;
+  defenderLosses?: number;
+  territoriesCaptured?: TerritoryId[];
+  cardsTraded?: number;
+  fortifiedTroops?: number;
+  fortifiedFromId?: TerritoryId;
+  fortifiedToId?: TerritoryId;
   /** First territory captured this turn; earns one card when the turn ends. */
   capturedTerritoryId?: TerritoryId;
   /** Recorded after the deterministic conquest-card award is applied. */
@@ -48,11 +60,12 @@ export interface User {
   createdAt: string;
 }
 
-/** A bearer session token → user. */
+/** A stored session digest → user. The raw bearer token is never persisted. */
 export interface AuthToken {
-  token: string;
+  tokenHash: string;
   userId: string;
   createdAt: string;
+  expiresAt: string;
 }
 
 /** Which user owns a given seat (player) in a game. */
@@ -64,6 +77,8 @@ export interface Member {
 
 export interface GameRepository {
   loadGame(gameId: string): Promise<GameState | null>;
+  /** All persisted games, used to restore active schedules after a restart. */
+  listGames(): Promise<GameState[]>;
   saveGame(state: GameState): Promise<void>;
   loadSession(gameId: string, dayNumber: number): Promise<DailySession | null>;
   saveSession(session: DailySession): Promise<void>;
@@ -78,12 +93,14 @@ export interface GameRepository {
   getUserByUsername(username: string): Promise<User | null>;
   getUserById(id: string): Promise<User | null>;
   createToken(token: AuthToken): Promise<void>;
-  getToken(token: string): Promise<AuthToken | null>;
-  deleteToken(token: string): Promise<void>;
+  getToken(tokenHash: string): Promise<AuthToken | null>;
+  deleteToken(tokenHash: string): Promise<void>;
   setMember(member: Member): Promise<void>;
+  deleteMember(gameId: string, playerId: string): Promise<void>;
   getMemberByUser(gameId: string, userId: string): Promise<Member | null>;
   getMemberBySeat(gameId: string, playerId: string): Promise<Member | null>;
   listMembers(gameId: string): Promise<Member[]>;
+  listMembersForUser(userId: string): Promise<Member[]>;
 }
 
 /** Deep-ish clone so callers can't mutate stored state by reference. */
@@ -116,6 +133,10 @@ export class InMemoryGameRepository implements GameRepository {
   async loadGame(gameId: string): Promise<GameState | null> {
     const g = this.games.get(gameId);
     return g ? clone(g) : null;
+  }
+
+  async listGames(): Promise<GameState[]> {
+    return [...this.games.values()].map(clone);
   }
 
   async saveGame(state: GameState): Promise<void> {
@@ -165,17 +186,20 @@ export class InMemoryGameRepository implements GameRepository {
     return u ? clone(u) : null;
   }
   async createToken(token: AuthToken): Promise<void> {
-    this.tokens.set(token.token, clone(token));
+    this.tokens.set(token.tokenHash, clone(token));
   }
-  async getToken(token: string): Promise<AuthToken | null> {
-    const t = this.tokens.get(token);
+  async getToken(tokenHash: string): Promise<AuthToken | null> {
+    const t = this.tokens.get(tokenHash);
     return t ? clone(t) : null;
   }
-  async deleteToken(token: string): Promise<void> {
-    this.tokens.delete(token);
+  async deleteToken(tokenHash: string): Promise<void> {
+    this.tokens.delete(tokenHash);
   }
   async setMember(member: Member): Promise<void> {
     this.members.set(`${member.gameId}:${member.playerId}`, clone(member));
+  }
+  async deleteMember(gameId: string, playerId: string): Promise<void> {
+    this.members.delete(`${gameId}:${playerId}`);
   }
   async getMemberByUser(gameId: string, userId: string): Promise<Member | null> {
     for (const m of this.members.values()) if (m.gameId === gameId && m.userId === userId) return clone(m);
@@ -187,5 +211,8 @@ export class InMemoryGameRepository implements GameRepository {
   }
   async listMembers(gameId: string): Promise<Member[]> {
     return [...this.members.values()].filter((m) => m.gameId === gameId).map(clone);
+  }
+  async listMembersForUser(userId: string): Promise<Member[]> {
+    return [...this.members.values()].filter((m) => m.userId === userId).map(clone);
   }
 }

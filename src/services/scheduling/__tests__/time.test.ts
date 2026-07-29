@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { tzOffsetMs, zonedInstant, nextWindowStart, windowDeadline } from '../time.js';
+import {
+  tzOffsetMs,
+  zonedInstant,
+  nextDayWindowStart,
+  nextWindowStart,
+  windowDeadline,
+} from '../time.js';
 
 const NY = 'America/New_York';
 const HOUR = 3600_000;
@@ -28,6 +34,13 @@ describe('timezone timing', () => {
     // 20:00 EST (01:00Z next day), window 19:00 already gone -> tomorrow 19:00 EST
     const from = new Date('2026-01-16T01:00:00Z'); // 20:00 EST on the 15th
     expect(nextWindowStart(NY, 19 * 60, from).toISOString()).toBe('2026-01-17T00:00:00.000Z');
+  });
+
+  it('keeps completed game days to once per local calendar day', () => {
+    const from = new Date('2026-01-15T15:00:00Z'); // 10:00 EST
+    expect(nextDayWindowStart(NY, 19 * 60, from).toISOString()).toBe(
+      '2026-01-17T00:00:00.000Z',
+    );
   });
 
   it('crosses the spring-forward day correctly (window well clear of the gap)', () => {

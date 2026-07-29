@@ -39,4 +39,18 @@ describe('InProcessJobQueue', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(fired).toBe(true);
   });
+
+  it('keeps only one pending job for the same logical key', async () => {
+    vi.useFakeTimers();
+    const q = new InProcessJobQueue();
+    const received: unknown[] = [];
+    q.work('job', async (data) => { received.push(data); });
+
+    const first = await q.schedule('job', new Date(Date.now() + 1000), { attempt: 1 }, 'same');
+    const duplicate = await q.schedule('job', new Date(Date.now() + 2000), { attempt: 2 }, 'same');
+    expect(duplicate).toBe(first);
+
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(received).toEqual([{ attempt: 1 }]);
+  });
 });

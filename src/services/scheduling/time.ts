@@ -73,6 +73,16 @@ export function nextWindowStart(tz: string, minuteOfDay: number, from: Date): Da
   return zonedInstant(tz, n.year, n.month, n.day, minuteOfDay);
 }
 
+/** The configured wall-clock on the following local calendar day. */
+export function nextDayWindowStart(tz: string, minuteOfDay: number, from: Date): Date {
+  const { year, month, day } = localYMD(tz, from);
+  const nextAnchor = new Date(
+    zonedInstant(tz, year, month, day, 12 * 60).getTime() + 24 * 60 * 60 * 1000,
+  );
+  const next = localYMD(tz, nextAnchor);
+  return zonedInstant(tz, next.year, next.month, next.day, minuteOfDay);
+}
+
 /** The deadline for a player's window: `from` + `minutes`. */
 export function windowDeadline(from: Date, minutes: number): Date {
   return new Date(from.getTime() + minutes * 60 * 1000);

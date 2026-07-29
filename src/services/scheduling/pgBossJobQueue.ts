@@ -52,9 +52,17 @@ export class PgBossJobQueue implements JobQueue {
     this.started = true;
   }
 
-  async schedule(name: string, runAt: Date, data: unknown): Promise<string> {
+  async schedule(name: string, runAt: Date, data: unknown, uniqueKey?: string): Promise<string> {
     await this.ensureQueue(name);
-    const id = await this.boss.sendAfter(name, (data ?? {}) as object, null, runAt);
+    const id = await this.boss.sendAfter(
+      name,
+      (data ?? {}) as object,
+      uniqueKey ? { singletonKey: uniqueKey } : null,
+      runAt,
+    );
+    // A stately queue returns null when this logical job is already queued or
+    // active. Recovery can safely treat that as success.
+    if (!id && uniqueKey) return `existing:${name}:${uniqueKey}`;
     if (!id) throw new Error(`pg-boss refused job for queue ${name}`);
     return id;
   }
@@ -78,8 +86,24 @@ export class PgBossJobQueue implements JobQueue {
     this.started = false;
   }
 
-  private ensureQueue(name: string): Promise<unknown> {
-    // Idempotent: swallow "already exists" so repeated calls are safe.
-    return this.boss.createQueue(name).catch(() => undefined);
+  private async ensureQueue(name: string): Promise<void> {
+    const existing = await this.boss.getQueue(name);
+    if (existing) {
+      if (existing.policy !== 'stately') {
+        throw new Error(
+          `pg-boss queue ${name} uses ${existing.policy}; expected stately for duplicate-safe timers`,
+        );
+      }
+      return;
+    }
+
+    try {
+      await this.boss.createQueue(name, { policy: 'stately' });
+    } catch (error) {
+      // Another app instance may have created it after our lookup.
+      const raced = await this.boss.getQueue(name);
+      if (raced?.policy === 'stately') return;
+      throw error;
+    }
   }
 }

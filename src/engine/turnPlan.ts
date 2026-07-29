@@ -29,6 +29,7 @@ import {
   type ReinforcePlacement,
 } from './reinforce.js';
 import { validateFortify, applyFortify, type FortifyMove } from './fortify.js';
+import { recordAttackEvent, recordFortifiedEvent } from './gameEvents.js';
 import type { GameState, PlayerId } from './types.js';
 
 export interface TurnPlan {
@@ -125,7 +126,16 @@ export function applyTurnPlan(
       decl.fromId,
       decl.toId,
     );
+    const beforeAttack = current;
     current = applyAttackResult(current, playerId, decl, result);
+    current = recordAttackEvent(
+      beforeAttack,
+      current,
+      playerId,
+      decl,
+      result,
+      `${seedBase}:attack_event:${i}`,
+    );
     attacks.push({ declaration: decl, result });
   }
 
@@ -137,6 +147,12 @@ export function applyTurnPlan(
       rejected.push({ kind: 'fortify', reason: err.code, detail: plan.fortify });
     } else {
       current = applyFortify(current, plan.fortify);
+      current = recordFortifiedEvent(
+        current,
+        playerId,
+        plan.fortify,
+        `${seedBase}:fortify_event`,
+      );
       fortified = plan.fortify;
     }
   }

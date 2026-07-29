@@ -81,9 +81,12 @@ describe('orchestrator', () => {
     ]);
     expect(game!.players.find((p) => p.id === 'a')!.pendingEliminationReward).toBe(3);
     expect(game!.players.find((p) => p.id === 'b')!.status).toBe('eliminated');
-    expect(game!.events).toEqual([
+    expect(game!.events).toEqual(expect.arrayContaining([
       expect.objectContaining({ eliminatedByPlayerId: 'a', eliminatedPlayerId: 'b', rewardTroops: 3 }),
-    ]);
+      expect.objectContaining({ type: 'attack_resolved', playerId: 'a', toId: 'india', captured: true }),
+      expect.objectContaining({ type: 'conquest_card_earned', playerId: 'a', territoryId: 'india' }),
+      expect.objectContaining({ type: 'turn_completed', playerId: 'a', resolution: 'auto_resolved' }),
+    ]));
 
     const session = await repo.loadSession('g', 1);
     expect(session!.queue).toEqual([]); // a left and eliminated b is skipped

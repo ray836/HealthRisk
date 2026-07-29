@@ -27,6 +27,11 @@ export class DrizzleGameRepository implements GameRepository {
     return rows.length ? (rows[0].state as GameState) : null;
   }
 
+  async listGames(): Promise<GameState[]> {
+    const rows = await this.db.select().from(games);
+    return rows.map((row: { state: GameState }) => row.state);
+  }
+
   async saveGame(state: GameState): Promise<void> {
     await this.db
       .insert(games)
@@ -108,18 +113,23 @@ export class DrizzleGameRepository implements GameRepository {
   async createToken(token: AuthToken): Promise<void> {
     await this.db.insert(authTokens).values(token);
   }
-  async getToken(token: string): Promise<AuthToken | null> {
-    const rows = await this.db.select().from(authTokens).where(eq(authTokens.token, token));
+  async getToken(tokenHash: string): Promise<AuthToken | null> {
+    const rows = await this.db.select().from(authTokens).where(eq(authTokens.tokenHash, tokenHash));
     return rows.length ? (rows[0] as AuthToken) : null;
   }
-  async deleteToken(token: string): Promise<void> {
-    await this.db.delete(authTokens).where(eq(authTokens.token, token));
+  async deleteToken(tokenHash: string): Promise<void> {
+    await this.db.delete(authTokens).where(eq(authTokens.tokenHash, tokenHash));
   }
   async setMember(member: Member): Promise<void> {
     await this.db
       .insert(members)
       .values(member)
       .onConflictDoUpdate({ target: [members.gameId, members.playerId], set: { userId: member.userId } });
+  }
+  async deleteMember(gameId: string, playerId: string): Promise<void> {
+    await this.db
+      .delete(members)
+      .where(and(eq(members.gameId, gameId), eq(members.playerId, playerId)));
   }
   async getMemberByUser(gameId: string, userId: string): Promise<Member | null> {
     const rows = await this.db
@@ -137,5 +147,8 @@ export class DrizzleGameRepository implements GameRepository {
   }
   async listMembers(gameId: string): Promise<Member[]> {
     return (await this.db.select().from(members).where(eq(members.gameId, gameId))) as Member[];
+  }
+  async listMembersForUser(userId: string): Promise<Member[]> {
+    return (await this.db.select().from(members).where(eq(members.userId, userId))) as Member[];
   }
 }

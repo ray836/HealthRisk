@@ -59,9 +59,10 @@ export const users = pgTable('er_users', {
 });
 
 export const authTokens = pgTable('er_auth_tokens', {
-  token: text('token').primaryKey(),
+  tokenHash: text('token').primaryKey(),
   userId: text('user_id').notNull(),
   createdAt: text('created_at').notNull(),
+  expiresAt: text('expires_at').notNull(),
 });
 
 export const members = pgTable(
@@ -74,7 +75,7 @@ export const members = pgTable(
   (t) => ({ pk: primaryKey({ columns: [t.gameId, t.playerId] }) }),
 );
 
-/** Idempotent DDL to bootstrap the store (no migration tooling needed for the demo). */
+/** Initial snapshot-store schema, applied by db/migrations.ts as migration 1. */
 export const DDL_STATEMENTS: string[] = [
   `CREATE TABLE IF NOT EXISTS er_games (
      id text PRIMARY KEY,

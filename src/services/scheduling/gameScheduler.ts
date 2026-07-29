@@ -28,7 +28,7 @@ import {
 } from '../orchestrator.js';
 import type { GameRepository } from '../repository.js';
 import type { JobQueue } from './jobQueue.js';
-import { nextWindowStart, windowDeadline } from './time.js';
+import { nextDayWindowStart, nextWindowStart, windowDeadline } from './time.js';
 
 export const JOB_SESSION_OPEN = 'exercise-risk:session_open';
 export const JOB_PLAYER_WINDOW = 'exercise-risk:player_window';
@@ -41,6 +41,8 @@ interface PlayerWindowData {
   gameId: string;
   dayNumber: number;
   playerId: string;
+  /** Exact persisted deadline; superseded deliveries must not end a newer window. */
+  deadline?: string;
 }
 
 export interface GameSchedulerDeps {
@@ -70,7 +72,8 @@ export class GameScheduler {
     this.clock = deps.clock ?? systemClock;
     this.nextDayOpenAt =
       deps.nextDayOpenAt ??
-      ((config, now) => nextWindowStart(config.timezone, config.windowStartMinuteOfDay, now));
+      ((config, now) =>
+        nextDayWindowStart(config.timezone, config.windowStartMinuteOfDay, now));
   }
 
   /** Arm the current front player's window (public entry for the server on open). */
@@ -78,20 +81,51 @@ export class GameScheduler {
     await this.advance(gameId, dayNumber);
   }
 
+  /**
+   * Restore every active game's next timer after an app restart. Existing
+   * deadlines are preserved, including overdue deadlines that must fire now.
+   */
+  async recoverActiveGames(): Promise<number> {
+    const activeGames = (await this.repo.listGames()).filter((game) => game.status === 'active');
+    for (const game of activeGames) {
+      const session = await this.repo.loadSession(game.id, game.dayNumber);
+      if (!session) await openDailySession(this.repo, game.id, game.dayNumber);
+      await this.advance(game.id, game.dayNumber);
+    }
+    return activeGames.length;
+  }
+
   /** Register job handlers. Call once at startup, before scheduling. */
   register(): void {
     this.queue.work(JOB_SESSION_OPEN, async (data) => {
       const { gameId, dayNumber } = data as SessionOpenData;
+      const game = await this.repo.loadGame(gameId);
+      if (!game || game.status !== 'active' || dayNumber < game.dayNumber) return;
+
+      const existing = await this.repo.loadSession(gameId, dayNumber);
+      // A redelivered open job is complete once its current window is armed
+      // (or the whole day already ended). A session without a deadline means a
+      // prior process stopped between opening it and scheduling its first turn.
+      if (
+        existing &&
+        (currentPlayer(existing) === null || validDeadline(existing.windowExpiresAt))
+      ) {
+        return;
+      }
+
       await openDailySession(this.repo, gameId, dayNumber);
       await this.advance(gameId, dayNumber);
+      await this.bumpRevision(gameId);
     });
 
     this.queue.work(JOB_PLAYER_WINDOW, async (data) => {
-      const { gameId, dayNumber, playerId } = data as PlayerWindowData;
+      const { gameId, dayNumber, playerId, deadline } = data as PlayerWindowData;
       const session = await this.repo.loadSession(gameId, dayNumber);
       if (!session || currentPlayer(session) !== playerId) return; // stale timer
+      if (deadline && session.windowExpiresAt !== deadline) return; // superseded timer
       await handleWindowExpiry(this.repo, this.planner, gameId, dayNumber);
       await this.advance(gameId, dayNumber);
+      await this.bumpRevision(gameId);
     });
   }
 
@@ -104,7 +138,12 @@ export class GameScheduler {
     if (!game) throw new Error(`Unknown game ${gameId}`);
     const day = dayNumber ?? game.dayNumber;
     const at = nextWindowStart(game.config.timezone, game.config.windowStartMinuteOfDay, this.clock.now());
-    await this.queue.schedule(JOB_SESSION_OPEN, at, { gameId, dayNumber: day } satisfies SessionOpenData);
+    await this.queue.schedule(
+      JOB_SESSION_OPEN,
+      at,
+      { gameId, dayNumber: day } satisfies SessionOpenData,
+      sessionOpenKey(gameId, day),
+    );
   }
 
   /**
@@ -120,27 +159,63 @@ export class GameScheduler {
   /** Schedule the next thing: this day's next player, or next day's open. */
   private async advance(gameId: string, dayNumber: number): Promise<void> {
     const game = await this.repo.loadGame(gameId);
-    if (!game || game.status === 'finished') return; // game over; stop scheduling
+    if (!game || game.status !== 'active') return; // lobby/game over; stop scheduling
     const session = await this.repo.loadSession(gameId, dayNumber);
     if (!session) return;
 
     const now = this.clock.now();
     const player = currentPlayer(session);
     if (player) {
-      const at = windowDeadline(now, game.config.perPlayerWindowMinutes);
+      const at =
+        validDeadline(session.windowExpiresAt) ??
+        windowDeadline(now, game.config.perPlayerWindowMinutes);
+      const deadline = at.toISOString();
       // Persist the deadline so the UI can render a countdown.
-      await this.repo.saveSession({ ...session, windowExpiresAt: at.toISOString() });
-      await this.queue.schedule(JOB_PLAYER_WINDOW, at, {
-        gameId,
-        dayNumber,
-        playerId: player,
-      } satisfies PlayerWindowData);
+      if (session.windowExpiresAt !== deadline) {
+        await this.repo.saveSession({ ...session, windowExpiresAt: deadline });
+      }
+      await this.queue.schedule(
+        JOB_PLAYER_WINDOW,
+        at,
+        {
+          gameId,
+          dayNumber,
+          playerId: player,
+          deadline,
+        } satisfies PlayerWindowData,
+        playerWindowKey(gameId, dayNumber, player),
+      );
     } else {
       const at = this.nextDayOpenAt(game.config, now);
-      await this.queue.schedule(JOB_SESSION_OPEN, at, {
-        gameId,
-        dayNumber: dayNumber + 1,
-      } satisfies SessionOpenData);
+      const nextDay = dayNumber + 1;
+      await this.queue.schedule(
+        JOB_SESSION_OPEN,
+        at,
+        {
+          gameId,
+          dayNumber: nextDay,
+        } satisfies SessionOpenData,
+        sessionOpenKey(gameId, nextDay),
+      );
     }
   }
+
+  private async bumpRevision(gameId: string): Promise<void> {
+    const game = await this.repo.loadGame(gameId);
+    if (game) await this.repo.saveGame({ ...game, revision: (game.revision ?? 0) + 1 });
+  }
+}
+
+function validDeadline(value: string | undefined): Date | null {
+  if (!value) return null;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp) : null;
+}
+
+function sessionOpenKey(gameId: string, dayNumber: number): string {
+  return `${gameId}:${dayNumber}`;
+}
+
+function playerWindowKey(gameId: string, dayNumber: number, playerId: string): string {
+  return `${gameId}:${dayNumber}:${playerId}`;
 }

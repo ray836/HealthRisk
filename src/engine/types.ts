@@ -126,8 +126,72 @@ export interface PlayerEliminationEvent {
   rewardTroops: number;
 }
 
+export interface AttackResolvedEvent {
+  id: string;
+  type: 'attack_resolved';
+  dayNumber: number;
+  playerId: PlayerId;
+  previousOwnerId: PlayerId | null;
+  fromId: TerritoryId;
+  toId: TerritoryId;
+  attackerLosses: number;
+  defenderLosses: number;
+  captured: boolean;
+  continentsGained: string[];
+  continentsLost: string[];
+}
+
+export interface FortifiedEvent {
+  id: string;
+  type: 'fortified';
+  dayNumber: number;
+  playerId: PlayerId;
+  fromId: TerritoryId;
+  toId: TerritoryId;
+  count: number;
+}
+
+export interface CardsTradedEvent {
+  id: string;
+  type: 'cards_traded';
+  dayNumber: number;
+  playerId: PlayerId;
+  troopsAwarded: number;
+}
+
+export interface ConquestCardEarnedEvent {
+  id: string;
+  type: 'conquest_card_earned';
+  dayNumber: number;
+  playerId: PlayerId;
+  territoryId: TerritoryId;
+}
+
+export interface TurnCompletedEvent {
+  id: string;
+  type: 'turn_completed';
+  dayNumber: number;
+  playerId: PlayerId;
+  resolution: 'completed' | 'auto_resolved';
+}
+
+export type GameEvent =
+  | AttackResolvedEvent
+  | FortifiedEvent
+  | CardsTradedEvent
+  | ConquestCardEarnedEvent
+  | TurnCompletedEvent
+  | PlayerEliminationEvent;
+
 export interface GameState {
   id: string;
+  /**
+   * Monotonic browser-visible version. Mutating requests include the revision
+   * they were rendered from so a second tab cannot silently replay old moves.
+   */
+  revision?: number;
+  /** Practice games are private hot-seat sandboxes and do not occupy a multiplayer slot. */
+  practice?: boolean;
   config: GameConfig;
   players: Player[];
   territories: Territory[];
@@ -135,11 +199,11 @@ export interface GameState {
   turnOrder: PlayerId[];
   /** Increments each daily session; day 0 is the first turn window. */
   dayNumber: number;
-  status: 'setup' | 'active' | 'finished';
+  status: 'setup' | 'active' | 'finished' | 'cancelled';
   winnerId?: PlayerId;
   healthRulesVersion?: number;
   pendingHealthRuleProposal?: HealthRuleProposal;
   healthRuleHistory?: HealthRuleHistoryEntry[];
   /** Persistent public events so every browser sees important game moments. */
-  events?: PlayerEliminationEvent[];
+  events?: GameEvent[];
 }
