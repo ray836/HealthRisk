@@ -105,4 +105,27 @@ describe('health rule configuration', () => {
       effectiveDay: 3,
     });
   });
+
+  it('applies creator edits immediately while the game is still in the lobby', async () => {
+    const setupGame: GameState = {
+      ...game,
+      status: 'setup',
+      dayNumber: 0,
+    };
+    const repo = new InMemoryGameRepository({ games: [setupGame] });
+
+    await proposeHealthRules(repo, game.id, 'p1', proposedRules);
+
+    const saved = (await repo.loadGame(game.id))!;
+    expect(saved.config.exercises[0]).toMatchObject({
+      key: 'vegetables',
+      label: 'Vegetable goal',
+      trackingType: 'checkbox',
+      dailyUnitCap: 1,
+    });
+    expect(saved.config.categoryTroopCaps).toEqual({ nutrition: 2 });
+    expect(saved.config.dailyTotalTroopCap).toBe(6);
+    expect(saved.healthRulesVersion).toBe(2);
+    expect(saved.pendingHealthRuleProposal).toBeUndefined();
+  });
 });

@@ -9,9 +9,22 @@ interface GameView {
   id: string;
   revision: number;
   status: string;
+  isCreator: boolean;
   currentPlayerId: string | null;
   mySeats: string[];
   nextSessionOpensAt: string | null;
+  exercises: Array<{
+    key: string;
+    label: string;
+    category: string;
+    trackingType: string;
+    unitLabel: string;
+    troopsPerUnit: number;
+    dailyUnitCap: number | null;
+  }>;
+  categoryTroopCaps: Record<string, number>;
+  dailyTotalTroopCap: number;
+  pendingHealthRuleProposal?: unknown;
   healthLogging: {
     allowed: boolean;
     playerId: string | null;
@@ -76,6 +89,79 @@ afterAll(async () => {
 });
 
 describe('multiplayer route authorization', () => {
+  it('lets only the creator update the rules everyone sees in the lobby', async () => {
+    const password = 'RouteTest@2026';
+    const creator = await request<AuthResult>('/api/auth/signup', {
+      method: 'POST',
+      body: { username: 'lobby-rules-owner', password },
+    });
+    const other = await request<AuthResult>('/api/auth/signup', {
+      method: 'POST',
+      body: { username: 'lobby-rules-guest', password },
+    });
+    const created = await request<GameView>('/api/games', {
+      method: 'POST',
+      token: creator.body.token,
+      body: { players: 2, practice: false },
+    });
+    const gameId = created.body.id;
+    await request<GameResult>(`/api/games/${gameId}/join`, {
+      method: 'POST',
+      token: other.body.token,
+      body: {},
+    });
+    const guestView = await request<GameView>(`/api/games/${gameId}`, {
+      token: other.body.token,
+    });
+    const rules = {
+      exercises: [{
+        key: 'walk',
+        label: 'Outdoor walk',
+        category: 'movement',
+        trackingType: 'duration',
+        unitLabel: 'minute',
+        troopsPerUnit: 0.1,
+        dailyUnitCap: 60,
+      }],
+      categoryTroopCaps: { movement: 6 },
+      dailyTotalTroopCap: 8,
+    };
+
+    const denied = await request<{ error: string }>(`/api/games/${gameId}/health-rules/propose`, {
+      method: 'POST',
+      token: other.body.token,
+      body: { ...rules, revision: guestView.body.revision },
+    });
+    expect(denied.response.status).toBe(400);
+    expect(denied.body.error).toBe('not_creator');
+
+    const creatorView = await request<GameView>(`/api/games/${gameId}`, {
+      token: creator.body.token,
+    });
+    const updated = await request<GameResult>(`/api/games/${gameId}/health-rules/propose`, {
+      method: 'POST',
+      token: creator.body.token,
+      body: { ...rules, revision: creatorView.body.revision },
+    });
+    expect(updated.response.status).toBe(200);
+    expect(updated.body.game.exercises).toEqual([
+      expect.objectContaining({
+        key: 'walk',
+        label: 'Outdoor walk',
+        trackingType: 'duration',
+        troopsPerUnit: 0.1,
+        dailyUnitCap: 60,
+      }),
+    ]);
+    expect(updated.body.game.pendingHealthRuleProposal).toBeNull();
+
+    const visibleToGuest = await request<GameView>(`/api/games/${gameId}`, {
+      token: other.body.token,
+    });
+    expect(visibleToGuest.body.exercises[0]?.label).toBe('Outdoor walk');
+    expect(visibleToGuest.body.dailyTotalTroopCap).toBe(8);
+  });
+
   it('lets active members log health anytime while keeping move actions turn-owned', async () => {
     const password = 'RouteTest@2026';
     const creator = await request<AuthResult>('/api/auth/signup', {

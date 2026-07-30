@@ -104,7 +104,34 @@
       .lobbyActions { display:flex; justify-content:flex-end; gap:8px; margin-top:20px; }
       .lobbyActions .primary { border-color:#5e8fc5; background:#294b70; }
       .lobbyFootnote { margin:13px 0 0; color:var(--muted); font-size:11px; }
-      @media (max-width:620px){ .lobbyCard{padding:20px}.lobbySchedule{grid-template-columns:1fr}.lobbyActions{flex-direction:column-reverse}.lobbyActions button{width:100%} }
+      .lobbyRules { margin:18px 0; padding:15px; border:1px solid #3b5069; border-radius:12px; background:#111a25; }
+      .lobbyRulesHead { display:flex; justify-content:space-between; gap:12px; align-items:start; margin-bottom:12px; }
+      .lobbyRulesHead h3 { margin:0; font-size:16px; }
+      .lobbyRulesHead p { margin:3px 0 0; color:var(--muted); font-size:11px; }
+      .lobbyRuleList { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+      .lobbyRuleItem { display:grid; grid-template-columns:31px minmax(0,1fr); gap:9px; align-items:center; padding:10px; border:1px solid #304156; border-radius:9px; background:#17212d; }
+      .lobbyRuleIcon { display:grid; place-items:center; width:31px; height:31px; border-radius:9px; background:#24344a; font-size:16px; }
+      .lobbyRuleItem b, .lobbyRuleItem small { display:block; }
+      .lobbyRuleItem small { margin-top:2px; color:var(--muted); font-size:10px; }
+      .lobbyRuleCaps { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+      .lobbyRuleCaps span { padding:4px 8px; border:1px solid #3a4e66; border-radius:999px; color:#aebccc; background:#162231; font-size:10px; }
+      .lobbyRuleEditor { display:grid; gap:9px; }
+      .lobbyRuleEditor .ruleCard { background:#151f2b; border-color:#354a62; }
+      .lobbyRuleEditor .ruleFields { grid-template-columns:repeat(3,minmax(0,1fr)); }
+      .lobbyRuleEditorActions { display:flex; justify-content:space-between; gap:8px; align-items:center; margin-top:2px; }
+      .lobbyRuleEditorActions > div { display:flex; gap:8px; }
+      .lobbyRuleSave { border-color:#5e8fc5; background:#294b70; }
+      @media (max-width:620px){
+        .lobbyCard{padding:20px}
+        .lobbySchedule{grid-template-columns:1fr}
+        .lobbyActions{flex-direction:column-reverse}
+        .lobbyActions button{width:100%}
+        .lobbyRulesHead{display:grid}
+        .lobbyRuleList{grid-template-columns:1fr}
+        .lobbyRuleEditor .ruleFields{grid-template-columns:1fr 1fr}
+        .lobbyRuleEditorActions{align-items:stretch;flex-direction:column}
+        .lobbyRuleEditorActions > div{display:grid;grid-template-columns:1fr 1fr}
+      }
       .noGameShell { min-height:545px; display:grid; place-items:center; padding:28px; border:1px solid #263545; border-radius:9px; background:
         radial-gradient(circle at 50% 22%,rgba(65,112,166,.24),transparent 38%),
         linear-gradient(150deg,#101822,#0d131b); }
@@ -664,6 +691,10 @@
       localStorage.removeItem('exriskToken');
       let currentUser = null;
       let activeMultiplayerGameId = null;
+      let lobbyRuleEditing = false;
+      let lobbyRuleDraft = null;
+      let lobbyRuleDraftGameId = null;
+      let lobbyRuleDraftRevision = null;
       const apiBaseUrl =
         document.querySelector('meta[name="healthrisk-api-base-url"]')?.content ||
         globalThis.HEALTHRISK_API_BASE_URL ||
@@ -1480,6 +1511,219 @@
         })[timezone] || timezone;
       }
 
+      function lobbyRulesFromGame() {
+        return {
+          exercises: game.exercises.map((rule) => ({
+            ...rule,
+            troopsPerUnit: String(rule.troopsPerUnit),
+            dailyUnitCap: rule.dailyUnitCap === null ? '' : String(rule.dailyUnitCap),
+          })),
+          categoryTroopCaps: {
+            movement: game.categoryTroopCaps?.movement === undefined ? '' : String(game.categoryTroopCaps.movement),
+            nutrition: game.categoryTroopCaps?.nutrition === undefined ? '' : String(game.categoryTroopCaps.nutrition),
+            recovery: game.categoryTroopCaps?.recovery === undefined ? '' : String(game.categoryTroopCaps.recovery),
+          },
+          dailyTotalTroopCap: String(game.dailyTotalTroopCap),
+        };
+      }
+
+      function ensureLobbyRuleDraft() {
+        if (
+          lobbyRuleDraftGameId !== game.id ||
+          !lobbyRuleDraft ||
+          (!lobbyRuleEditing && lobbyRuleDraftRevision !== game.revision)
+        ) {
+          lobbyRuleDraft = lobbyRulesFromGame();
+          lobbyRuleDraftGameId = game.id;
+          lobbyRuleDraftRevision = game.revision;
+        }
+      }
+
+      function lobbyRulesRequest() {
+        const categoryTroopCaps = {};
+        for (const category of ['movement', 'nutrition', 'recovery']) {
+          const raw = lobbyRuleDraft.categoryTroopCaps[category];
+          if (raw !== '') categoryTroopCaps[category] = Number(raw);
+        }
+        return {
+          exercises: lobbyRuleDraft.exercises.map((rule) => ({
+            key: rule.label,
+            label: rule.label,
+            category: rule.category,
+            trackingType: rule.trackingType,
+            unitLabel: rule.trackingType === 'checkbox' ? 'completion' : rule.unitLabel,
+            troopsPerUnit: Number(rule.troopsPerUnit),
+            dailyUnitCap:
+              rule.trackingType === 'checkbox'
+                ? 1
+                : rule.dailyUnitCap === ''
+                  ? null
+                  : Number(rule.dailyUnitCap),
+          })),
+          categoryTroopCaps,
+          dailyTotalTroopCap: Number(lobbyRuleDraft.dailyTotalTroopCap),
+        };
+      }
+
+      function lobbyRuleCriteria(rule) {
+        const rate = Number(rule.troopsPerUnit);
+        const troopWord = rate === 1 ? 'troop' : 'troops';
+        if (rule.trackingType === 'checkbox') {
+          return `${rate} ${troopWord} when completed · once per day`;
+        }
+        const unit = rule.unitLabel || 'unit';
+        const unitPlural = Number(rule.dailyUnitCap) === 1 ? unit : `${unit}s`;
+        const limit = rule.dailyUnitCap === null
+          ? 'no individual daily limit'
+          : `up to ${rule.dailyUnitCap} ${unitPlural} per day`;
+        return `${rate} ${troopWord} per ${unit} · ${limit}`;
+      }
+
+      function lobbyRuleEditorHtml() {
+        ensureLobbyRuleDraft();
+        const cards = lobbyRuleDraft.exercises.map((rule, index) => {
+          const checkbox = rule.trackingType === 'checkbox';
+          return `<div class="ruleCard" data-lobby-rule-index="${index}">
+            <div class="ruleCardTop">
+              <input data-lobby-rule-field="label" value="${esc(rule.label)}" aria-label="Goal ${index + 1} name" />
+              <button class="ruleRemove" type="button" data-lobby-rule-remove="${index}"${lobbyRuleDraft.exercises.length === 1 ? ' disabled' : ''}>Remove</button>
+            </div>
+            <div class="ruleFields">
+              <label>Category<select data-lobby-rule-field="category">
+                <option value="movement"${rule.category === 'movement' ? ' selected' : ''}>Movement</option>
+                <option value="nutrition"${rule.category === 'nutrition' ? ' selected' : ''}>Nutrition</option>
+                <option value="recovery"${rule.category === 'recovery' ? ' selected' : ''}>Recovery</option>
+              </select></label>
+              <label>Track as<select data-lobby-rule-field="trackingType">
+                <option value="quantity"${rule.trackingType === 'quantity' ? ' selected' : ''}>Quantity</option>
+                <option value="duration"${rule.trackingType === 'duration' ? ' selected' : ''}>Duration</option>
+                <option value="checkbox"${checkbox ? ' selected' : ''}>Done / not done</option>
+              </select></label>
+              <label>Unit<input data-lobby-rule-field="unitLabel" value="${esc(rule.unitLabel)}"${checkbox ? ' disabled' : ''} /></label>
+              <label>Troops per unit<input data-lobby-rule-field="troopsPerUnit" type="number" min=".01" max="20" step=".01" value="${esc(rule.troopsPerUnit)}" /></label>
+              <label>Daily unit limit<input data-lobby-rule-field="dailyUnitCap" type="number" min="1" max="10000" step="1" value="${esc(rule.dailyUnitCap)}"${checkbox ? ' disabled' : ''} /></label>
+            </div>
+          </div>`;
+        }).join('');
+        const caps = lobbyRuleDraft.categoryTroopCaps;
+        return `<div class="lobbyRuleEditor">
+          <p class="muted">These changes apply immediately in the waiting room so every player can review them before the game starts.</p>
+          ${cards}
+          <div class="capGrid">
+            <label>Movement troop cap<input data-lobby-cap="movement" type="number" min="1" max="50" step="1" value="${esc(caps.movement)}" /></label>
+            <label>Nutrition troop cap<input data-lobby-cap="nutrition" type="number" min="1" max="50" step="1" value="${esc(caps.nutrition)}" /></label>
+            <label>Recovery troop cap<input data-lobby-cap="recovery" type="number" min="1" max="50" step="1" value="${esc(caps.recovery)}" /></label>
+            <label>Overall daily troop cap<input id="lobbyDailyCap" type="number" min="1" max="50" step="1" value="${esc(lobbyRuleDraft.dailyTotalTroopCap)}" /></label>
+          </div>
+          <div class="lobbyRuleEditorActions">
+            <button id="lobbyAddRuleBtn" type="button">+ Add another goal</button>
+            <div><button id="lobbyCancelRulesBtn" type="button">Cancel</button><button id="lobbySaveRulesBtn" class="lobbyRuleSave" type="button">Save rules</button></div>
+          </div>
+        </div>`;
+      }
+
+      function lobbyRulesHtml() {
+        if (lobbyRuleEditing && game.isCreator) {
+          return `<section class="lobbyRules">
+            <div class="lobbyRulesHead"><div><h3>Edit health rules</h3><p>Set which activities earn troops and the maximum contribution each day.</p></div></div>
+            ${lobbyRuleEditorHtml()}
+          </section>`;
+        }
+        const icons = { movement: '🏃', nutrition: '🥗', recovery: '🌙' };
+        const rules = game.exercises.map((rule) => `<div class="lobbyRuleItem">
+          <span class="lobbyRuleIcon" aria-hidden="true">${icons[rule.category] || '✨'}</span>
+          <div><b>${esc(rule.label)}</b><small>${esc(lobbyRuleCriteria(rule))} · ${esc(pretty(rule.category))}</small></div>
+        </div>`).join('');
+        const caps = ['movement', 'nutrition', 'recovery']
+          .filter((category) => game.categoryTroopCaps?.[category] !== undefined)
+          .map((category) => {
+            const cap = game.categoryTroopCaps[category];
+            return `<span>${esc(pretty(category))}: max ${cap} ${cap === 1 ? 'troop' : 'troops'}</span>`;
+          })
+          .join('');
+        return `<section class="lobbyRules">
+          <div class="lobbyRulesHead">
+            <div><h3>Health rules</h3><p>${game.isCreator ? 'Review or adjust these before starting.' : `Set by ${esc(game.players[0]?.name || 'the game creator')}.`}</p></div>
+            ${game.isCreator ? '<button id="lobbyEditRulesBtn" type="button">Edit exercises &amp; criteria</button>' : ''}
+          </div>
+          <div class="lobbyRuleList">${rules}</div>
+          <div class="lobbyRuleCaps">${caps}<span>Overall: max ${game.dailyTotalTroopCap} troops/day</span><span>Mid-game changes: ${game.healthRuleGovernance === 'vote' ? 'player vote' : 'creator decides'}</span></div>
+        </section>`;
+      }
+
+      function wireLobbyRuleEditor() {
+        const edit = $('#lobbyEditRulesBtn');
+        if (edit) edit.onclick = () => {
+          lobbyRuleEditing = true;
+          lobbyRuleDraft = lobbyRulesFromGame();
+          lobbyRuleDraftGameId = game.id;
+          lobbyRuleDraftRevision = game.revision;
+          renderLobby();
+        };
+        document.querySelectorAll('[data-lobby-rule-field]').forEach((input) => {
+          const update = () => {
+            const card = input.closest('[data-lobby-rule-index]');
+            const rule = lobbyRuleDraft.exercises[Number(card.dataset.lobbyRuleIndex)];
+            rule[input.dataset.lobbyRuleField] = input.value;
+            if (input.dataset.lobbyRuleField === 'trackingType' && input.value === 'checkbox') {
+              rule.unitLabel = 'completion';
+              rule.dailyUnitCap = '1';
+              renderLobby();
+            }
+          };
+          input.oninput = update;
+          input.onchange = update;
+        });
+        document.querySelectorAll('[data-lobby-rule-remove]').forEach((button) => {
+          button.onclick = () => {
+            if (lobbyRuleDraft.exercises.length <= 1) return;
+            lobbyRuleDraft.exercises.splice(Number(button.dataset.lobbyRuleRemove), 1);
+            renderLobby();
+          };
+        });
+        const addRule = () => {
+          lobbyRuleDraft.exercises.push({
+            key: '',
+            label: 'New health goal',
+            category: 'movement',
+            trackingType: 'quantity',
+            unitLabel: 'unit',
+            troopsPerUnit: '1',
+            dailyUnitCap: '1',
+          });
+          renderLobby();
+        };
+        const add = $('#lobbyAddRuleBtn');
+        if (add) add.onclick = addRule;
+        document.querySelectorAll('[data-lobby-cap]').forEach((input) => {
+          input.oninput = () => { lobbyRuleDraft.categoryTroopCaps[input.dataset.lobbyCap] = input.value; };
+        });
+        const dailyCap = $('#lobbyDailyCap');
+        if (dailyCap) dailyCap.oninput = () => { lobbyRuleDraft.dailyTotalTroopCap = dailyCap.value; };
+        const cancel = $('#lobbyCancelRulesBtn');
+        if (cancel) cancel.onclick = () => {
+          lobbyRuleEditing = false;
+          lobbyRuleDraft = lobbyRulesFromGame();
+          renderLobby();
+        };
+        const save = $('#lobbySaveRulesBtn');
+        if (save) save.onclick = async () => {
+          save.disabled = true;
+          try {
+            const data = await post(`/api/games/${gameId}/health-rules/propose`, lobbyRulesRequest());
+            game = data.game;
+            lobbyRuleEditing = false;
+            lobbyRuleDraft = lobbyRulesFromGame();
+            lobbyRuleDraftRevision = game.revision;
+            showToast('Health rules updated for this lobby');
+            render();
+          } catch (error) {
+            showToast(error.message);
+            save.disabled = false;
+          }
+        };
+      }
+
       function renderLobby() {
         const cancelled = game.status === 'cancelled';
         const joined = game.claimedPlayerCount ?? game.players.filter((player) => player.claimed).length;
@@ -1493,7 +1737,7 @@
           ? '<button id="lobbyNewGameBtn" class="primary" type="button">Start another game</button>'
           : `
             ${(game.mySeats || []).length ? `<button id="lobbyLeaveBtn" type="button">${game.isCreator ? 'Cancel lobby' : 'Leave lobby'}</button>` : ''}
-            ${game.isCreator ? `<button id="lobbyStartBtn" class="primary" type="button"${full ? '' : ' disabled'}>Start game</button>` : ''}
+            ${game.isCreator ? `<button id="lobbyStartBtn" class="primary" type="button"${full && !lobbyRuleEditing ? '' : ' disabled'}>Start game</button>` : ''}
           `;
         $('#board').innerHTML = `<div class="lobbyShell"><div class="lobbyCard">
           <div class="lobbyEyebrow">${cancelled ? 'Lobby closed' : 'Multiplayer waiting room'}</div>
@@ -1501,6 +1745,7 @@
           <p class="muted">${cancelled ? 'No moves were made and this lobby no longer occupies a game slot.' : game.isCreator ? 'Share the invite code, then start when every seat is filled.' : 'The creator will start the game after every player joins.'}</p>
           <div class="lobbyCode"><div><span>Invite code</span><code>${esc(game.id)}</code></div>${cancelled ? '' : '<button id="lobbyCopyBtn" type="button">Copy</button>'}</div>
           <div class="lobbySeats">${seats}</div>
+          ${cancelled ? '' : lobbyRulesHtml()}
           ${cancelled ? '' : `<div class="lobbySchedule">
             <div><span>Future game days begin</span><b>${formatClock(game.schedule.dailyStartMinuteOfDay)} ${timezoneLabel(game.schedule.timezone)}</b></div>
             <div><span>Your move window</span><b>${formatWindow(game.schedule.playerWindowMinutes)}</b></div>
@@ -1517,6 +1762,7 @@
         if (leave) leave.onclick = leaveCurrentGame;
         const again = $('#lobbyNewGameBtn');
         if (again) again.onclick = () => openGameOptions('newGameSection');
+        if (!cancelled) wireLobbyRuleEditor();
       }
 
       function terr(id) { return game.territories.find((t) => t.id === id); }

@@ -136,6 +136,25 @@ export async function proposeHealthRules(
     throw new Error('A health-rule vote is already in progress');
   }
   const rules = normalizeHealthRules(input);
+  // The lobby is the creator's final configuration screen. Apply edits
+  // immediately so everyone can review the actual rules before agreeing to
+  // start. Once play begins, the proposal/governance flow below protects a
+  // day's rules from changing partway through that day.
+  if (game.status === 'setup') {
+    const next = {
+      ...game,
+      config: {
+        ...game.config,
+        exercises: rules.exercises,
+        categoryTroopCaps: rules.categoryTroopCaps,
+        dailyTotalTroopCap: rules.dailyTotalTroopCap,
+      },
+      healthRulesVersion: (game.healthRulesVersion ?? 1) + 1,
+      pendingHealthRuleProposal: undefined,
+    };
+    await repo.saveGame(next);
+    return next;
+  }
   let proposal: HealthRuleProposal = {
     id: randomUUID(),
     proposedByPlayerId,
