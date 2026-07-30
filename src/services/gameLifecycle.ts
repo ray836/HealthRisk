@@ -7,6 +7,7 @@ import { checkWin, forfeitPlayer } from '../engine/game.js';
 import type { GameState } from '../engine/types.js';
 import type { DailySession } from '../engine/turnSession.js';
 import { pruneIneligiblePlayers } from '../engine/turnSession.js';
+import { summarizeLobbyHealthVotes } from './lobbyHealthVoting.js';
 import type { GameRepository } from './repository.js';
 import { TurnError } from './turnApi.js';
 
@@ -45,12 +46,28 @@ export async function startLobbyGame(
       `Waiting for ${game.players.length - members.length} more player(s)`,
     );
   }
+  const healthVotes = summarizeLobbyHealthVotes(game);
+  if (!healthVotes.allSubmitted) {
+    throw new TurnError(
+      'health_votes_incomplete',
+      `Waiting for ${game.players.length - healthVotes.submittedPlayerIds.length} player(s) to review the health goals`,
+    );
+  }
+  if (!healthVotes.includedExerciseKeys.length) {
+    throw new TurnError(
+      'no_health_goals_selected',
+      'At least one player must select a health goal before the game starts',
+    );
+  }
+  const includedExerciseKeys = new Set(healthVotes.includedExerciseKeys);
 
   const started: GameState = {
     ...game,
     status: 'active',
     config: {
       ...game.config,
+      exercises: game.config.exercises.filter((exercise) =>
+        includedExerciseKeys.has(exercise.key)),
       perPlayerWindowMinutes: dailyWindowMinutes(game.players.length),
     },
   };
@@ -92,8 +109,11 @@ export async function leaveGame(
     }
 
     await repo.deleteMember(gameId, member.playerId);
+    const remainingLobbyHealthVotes = { ...(game.lobbyHealthVotes ?? {}) };
+    delete remainingLobbyHealthVotes[member.playerId];
     const reset = {
       ...game,
+      lobbyHealthVotes: remainingLobbyHealthVotes,
       players: game.players.map((player) =>
         player.id === member.playerId
           ? { ...player, name: `Player ${Number(player.id.replace(/\D/g, '')) || ''}`.trim() }

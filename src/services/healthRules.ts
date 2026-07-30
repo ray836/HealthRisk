@@ -151,6 +151,7 @@ export async function proposeHealthRules(
       },
       healthRulesVersion: (game.healthRulesVersion ?? 1) + 1,
       pendingHealthRuleProposal: undefined,
+      lobbyHealthVotes: {},
     };
     await repo.saveGame(next);
     return next;

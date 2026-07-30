@@ -204,6 +204,12 @@ export interface GameState {
   healthRulesVersion?: number;
   pendingHealthRuleProposal?: HealthRuleProposal;
   healthRuleHistory?: HealthRuleHistoryEntry[];
+  /**
+   * Pre-game approval selections keyed by player seat. A present key means
+   * that player submitted, even when they selected no goals. The union of all
+   * submitted keys becomes the final exercise list when the lobby starts.
+   */
+  lobbyHealthVotes?: Record<PlayerId, string[]>;
   /** Persistent public events so every browser sees important game moments. */
   events?: GameEvent[];
 }

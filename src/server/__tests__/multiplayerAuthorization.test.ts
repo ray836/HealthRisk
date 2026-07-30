@@ -25,6 +25,16 @@ interface GameView {
   categoryTroopCaps: Record<string, number>;
   dailyTotalTroopCap: number;
   pendingHealthRuleProposal?: unknown;
+  lobbyHealthVoting: {
+    voteCounts: Record<string, number>;
+    submittedPlayerIds: string[];
+    includedExerciseKeys: string[];
+    submissionCount: number;
+    requiredSubmissions: number;
+    allSubmitted: boolean;
+    hasSubmitted: boolean;
+    mySelections: string[];
+  };
   healthLogging: {
     allowed: boolean;
     playerId: string | null;
@@ -184,9 +194,26 @@ describe('multiplayer route authorization', () => {
       token: other.body.token,
       body: {},
     });
-    const latest = await request<GameView>(`/api/games/${gameId}`, {
+    let latest = await request<GameView>(`/api/games/${gameId}`, {
       token: creator.body.token,
     });
+    const creatorVote = await request<GameResult>(`/api/games/${gameId}/lobby-health-votes`, {
+      method: 'POST',
+      token: creator.body.token,
+      body: {
+        revision: latest.body.revision,
+        exerciseKeys: latest.body.exercises.map((exercise) => exercise.key),
+      },
+    });
+    const guestVote = await request<GameResult>(`/api/games/${gameId}/lobby-health-votes`, {
+      method: 'POST',
+      token: other.body.token,
+      body: {
+        revision: creatorVote.body.game.revision,
+        exerciseKeys: creatorVote.body.game.exercises.map((exercise) => exercise.key),
+      },
+    });
+    latest = { response: guestVote.response, body: guestVote.body.game };
     const started = await request<GameResult>(`/api/games/${gameId}/start`, {
       method: 'POST',
       token: creator.body.token,

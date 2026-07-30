@@ -6,7 +6,10 @@ import { leaveGame, startLobbyGame } from '../gameLifecycle.js';
 import { InMemoryGameRepository } from '../repository.js';
 
 const config: GameConfig = {
-  exercises: [],
+  exercises: [
+    { key: 'run', label: 'Run', unitLabel: 'mile', troopsPerUnit: 1, dailyUnitCap: 5 },
+    { key: 'sleep', label: 'Sleep', unitLabel: 'completion', trackingType: 'checkbox', troopsPerUnit: 1, dailyUnitCap: 1 },
+  ],
   dailyTotalTroopCap: 8,
   windowStartMinuteOfDay: 19 * 60,
   perPlayerWindowMinutes: 20,
@@ -29,7 +32,9 @@ function lobby(id = 'lobby') {
 
 describe('multiplayer lifecycle', () => {
   it('requires a full lobby and gives every player one half-day turn window', async () => {
-    const repo = new InMemoryGameRepository({ games: [lobby()] });
+    const state = lobby();
+    state.lobbyHealthVotes = { p1: ['run'], p2: ['run'] };
+    const repo = new InMemoryGameRepository({ games: [state] });
     await repo.setMember({ gameId: 'lobby', playerId: 'p1', userId: 'creator' });
     await repo.setMember({ gameId: 'lobby', playerId: 'p2', userId: 'guest' });
 
@@ -37,6 +42,38 @@ describe('multiplayer lifecycle', () => {
 
     expect(started.status).toBe('active');
     expect(started.config.perPlayerWindowMinutes).toBe(720);
+    expect(started.config.exercises.map((exercise) => exercise.key)).toEqual(['run']);
+  });
+
+  it('waits for every player to submit and keeps the union of their selected goals', async () => {
+    const state = lobby('voting');
+    state.lobbyHealthVotes = { p1: ['run'] };
+    const repo = new InMemoryGameRepository({ games: [state] });
+    await repo.setMember({ gameId: 'voting', playerId: 'p1', userId: 'creator' });
+    await repo.setMember({ gameId: 'voting', playerId: 'p2', userId: 'guest' });
+
+    await expect(startLobbyGame(repo, 'voting', 'creator')).rejects.toMatchObject({
+      code: 'health_votes_incomplete',
+    });
+
+    await repo.saveGame({
+      ...(await repo.loadGame('voting'))!,
+      lobbyHealthVotes: { p1: ['run'], p2: ['sleep'] },
+    });
+    const started = await startLobbyGame(repo, 'voting', 'creator');
+    expect(started.config.exercises.map((exercise) => exercise.key)).toEqual(['run', 'sleep']);
+  });
+
+  it('does not start when everyone submits an empty selection', async () => {
+    const state = lobby('no-goals');
+    state.lobbyHealthVotes = { p1: [], p2: [] };
+    const repo = new InMemoryGameRepository({ games: [state] });
+    await repo.setMember({ gameId: 'no-goals', playerId: 'p1', userId: 'creator' });
+    await repo.setMember({ gameId: 'no-goals', playerId: 'p2', userId: 'guest' });
+
+    await expect(startLobbyGame(repo, 'no-goals', 'creator')).rejects.toMatchObject({
+      code: 'no_health_goals_selected',
+    });
   });
 
   it('frees a guest seat before play and lets the creator cancel the lobby', async () => {

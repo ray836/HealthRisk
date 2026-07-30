@@ -31,6 +31,10 @@ import { logExercise } from '../services/exerciseApi.js';
 import { ensureTurnStarted } from '../services/turnStart.js';
 import { buildPlayerDashboard } from '../services/playerDashboard.js';
 import { buildSharedHealthProgress } from '../services/sharedHealthProgress.js';
+import {
+  submitLobbyHealthVotes,
+  summarizeLobbyHealthVotes,
+} from '../services/lobbyHealthVoting.js';
 import { findActiveMultiplayerGame, isPracticeGame } from '../services/activeGame.js';
 import { leaveGame, startLobbyGame } from '../services/gameLifecycle.js';
 import {
@@ -163,6 +167,10 @@ async function gameView(gameId: string, viewerId?: string) {
     sharedHealthProgress.map((progress) => [progress.playerId, progress]),
   );
   const practice = await isPracticeGame(repo, game);
+  const lobbyHealthVoteSummary = summarizeLobbyHealthVotes(game);
+  const myLobbyHealthSelections = [...new Set(
+    mySeats.flatMap((playerId) => game.lobbyHealthVotes?.[playerId] ?? []),
+  )];
   const scheduledPlayerWindowMinutes =
     game.status === 'setup' && !practice
       ? Math.floor((24 * 60) / game.players.length)
@@ -227,6 +235,20 @@ async function gameView(gameId: string, viewerId?: string) {
       missedTurnPolicy: 'auto_resolve',
     },
     claimedPlayerCount: members.length,
+    lobbyHealthVoting: {
+      enabled: game.status === 'setup' && !practice,
+      voteCounts: lobbyHealthVoteSummary.voteCounts,
+      submittedPlayerIds: lobbyHealthVoteSummary.submittedPlayerIds,
+      includedExerciseKeys: lobbyHealthVoteSummary.includedExerciseKeys,
+      submissionCount: lobbyHealthVoteSummary.submittedPlayerIds.length,
+      requiredSubmissions: game.players.length,
+      allSubmitted: lobbyHealthVoteSummary.allSubmitted,
+      hasSubmitted:
+        mySeats.length > 0 &&
+        mySeats.every((playerId) =>
+          Object.prototype.hasOwnProperty.call(game.lobbyHealthVotes ?? {}, playerId)),
+      mySelections: myLobbyHealthSelections,
+    },
     players: game.players.map((p) => ({
       id: p.id,
       name: p.name,
@@ -628,6 +650,7 @@ app.post(
     game.practice = practice;
     game.status = practice ? 'active' : 'setup';
     game.healthRulesVersion = 1;
+    if (!practice) game.lobbyHealthVotes = {};
     await repo.withGameLock(id, async () => {
       await repo.saveGame(game);
 
@@ -750,14 +773,40 @@ app.post(
         );
       }
       seat = await claimOpenSeat(repo, gameId, latest.players.map((p) => p.id), user.id);
+      const lobbyHealthVotes = { ...(latest.lobbyHealthVotes ?? {}) };
+      if (!existing) delete lobbyHealthVotes[seat];
       await repo.saveGame({
         ...latest,
+        lobbyHealthVotes,
         players: latest.players.map((player) =>
           player.id === seat ? { ...player, name: user.username } : player,
         ),
       });
     }, false);
     res.json({ seat, game: await gameView(gameId, user.id) });
+  }),
+);
+
+app.post(
+  '/api/games/:id/lobby-health-votes',
+  asyncH(async (req, res) => {
+    const user = requireUser(req);
+    const id = req.params.id as string;
+    const members = await repo.listMembers(id);
+    const mySeats = members
+      .filter((member) => member.userId === user.id)
+      .map((member) => member.playerId);
+    if (!mySeats.length) throw new TurnError('no_seat', 'Join this lobby before selecting health goals');
+    if (!Array.isArray(req.body?.exerciseKeys)) {
+      throw new TurnError('bad_health_vote', 'Submit a list of selected health goals');
+    }
+    const exerciseKeys = req.body.exerciseKeys.map((value: unknown) => String(value));
+    await mutateGame(req, id, async () => {
+      for (const playerId of mySeats) {
+        await submitLobbyHealthVotes(repo, id, playerId, exerciseKeys);
+      }
+    });
+    res.json({ game: await gameView(id, user.id) });
   }),
 );
 

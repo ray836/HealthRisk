@@ -110,11 +110,26 @@
       .lobbyRulesHead p { margin:3px 0 0; color:var(--muted); font-size:11px; }
       .lobbyRuleList { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
       .lobbyRuleItem { display:grid; grid-template-columns:31px minmax(0,1fr); gap:9px; align-items:center; padding:10px; border:1px solid #304156; border-radius:9px; background:#17212d; }
+      .lobbyRuleItem.voteable { grid-template-columns:31px minmax(0,1fr) auto; transition:border-color .15s ease,background .15s ease,box-shadow .15s ease; }
+      .lobbyRuleItem.voteable.selected { border-color:#557da8; background:linear-gradient(145deg,#1b3046,#172331); box-shadow:inset 3px 0 #6ea8fe; }
+      .lobbyRuleItem.voteable.excluded { opacity:.68; border-style:dashed; }
       .lobbyRuleIcon { display:grid; place-items:center; width:31px; height:31px; border-radius:9px; background:#24344a; font-size:16px; }
       .lobbyRuleItem b, .lobbyRuleItem small { display:block; }
       .lobbyRuleItem small { margin-top:2px; color:var(--muted); font-size:10px; }
+      .lobbyVoteChoice { display:grid; justify-items:end; gap:3px; }
+      .lobbyVoteToggle { min-width:92px; padding:6px 8px; border-color:#435a75; border-radius:8px; background:#1b2939; color:#b9c7d7; font-size:10px; font-weight:750; }
+      .lobbyVoteToggle.selected { border-color:#6091c5; background:#294d70; color:#fff; }
+      .lobbyVoteChoice small { color:#7f90a4; font-size:8px; }
+      .lobbyVoteChoice small.included { color:#7ecba7; }
       .lobbyRuleCaps { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
       .lobbyRuleCaps span { padding:4px 8px; border:1px solid #3a4e66; border-radius:999px; color:#aebccc; background:#162231; font-size:10px; }
+      .lobbyVotingPanel { display:grid; grid-template-columns:38px minmax(0,1fr) auto auto; gap:10px; align-items:center; margin-top:12px; padding:11px; border:1px solid #405a77; border-radius:10px; background:linear-gradient(100deg,#1c3046,#152231); }
+      .lobbyVotingPanel > .voteIcon { display:grid; place-items:center; width:38px; height:38px; border:1px solid #54779e; border-radius:10px; background:#25425f; font-size:18px; }
+      .lobbyVotingPanel b, .lobbyVotingPanel small { display:block; }
+      .lobbyVotingPanel small { margin-top:2px; color:#96a6b8; font-size:9px; }
+      .lobbyVoteProgress { padding:4px 8px; border:1px solid #405773; border-radius:999px; color:#aebdce; background:#13202e; font-size:9px; font-weight:750; white-space:nowrap; }
+      .lobbyVoteSubmit { border-color:#5b84af; background:#284a6b; font-weight:750; }
+      .lobbyVoteSubmit.submitted { border-color:#416652; background:#1e3a2d; color:#9ed9b8; }
       .lobbyEditorTitle { display:grid; grid-template-columns:42px minmax(0,1fr); gap:11px; align-items:center; }
       .lobbyEditorTitleIcon { display:grid; place-items:center; width:42px; height:42px; border:1px solid #4b6b8e; border-radius:12px; background:linear-gradient(145deg,#294665,#1c3047); box-shadow:inset 0 1px rgba(255,255,255,.08); font-size:20px; }
       .lobbyRuleEditor { display:grid; gap:14px; }
@@ -170,6 +185,9 @@
         .lobbyActions button{width:100%}
         .lobbyRulesHead{display:grid}
         .lobbyRuleList{grid-template-columns:1fr}
+        .lobbyVotingPanel{grid-template-columns:38px minmax(0,1fr)}
+        .lobbyVoteProgress{justify-self:start}
+        .lobbyVoteSubmit{width:100%;grid-column:1 / -1}
         .lobbyRuleEditor .ruleFields{grid-template-columns:1fr 1fr}
         .lobbyCapGrid{grid-template-columns:1fr 1fr}
         .lobbyRuleEditorActions{align-items:stretch;flex-direction:column}
@@ -738,6 +756,11 @@
       let lobbyRuleDraft = null;
       let lobbyRuleDraftGameId = null;
       let lobbyRuleDraftRevision = null;
+      let lobbyVoteDraft = new Set();
+      let lobbyVoteDraftGameId = null;
+      let lobbyVoteDraftRevision = null;
+      let lobbyVoteDraftRulesVersion = null;
+      let lobbyVoteDirty = false;
       const apiBaseUrl =
         document.querySelector('meta[name="healthrisk-api-base-url"]')?.content ||
         globalThis.HEALTHRISK_API_BASE_URL ||
@@ -1582,6 +1605,21 @@
         }
       }
 
+      function ensureLobbyVoteDraft() {
+        const voting = game.lobbyHealthVoting;
+        if (
+          lobbyVoteDraftGameId !== game.id ||
+          lobbyVoteDraftRulesVersion !== game.healthRulesVersion ||
+          (!lobbyVoteDirty && lobbyVoteDraftRevision !== game.revision)
+        ) {
+          lobbyVoteDraft = new Set(voting?.mySelections ?? []);
+          lobbyVoteDraftGameId = game.id;
+          lobbyVoteDraftRevision = game.revision;
+          lobbyVoteDraftRulesVersion = game.healthRulesVersion;
+          lobbyVoteDirty = false;
+        }
+      }
+
       function lobbyRulesRequest() {
         const categoryTroopCaps = {};
         for (const category of ['movement', 'nutrition', 'recovery']) {
@@ -1698,10 +1736,33 @@
           </section>`;
         }
         const icons = { movement: '🏃', nutrition: '🥗', recovery: '🌙' };
-        const rules = game.exercises.map((rule) => `<div class="lobbyRuleItem">
-          <span class="lobbyRuleIcon" aria-hidden="true">${icons[rule.category] || '✨'}</span>
-          <div><b>${esc(rule.label)}</b><small>${esc(lobbyRuleCriteria(rule))} · ${esc(pretty(rule.category))}</small></div>
-        </div>`).join('');
+        const voting = game.lobbyHealthVoting;
+        ensureLobbyVoteDraft();
+        const localChoicesReady = voting?.allSubmitted && !lobbyVoteDirty;
+        const savedSelections = new Set(voting?.mySelections ?? []);
+        const rules = game.exercises.map((rule) => {
+          const selected = lobbyVoteDraft.has(rule.key);
+          const saved = savedSelections.has(rule.key);
+          const voteCount = Math.max(
+            0,
+            (voting?.voteCounts?.[rule.key] ?? 0) +
+              (selected && !saved ? 1 : 0) -
+              (!selected && saved ? 1 : 0),
+          );
+          const voteStatus = voteCount > 0
+            ? `${voteCount} interested · included`
+            : voting?.allSubmitted
+              ? 'No interest · excluded'
+              : 'No interest yet';
+          return `<div class="lobbyRuleItem voteable${selected ? ' selected' : ''}${voting?.allSubmitted && voteCount === 0 ? ' excluded' : ''}">
+            <span class="lobbyRuleIcon" aria-hidden="true">${icons[rule.category] || '✨'}</span>
+            <div><b>${esc(rule.label)}</b><small>${esc(lobbyRuleCriteria(rule))} · ${esc(pretty(rule.category))}</small></div>
+            <div class="lobbyVoteChoice">
+              <button class="lobbyVoteToggle${selected ? ' selected' : ''}" type="button" data-lobby-vote-key="${esc(rule.key)}">${selected ? '✓ I’d use this' : '＋ I’d use this'}</button>
+              <small class="${voteCount > 0 ? 'included' : ''}">${voteStatus}</small>
+            </div>
+          </div>`;
+        }).join('');
         const caps = ['movement', 'nutrition', 'recovery']
           .filter((category) => game.categoryTroopCaps?.[category] !== undefined)
           .map((category) => {
@@ -1716,6 +1777,12 @@
           </div>
           <div class="lobbyRuleList">${rules}</div>
           <div class="lobbyRuleCaps">${caps}<span>Overall: max ${game.dailyTotalTroopCap} troops/day</span><span>Mid-game changes: ${game.healthRuleGovernance === 'vote' ? 'player vote' : 'creator decides'}</span></div>
+          <div class="lobbyVotingPanel">
+            <span class="voteIcon" aria-hidden="true">🗳️</span>
+            <div><b>${localChoicesReady ? (voting.includedExerciseKeys.length ? 'Health choices are ready' : 'At least one goal needs interest') : lobbyVoteDirty ? 'Submit your updated choices' : 'Which goals would you use?'}</b><small>${voting?.hasSubmitted && !lobbyVoteDirty ? 'Your choices are submitted. You can still change them before the game begins.' : 'Select any goals that fit you, then submit your choices.'}</small></div>
+            <span class="lobbyVoteProgress">${voting?.submissionCount ?? 0}/${voting?.requiredSubmissions ?? game.players.length} submitted</span>
+            <button id="lobbySubmitVotesBtn" class="lobbyVoteSubmit${voting?.hasSubmitted && !lobbyVoteDirty ? ' submitted' : ''}" type="button"${voting?.hasSubmitted && !lobbyVoteDirty ? ' disabled' : ''}>${voting?.hasSubmitted ? (lobbyVoteDirty ? 'Update choices' : '✓ Choices submitted') : 'Submit my choices'}</button>
+          </div>
         </section>`;
       }
 
@@ -1727,6 +1794,35 @@
           lobbyRuleDraftGameId = game.id;
           lobbyRuleDraftRevision = game.revision;
           renderLobby();
+        };
+        document.querySelectorAll('[data-lobby-vote-key]').forEach((button) => {
+          button.onclick = () => {
+            const key = button.dataset.lobbyVoteKey;
+            if (lobbyVoteDraft.has(key)) lobbyVoteDraft.delete(key);
+            else lobbyVoteDraft.add(key);
+            lobbyVoteDirty = true;
+            renderLobby();
+          };
+        });
+        const submitVotes = $('#lobbySubmitVotesBtn');
+        if (submitVotes) submitVotes.onclick = async () => {
+          submitVotes.disabled = true;
+          try {
+            const data = await post(`/api/games/${gameId}/lobby-health-votes`, {
+              exerciseKeys: [...lobbyVoteDraft],
+            });
+            game = data.game;
+            lobbyVoteDraft = new Set(game.lobbyHealthVoting?.mySelections ?? []);
+            lobbyVoteDraftGameId = game.id;
+            lobbyVoteDraftRevision = game.revision;
+            lobbyVoteDraftRulesVersion = game.healthRulesVersion;
+            lobbyVoteDirty = false;
+            showToast('Health choices submitted');
+            render();
+          } catch (error) {
+            showToast(error.message);
+            submitVotes.disabled = false;
+          }
         };
         document.querySelectorAll('[data-lobby-rule-field]').forEach((input) => {
           const update = () => {
@@ -1788,7 +1884,12 @@
             lobbyRuleEditing = false;
             lobbyRuleDraft = lobbyRulesFromGame();
             lobbyRuleDraftRevision = game.revision;
-            showToast('Health rules updated for this lobby');
+            lobbyVoteDraft = new Set();
+            lobbyVoteDraftGameId = null;
+            lobbyVoteDraftRevision = null;
+            lobbyVoteDraftRulesVersion = null;
+            lobbyVoteDirty = false;
+            showToast('Health rules updated — everyone needs to review them again');
             render();
           } catch (error) {
             showToast(error.message);
@@ -1801,21 +1902,51 @@
         const cancelled = game.status === 'cancelled';
         const joined = game.claimedPlayerCount ?? game.players.filter((player) => player.claimed).length;
         const full = joined === game.players.length;
+        const voting = game.lobbyHealthVoting;
+        const votesReady = !voting?.enabled || (voting.allSubmitted && !lobbyVoteDirty);
+        const hasIncludedGoals = !voting?.enabled || voting.includedExerciseKeys.length > 0;
+        const readyToStart = full && votesReady && hasIncludedGoals && !lobbyRuleEditing;
         const seats = game.players.map((player, index) => `
           <div class="lobbySeat${player.claimed ? '' : ' open'}">
             <span class="lobbySeatIcon" style="${player.claimed ? `color:${player.color}` : ''}">${player.claimed ? '✓' : index + 1}</span>
-            <div><b>${player.claimed ? esc(player.name) : 'Open seat'}</b><small>${player.claimed ? (index === 0 ? 'Game creator' : 'Ready') : 'Waiting for a player'}</small></div>
+            <div><b>${player.claimed ? esc(player.name) : 'Open seat'}</b><small>${player.claimed
+              ? `${index === 0 ? 'Game creator' : 'Player'} · ${voting?.submittedPlayerIds?.includes(player.id) ? 'choices submitted' : 'reviewing health goals'}`
+              : 'Waiting for a player'}</small></div>
           </div>`).join('');
         const actions = cancelled
           ? '<button id="lobbyNewGameBtn" class="primary" type="button">Start another game</button>'
           : `
             ${(game.mySeats || []).length ? `<button id="lobbyLeaveBtn" type="button">${game.isCreator ? 'Cancel lobby' : 'Leave lobby'}</button>` : ''}
-            ${game.isCreator ? `<button id="lobbyStartBtn" class="primary" type="button"${full && !lobbyRuleEditing ? '' : ' disabled'}>Start game</button>` : ''}
+            ${game.isCreator ? `<button id="lobbyStartBtn" class="primary" type="button"${readyToStart ? '' : ' disabled'}>Start game</button>` : ''}
           `;
+        const lobbyHeading = cancelled
+          ? 'This game was cancelled'
+          : !full
+            ? `Waiting for ${game.players.length - joined} more`
+            : !votesReady
+              ? lobbyVoteDirty ? 'Submit your updated health choices' : 'Waiting for health choices'
+              : !hasIncludedGoals
+                ? 'Choose at least one health goal'
+                : 'Everyone is ready';
+        const lobbyDescription = cancelled
+          ? 'No moves were made and this lobby no longer occupies a game slot.'
+          : !full
+            ? game.isCreator
+              ? 'Share the invite code. Everyone can review the health goals while the remaining seats fill.'
+              : 'Review the health goals while the creator waits for every player to join.'
+            : !votesReady
+              ? lobbyVoteDirty
+                ? 'Your changes are not part of the lobby yet. Submit them before the game can begin.'
+                : 'Each player must submit their health choices before the game can begin.'
+              : !hasIncludedGoals
+                ? 'No goal received interest. Change your choices so the game includes at least one health goal.'
+                : game.isCreator
+                  ? 'Every player has submitted. Start whenever you are ready.'
+                  : 'Your choices are locked in. The creator can now start the game.';
         $('#board').innerHTML = `<div class="lobbyShell"><div class="lobbyCard">
           <div class="lobbyEyebrow">${cancelled ? 'Lobby closed' : 'Multiplayer waiting room'}</div>
-          <h2>${cancelled ? 'This game was cancelled' : full ? 'Everyone is ready' : `Waiting for ${game.players.length - joined} more`}</h2>
-          <p class="muted">${cancelled ? 'No moves were made and this lobby no longer occupies a game slot.' : game.isCreator ? 'Share the invite code, then start when every seat is filled.' : 'The creator will start the game after every player joins.'}</p>
+          <h2>${lobbyHeading}</h2>
+          <p class="muted">${lobbyDescription}</p>
           <div class="lobbyCode"><div><span>Invite code</span><code>${esc(game.id)}</code></div>${cancelled ? '' : '<button id="lobbyCopyBtn" type="button">Copy</button>'}</div>
           <div class="lobbySeats">${seats}</div>
           ${cancelled ? '' : lobbyRulesHtml()}

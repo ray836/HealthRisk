@@ -58,6 +58,18 @@ export interface GameScheduleView {
   missedTurnPolicy: 'auto_resolve';
 }
 
+export interface LobbyHealthVotingView {
+  enabled: boolean;
+  voteCounts: Record<string, number>;
+  submittedPlayerIds: string[];
+  includedExerciseKeys: string[];
+  submissionCount: number;
+  requiredSubmissions: number;
+  allSubmitted: boolean;
+  hasSubmitted: boolean;
+  mySelections: string[];
+}
+
 export interface GamePlayerView {
   id: string;
   name: string;
@@ -119,6 +131,7 @@ export interface GameView {
   perPlayerWindowMinutes: number;
   schedule: GameScheduleView;
   claimedPlayerCount: number;
+  lobbyHealthVoting: LobbyHealthVotingView;
   players: GamePlayerView[];
   exercises: ExerciseRuleView[];
   categoryTroopCaps: Partial<Record<HealthCategory, number>>;

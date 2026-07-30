@@ -111,6 +111,11 @@ describe('health rule configuration', () => {
       ...game,
       status: 'setup',
       dayNumber: 0,
+      lobbyHealthVotes: {
+        p1: ['run'],
+        p2: ['run'],
+        p3: [],
+      },
     };
     const repo = new InMemoryGameRepository({ games: [setupGame] });
 
@@ -127,5 +132,6 @@ describe('health rule configuration', () => {
     expect(saved.config.dailyTotalTroopCap).toBe(6);
     expect(saved.healthRulesVersion).toBe(2);
     expect(saved.pendingHealthRuleProposal).toBeUndefined();
+    expect(saved.lobbyHealthVotes).toEqual({});
   });
 });
