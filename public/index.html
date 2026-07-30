@@ -3,6 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="healthrisk-api-base-url" content="" />
     <title>Exercise Risk — demo</title>
     <style>
       :root {
@@ -638,7 +639,9 @@
     </div>
 
     <script src="/world-map-data.js"></script>
-    <script>
+    <script type="module">
+      import { ApiError, createApiClient } from '/api-client.js';
+
       const $ = (s) => document.querySelector(s);
       let game = null;
       let mode = 'reinforce';
@@ -661,6 +664,19 @@
       localStorage.removeItem('exriskToken');
       let currentUser = null;
       let activeMultiplayerGameId = null;
+      const apiBaseUrl =
+        document.querySelector('meta[name="healthrisk-api-base-url"]')?.content ||
+        globalThis.HEALTHRISK_API_BASE_URL ||
+        '';
+      const api = createApiClient({
+        baseUrl: apiBaseUrl,
+        getToken: () => token,
+        credentials: 'same-origin',
+        onStaleGame: async () => {
+          await refresh();
+          showToast('The game changed in another browser. You are viewing the latest version.');
+        },
+      });
       let ruleDraft = [
         { key:'running', label:'Running', category:'movement', trackingType:'quantity', unitLabel:'mile', troopsPerUnit:1, dailyUnitCap:5 },
         { key:'cycling', label:'Cycling', category:'movement', trackingType:'quantity', unitLabel:'mile', troopsPerUnit:.25, dailyUnitCap:40 },
@@ -669,8 +685,6 @@
         { key:'balanced-meals', label:'Balanced meals', category:'nutrition', trackingType:'checkbox', unitLabel:'completion', troopsPerUnit:1, dailyUnitCap:1 },
         { key:'sleep', label:'Sleep goal', category:'recovery', trackingType:'checkbox', unitLabel:'completion', troopsPerUnit:1, dailyUnitCap:1 },
       ];
-      const authHeaders = () => (token ? { Authorization: 'Bearer ' + token } : {});
-
       const MAP_BOUNDS = { west:-180, east:180, north:82, south:-58, padX:18, padY:14, width:980, height:545 };
       const GEO_POS = {
         alaska:[-150,64], northwest_territory:[-117,64], greenland:[-42,72], alberta:[-115,53],
@@ -1101,34 +1115,22 @@
       }
 
       async function post(path, body) {
-        const payload = { ...(body || {}) };
-        if (
+        const revision =
           game &&
           path.startsWith(`/api/games/${game.id}/`) &&
           !path.endsWith('/join')
-        ) {
-          payload.revision = game.revision;
-        }
-        const r = await fetch(path, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', ...authHeaders() },
-          credentials: 'same-origin',
-          body: JSON.stringify(payload),
-        });
-        const data = await r.json();
-        if (!r.ok) {
-          if (data.error === 'stale_game') {
-            await refresh();
-            showToast('The game changed in another browser. You are viewing the latest version.');
-          }
+            ? game.revision
+            : undefined;
+        try {
+          return await api.post(path, body, { revision });
+        } catch (error) {
           if (path.startsWith('/api/auth/')) {
             const status = $('#authStatus');
-            status.textContent = data.message || data.error || 'Authentication failed';
+            status.textContent = error.message || 'Authentication failed';
             status.className = 'error';
           }
-          throw new Error(data.message || data.error || 'request failed');
+          throw error;
         }
-        return data;
       }
 
       function updateAuthUI() {
@@ -1230,11 +1232,7 @@
       function closeUserPanel() { $('#userPanelOverlay').classList.remove('show'); }
 
       async function loadMe() {
-        const r = await fetch('/api/auth/me', {
-          headers: authHeaders(),
-          credentials: 'same-origin',
-        });
-        const d = await r.json();
+        const d = await api.me();
         currentUser = d.user;
         activeMultiplayerGameId = d.activeMultiplayerGameId ?? null;
         if (!currentUser) {
@@ -1410,18 +1408,15 @@
       async function refresh() {
         if (!gameId) return;
         try {
-          const r = await fetch('/api/games/' + gameId, { headers: authHeaders() });
-          if (!r.ok) {
-            if ((r.status === 401 || r.status === 403) && game) {
-              game = null;
-              window.location.reload();
-            }
-            return;
-          }
-          game = await r.json();
+          game = await api.getGame(gameId);
           activeMultiplayerGameId = game.activeMultiplayerGameId ?? null;
           render();
-        } catch {
+        } catch (error) {
+          if (error instanceof ApiError && error.isUnauthorized && game) {
+            game = null;
+            window.location.reload();
+            return;
+          }
           if (game) $('#statusPill').textContent = 'Reconnecting...';
         }
       }

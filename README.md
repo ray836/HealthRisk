@@ -64,3 +64,33 @@ removed.
 Migration 3 intentionally revokes sessions created by older builds because
 those tokens were stored in plaintext and never expired. Players sign in again
 once after that migration; game membership and game state are unaffected.
+
+## Shared API client
+
+The browser and future native clients share the build-free client in
+`public/api-client.js`. It provides:
+
+- a configurable API base URL;
+- cookie sessions for the web app or bearer-token sessions for native clients;
+- normalized `ApiError` values for network, authentication, and stale-game
+  failures;
+- automatic revision attachment for concurrency-safe game mutations.
+
+Serializable request and response contracts live in
+`src/client/apiTypes.ts`, with declarations for the JavaScript client in
+`public/api-client.d.ts`.
+
+The hosted API can be selected in a client with:
+
+```js
+import { createApiClient } from './api-client.js';
+
+const api = createApiClient({
+  baseUrl: 'https://health-risk-ecru.vercel.app',
+  token: nativeSessionToken,
+});
+```
+
+The current browser remains same-origin by default. Its API origin can be
+overridden with the `healthrisk-api-base-url` meta tag in `public/index.html`
+when a separate frontend host is introduced.
