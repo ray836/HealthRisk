@@ -104,6 +104,21 @@
       .lobbyActions .primary { border-color:#5e8fc5; background:#294b70; }
       .lobbyFootnote { margin:13px 0 0; color:var(--muted); font-size:11px; }
       @media (max-width:620px){ .lobbyCard{padding:20px}.lobbySchedule{grid-template-columns:1fr}.lobbyActions{flex-direction:column-reverse}.lobbyActions button{width:100%} }
+      .noGameShell { min-height:545px; display:grid; place-items:center; padding:28px; border:1px solid #263545; border-radius:9px; background:
+        radial-gradient(circle at 50% 22%,rgba(65,112,166,.24),transparent 38%),
+        linear-gradient(150deg,#101822,#0d131b); }
+      .noGameCard { width:min(570px,100%); padding:34px; border:1px solid #49617f; border-radius:18px; background:linear-gradient(145deg,#202b39,#151c26); box-shadow:0 22px 60px rgba(0,0,0,.36); text-align:center; }
+      .noGameIcon { display:grid; place-items:center; width:58px; height:58px; margin:0 auto 16px; border:1px solid #52749b; border-radius:16px; background:#223852; color:#a9ceff; font-size:26px; }
+      .noGameCard h2 { margin:6px 0 8px; font-size:29px; }
+      .noGameCopy { max-width:450px; margin:0 auto; color:var(--muted); font-size:14px; }
+      .noGameActions { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:24px; }
+      .noGameActions button { min-height:46px; font-weight:700; }
+      .noGameActions .primary { border-color:#6598cf; background:#2c5279; }
+      .noGameActions .primary:hover { background:#35618e; }
+      .noGameFoot { margin:14px 0 0; color:#7f8b9a; font-size:11px; }
+      .dashEmptyAction { display:grid; gap:9px; }
+      .dashEmptyAction button { width:100%; border-color:#4b6f98; background:#29415e; }
+      @media (max-width:620px){ .noGameShell{min-height:390px;padding:16px}.noGameCard{padding:24px 18px}.noGameActions{grid-template-columns:1fr}.noGameCard h2{font-size:24px} }
       #board svg { width:100%; height:auto; display:block; background:#0f151d; border:1px solid #263545; border-radius:9px; }
       #board svg .landBase { fill:#17212c; pointer-events:none; }
       #board svg .continentRegion { fill-opacity:.26; stroke:none; pointer-events:none; }
@@ -1106,11 +1121,71 @@
           $('#panelWhoami').textContent = currentUser.username;
         }
         renderGameAccess();
+        if (!game) renderNoGameState();
       }
 
-      function openUserPanel() {
+      function renderNoGameState() {
+        if (game) return;
+        const signedIn = !!currentUser;
+        ['#dayPill', '#turnPill', '#statusPill', '#timerPill'].forEach((selector) => {
+          $(selector).style.display = 'none';
+        });
+        $('#myDashboard').innerHTML = signedIn
+          ? `<div class="dashEmpty dashEmptyAction">
+              <span>You are signed in. Start a game or join one to establish your position.</span>
+              <button id="dashboardSetupBtn" type="button">Open game setup</button>
+            </div>`
+          : '<div class="dashEmpty">Sign in or create an account to start playing.</div>';
+        $('#players').innerHTML = '';
+        $('#playersSummary').textContent = 'No game yet';
+        $('#phaseRail').innerHTML = '';
+        $('#turnSummaryBar').innerHTML = '';
+        document.querySelectorAll('.modeBtn').forEach((button) => {
+          button.disabled = true;
+          button.classList.remove('active');
+        });
+        $('#endBtn').disabled = true;
+        $('#expireBtn').disabled = true;
+        $('#hint').textContent = signedIn
+          ? 'Choose Start a game or Join with code to continue.'
+          : 'Sign in to create or join a game.';
+        $('#activitySummary').textContent = 'No events yet';
+        $('#log').innerHTML = '<div class="activityEmpty">Game events will appear here after you start or join.</div>';
+        $('#board').innerHTML = `<div class="noGameShell"><div class="noGameCard">
+          <div class="noGameIcon" aria-hidden="true">${signedIn ? '&#9873;' : '&#9829;'}</div>
+          <div class="lobbyEyebrow">${signedIn ? 'Account ready' : 'Welcome to Exercise Risk'}</div>
+          <h2>${signedIn ? 'How would you like to play?' : 'Turn healthy habits into territory'}</h2>
+          <p class="noGameCopy">${signedIn
+            ? 'Create a new game and invite friends, start a private practice board, or enter a code from another player.'
+            : 'Create an account or sign in above. Then start your own daily strategy game or join one with a code.'}</p>
+          <div class="noGameActions">
+            ${signedIn
+              ? '<button id="emptyStartBtn" class="primary" type="button">Start a game</button><button id="emptyJoinBtn" type="button">Join with code</button>'
+              : '<button id="emptyAuthBtn" class="primary" type="button">Sign in or create account</button>'}
+          </div>
+          <p class="noGameFoot">${signedIn ? 'Practice mode lets you learn by controlling every player.' : 'Your individual health entries remain private.'}</p>
+        </div></div>`;
+
+        const dashboardSetup = $('#dashboardSetupBtn');
+        if (dashboardSetup) dashboardSetup.onclick = () => openUserPanel('newGameSection');
+        const startButton = $('#emptyStartBtn');
+        if (startButton) startButton.onclick = () => openUserPanel('newGameSection');
+        const joinButton = $('#emptyJoinBtn');
+        if (joinButton) joinButton.onclick = () => openUserPanel('joinGameSection');
+        const authButton = $('#emptyAuthBtn');
+        if (authButton) authButton.onclick = () => $('#authUser').focus();
+      }
+
+      function openUserPanel(sectionId) {
         $('#userPanel').scrollTop = 0;
         $('#userPanelOverlay').classList.add('show');
+        if (sectionId) {
+          requestAnimationFrame(() => {
+            const section = $(`#${sectionId}`);
+            section?.scrollIntoView({ block: 'start' });
+            if (sectionId === 'joinGameSection') $('#joinCode').focus();
+          });
+        }
       }
       function closeUserPanel() { $('#userPanelOverlay').classList.remove('show'); }
 
@@ -1156,6 +1231,7 @@
           status.className = 'success';
           updateAuthUI(); log('Logged in as ' + currentUser.username);
           if (gameId) await refresh();
+          if (kind === 'signup' && !game) openUserPanel('newGameSection');
         } catch (e) {
           status.textContent = e.message;
           status.className = 'error';
@@ -2079,6 +2155,9 @@
 
       function render() {
         if (!game) return;
+        ['#dayPill', '#turnPill', '#statusPill'].forEach((selector) => {
+          $(selector).style.display = '';
+        });
         syncMode();
         renderMeta();
         renderGameActivity();
