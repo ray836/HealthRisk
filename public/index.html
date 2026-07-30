@@ -115,12 +115,54 @@
       .lobbyRuleItem small { margin-top:2px; color:var(--muted); font-size:10px; }
       .lobbyRuleCaps { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
       .lobbyRuleCaps span { padding:4px 8px; border:1px solid #3a4e66; border-radius:999px; color:#aebccc; background:#162231; font-size:10px; }
-      .lobbyRuleEditor { display:grid; gap:9px; }
-      .lobbyRuleEditor .ruleCard { background:#151f2b; border-color:#354a62; }
-      .lobbyRuleEditor .ruleFields { grid-template-columns:repeat(3,minmax(0,1fr)); }
-      .lobbyRuleEditorActions { display:flex; justify-content:space-between; gap:8px; align-items:center; margin-top:2px; }
+      .lobbyEditorTitle { display:grid; grid-template-columns:42px minmax(0,1fr); gap:11px; align-items:center; }
+      .lobbyEditorTitleIcon { display:grid; place-items:center; width:42px; height:42px; border:1px solid #4b6b8e; border-radius:12px; background:linear-gradient(145deg,#294665,#1c3047); box-shadow:inset 0 1px rgba(255,255,255,.08); font-size:20px; }
+      .lobbyRuleEditor { display:grid; gap:14px; }
+      .lobbyRuleNotice { display:grid; grid-template-columns:34px minmax(0,1fr); gap:10px; align-items:center; padding:10px 12px; border:1px solid #3d5876; border-radius:10px; background:linear-gradient(100deg,rgba(48,80,116,.46),rgba(24,38,55,.72)); }
+      .lobbyRuleNotice > span { display:grid; place-items:center; width:34px; height:34px; border-radius:9px; background:#223b57; font-size:16px; }
+      .lobbyRuleNotice b, .lobbyRuleNotice small { display:block; }
+      .lobbyRuleNotice small { margin-top:2px; color:#a5b4c6; font-size:10px; }
+      .lobbyRuleCardGrid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+      .lobbyRuleEditor .ruleCard { --rule-accent:#6ea8fe; position:relative; overflow:hidden; padding:14px; border-color:color-mix(in srgb,var(--rule-accent) 38%,#354a62); background:radial-gradient(circle at 0 0,color-mix(in srgb,var(--rule-accent) 13%,transparent),transparent 42%),linear-gradient(145deg,#182534,#121c27); box-shadow:inset 0 1px rgba(255,255,255,.035),0 7px 16px rgba(0,0,0,.14); }
+      .lobbyRuleEditor .ruleCard::before { content:""; position:absolute; inset:0 auto 0 0; width:3px; background:var(--rule-accent); opacity:.8; }
+      .lobbyRuleEditor .ruleCard.category-nutrition { --rule-accent:#58c994; }
+      .lobbyRuleEditor .ruleCard.category-recovery { --rule-accent:#a88ce8; }
+      .lobbyRuleCardHeader { display:grid; grid-template-columns:40px minmax(0,1fr) auto; gap:9px; align-items:start; margin-bottom:12px; }
+      .lobbyRuleCardIcon { display:grid; place-items:center; width:40px; height:40px; border:1px solid color-mix(in srgb,var(--rule-accent) 50%,#354a62); border-radius:11px; background:color-mix(in srgb,var(--rule-accent) 17%,#182433); font-size:19px; }
+      .lobbyGoalName { display:grid; gap:4px; min-width:0; color:#8392a4; font-size:9px; font-weight:750; letter-spacing:.07em; text-transform:uppercase; }
+      .lobbyGoalName input { width:100%; min-width:0; padding:5px 8px; border-color:transparent; background:rgba(10,17,25,.58); color:#f2f6fb; font-size:14px; font-weight:800; letter-spacing:0; text-transform:none; }
+      .lobbyGoalName input:focus { border-color:var(--rule-accent); background:#0e1823; }
+      .lobbyRuleChips { display:flex; flex-wrap:wrap; gap:4px; margin-top:5px; }
+      .lobbyRuleChips span { padding:2px 6px; border:1px solid color-mix(in srgb,var(--rule-accent) 32%,#354a62); border-radius:999px; color:color-mix(in srgb,var(--rule-accent) 66%,#d5dfeb); background:rgba(13,22,32,.48); font-size:8px; font-weight:750; letter-spacing:.03em; text-transform:uppercase; }
+      .lobbyRuleRemove { display:grid; place-items:center; width:32px; height:32px; padding:0; border-color:#4c3e49; border-radius:9px; background:rgba(62,35,43,.38); color:#e98b80; font-size:14px; }
+      .lobbyRuleRemove:hover { border-color:#8e4f58; background:#4a2931; }
+      .lobbyRuleEditor .ruleFields { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+      .lobbyRuleEditor .ruleFields label { gap:5px; }
+      .lobbyFieldLabel { display:flex; align-items:center; gap:5px; color:#9eacbd; font-size:9px; font-weight:700; letter-spacing:.035em; text-transform:uppercase; }
+      .lobbyRuleEditor .ruleFields input, .lobbyRuleEditor .ruleFields select { min-height:34px; padding:6px 8px; border:1px solid #3a4d63; border-radius:7px; background:#0f1924; color:#e8edf4; }
+      .lobbyRuleEditor .ruleFields input:focus, .lobbyRuleEditor .ruleFields select:focus { outline:none; border-color:var(--rule-accent); box-shadow:0 0 0 2px color-mix(in srgb,var(--rule-accent) 18%,transparent); }
+      .lobbyRuleEditor .ruleFields input:disabled { border-color:#2d3948; background:#151c25; color:#697687; opacity:.82; }
+      .lobbyCapSection { padding:13px; border:1px solid #3a5069; border-radius:11px; background:linear-gradient(145deg,#172434,#101923); }
+      .lobbyCapHeading { display:grid; grid-template-columns:34px minmax(0,1fr); gap:9px; align-items:center; margin-bottom:11px; }
+      .lobbyCapHeading > span { display:grid; place-items:center; width:34px; height:34px; border:1px solid #536d8b; border-radius:9px; background:#22364d; font-size:16px; }
+      .lobbyCapHeading b, .lobbyCapHeading small { display:block; }
+      .lobbyCapHeading small { color:#91a0b2; font-size:9px; }
+      .lobbyCapGrid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:7px; }
+      .lobbyCapCard { display:grid; grid-template-columns:27px minmax(0,1fr); gap:7px; align-items:center; padding:8px; border:1px solid #31445a; border-radius:9px; background:#111c28; }
+      .lobbyCapIcon { display:grid; place-items:center; width:27px; height:27px; border-radius:8px; background:#22344a; font-size:13px; }
+      .lobbyCapCard span b, .lobbyCapCard span small { display:block; }
+      .lobbyCapCard span b { color:#c9d4e1; font-size:9px; }
+      .lobbyCapCard span small { color:#7f8fa2; font-size:8px; }
+      .lobbyCapCard input { grid-column:1 / -1; width:100%; min-height:32px; padding:5px 8px; border:1px solid #3c5169; border-radius:7px; background:#0d1721; color:#edf3fa; font-weight:800; }
+      .lobbyRuleEditorActions { position:sticky; bottom:10px; z-index:3; display:flex; justify-content:space-between; gap:8px; align-items:center; margin-top:1px; padding:10px; border:1px solid #455d78; border-radius:11px; background:rgba(20,31,44,.94); box-shadow:0 12px 28px rgba(0,0,0,.36); backdrop-filter:blur(10px); }
       .lobbyRuleEditorActions > div { display:flex; gap:8px; }
-      .lobbyRuleSave { border-color:#5e8fc5; background:#294b70; }
+      .lobbyAddRule { border-style:dashed; border-color:#55718f; background:#18283a; color:#b9cee5; }
+      .lobbyRuleSave { border-color:#6598cf; background:linear-gradient(145deg,#315f89,#274968); color:#fff; font-weight:800; }
+      .lobbyRuleSave:hover { background:linear-gradient(145deg,#39709f,#2d567a); }
+      @media (max-width:900px){
+        .lobbyRuleCardGrid{grid-template-columns:1fr}
+        .lobbyCapGrid{grid-template-columns:1fr 1fr}
+      }
       @media (max-width:620px){
         .lobbyCard{padding:20px}
         .lobbySchedule{grid-template-columns:1fr}
@@ -129,6 +171,7 @@
         .lobbyRulesHead{display:grid}
         .lobbyRuleList{grid-template-columns:1fr}
         .lobbyRuleEditor .ruleFields{grid-template-columns:1fr 1fr}
+        .lobbyCapGrid{grid-template-columns:1fr 1fr}
         .lobbyRuleEditorActions{align-items:stretch;flex-direction:column}
         .lobbyRuleEditorActions > div{display:grid;grid-template-columns:1fr 1fr}
       }
@@ -1583,41 +1626,66 @@
         ensureLobbyRuleDraft();
         const cards = lobbyRuleDraft.exercises.map((rule, index) => {
           const checkbox = rule.trackingType === 'checkbox';
-          return `<div class="ruleCard" data-lobby-rule-index="${index}">
-            <div class="ruleCardTop">
-              <input data-lobby-rule-field="label" value="${esc(rule.label)}" aria-label="Goal ${index + 1} name" />
-              <button class="ruleRemove" type="button" data-lobby-rule-remove="${index}"${lobbyRuleDraft.exercises.length === 1 ? ' disabled' : ''}>Remove</button>
+          const trackingLabel = checkbox
+            ? '✓ One-time'
+            : rule.trackingType === 'duration'
+              ? '⏱ Duration'
+              : '# Quantity';
+          return `<div class="ruleCard category-${esc(rule.category)}" data-lobby-rule-index="${index}">
+            <div class="lobbyRuleCardHeader">
+              <span class="lobbyRuleCardIcon" aria-hidden="true">${exerciseEmoji(rule)}</span>
+              <div>
+                <label class="lobbyGoalName">Health goal
+                  <input data-lobby-rule-field="label" value="${esc(rule.label)}" aria-label="Goal ${index + 1} name" />
+                </label>
+                <div class="lobbyRuleChips"><span>${esc(pretty(rule.category))}</span><span>${trackingLabel}</span></div>
+              </div>
+              <button class="lobbyRuleRemove" type="button" data-lobby-rule-remove="${index}" aria-label="Remove ${esc(rule.label)}" title="Remove goal"${lobbyRuleDraft.exercises.length === 1 ? ' disabled' : ''}>✕</button>
             </div>
             <div class="ruleFields">
-              <label>Category<select data-lobby-rule-field="category">
+              <label><span class="lobbyFieldLabel">🧭 Category</span><select data-lobby-rule-field="category">
                 <option value="movement"${rule.category === 'movement' ? ' selected' : ''}>Movement</option>
                 <option value="nutrition"${rule.category === 'nutrition' ? ' selected' : ''}>Nutrition</option>
                 <option value="recovery"${rule.category === 'recovery' ? ' selected' : ''}>Recovery</option>
               </select></label>
-              <label>Track as<select data-lobby-rule-field="trackingType">
+              <label><span class="lobbyFieldLabel">🎯 Track as</span><select data-lobby-rule-field="trackingType">
                 <option value="quantity"${rule.trackingType === 'quantity' ? ' selected' : ''}>Quantity</option>
                 <option value="duration"${rule.trackingType === 'duration' ? ' selected' : ''}>Duration</option>
                 <option value="checkbox"${checkbox ? ' selected' : ''}>Done / not done</option>
               </select></label>
-              <label>Unit<input data-lobby-rule-field="unitLabel" value="${esc(rule.unitLabel)}"${checkbox ? ' disabled' : ''} /></label>
-              <label>Troops per unit<input data-lobby-rule-field="troopsPerUnit" type="number" min=".01" max="20" step=".01" value="${esc(rule.troopsPerUnit)}" /></label>
-              <label>Daily unit limit<input data-lobby-rule-field="dailyUnitCap" type="number" min="1" max="10000" step="1" value="${esc(rule.dailyUnitCap)}"${checkbox ? ' disabled' : ''} /></label>
+              <label><span class="lobbyFieldLabel">📏 Unit</span><input data-lobby-rule-field="unitLabel" value="${esc(rule.unitLabel)}"${checkbox ? ' disabled' : ''} /></label>
+              <label><span class="lobbyFieldLabel">⚔️ Troops per unit</span><input data-lobby-rule-field="troopsPerUnit" type="number" min=".01" max="20" step=".01" value="${esc(rule.troopsPerUnit)}" /></label>
+              <label><span class="lobbyFieldLabel">📅 Daily unit limit</span><input data-lobby-rule-field="dailyUnitCap" type="number" min="1" max="10000" step="1" value="${esc(rule.dailyUnitCap)}"${checkbox ? ' disabled' : ''} /></label>
             </div>
           </div>`;
         }).join('');
         const caps = lobbyRuleDraft.categoryTroopCaps;
+        const capCards = [
+          ['movement', '🏃', 'Movement', 'From movement goals'],
+          ['nutrition', '🥗', 'Nutrition', 'From food goals'],
+          ['recovery', '🌙', 'Recovery', 'From recovery goals'],
+        ].map(([category, icon, label, help]) => `<label class="lobbyCapCard">
+          <span class="lobbyCapIcon" aria-hidden="true">${icon}</span>
+          <span><b>${label}</b><small>${help}</small></span>
+          <input data-lobby-cap="${category}" aria-label="${label} troop cap" type="number" min="1" max="50" step="1" value="${esc(caps[category])}" />
+        </label>`).join('');
         return `<div class="lobbyRuleEditor">
-          <p class="muted">These changes apply immediately in the waiting room so every player can review them before the game starts.</p>
-          ${cards}
-          <div class="capGrid">
-            <label>Movement troop cap<input data-lobby-cap="movement" type="number" min="1" max="50" step="1" value="${esc(caps.movement)}" /></label>
-            <label>Nutrition troop cap<input data-lobby-cap="nutrition" type="number" min="1" max="50" step="1" value="${esc(caps.nutrition)}" /></label>
-            <label>Recovery troop cap<input data-lobby-cap="recovery" type="number" min="1" max="50" step="1" value="${esc(caps.recovery)}" /></label>
-            <label>Overall daily troop cap<input id="lobbyDailyCap" type="number" min="1" max="50" step="1" value="${esc(lobbyRuleDraft.dailyTotalTroopCap)}" /></label>
-          </div>
+          <div class="lobbyRuleNotice"><span aria-hidden="true">👀</span><div><b>Visible to the whole lobby</b><small>Saved changes appear for every player immediately, before anyone starts the game.</small></div></div>
+          <div class="lobbyRuleCardGrid">${cards}</div>
+          <section class="lobbyCapSection">
+            <div class="lobbyCapHeading"><span aria-hidden="true">🛡️</span><div><b>Daily reward limits</b><small>Caps keep health progress meaningful without overpowering the map strategy.</small></div></div>
+            <div class="lobbyCapGrid">
+              ${capCards}
+              <label class="lobbyCapCard">
+                <span class="lobbyCapIcon" aria-hidden="true">🏆</span>
+                <span><b>Overall</b><small>Maximum per player</small></span>
+                <input id="lobbyDailyCap" aria-label="Overall daily troop cap" type="number" min="1" max="50" step="1" value="${esc(lobbyRuleDraft.dailyTotalTroopCap)}" />
+              </label>
+            </div>
+          </section>
           <div class="lobbyRuleEditorActions">
-            <button id="lobbyAddRuleBtn" type="button">+ Add another goal</button>
-            <div><button id="lobbyCancelRulesBtn" type="button">Cancel</button><button id="lobbySaveRulesBtn" class="lobbyRuleSave" type="button">Save rules</button></div>
+            <button id="lobbyAddRuleBtn" class="lobbyAddRule" type="button">＋ Add health goal</button>
+            <div><button id="lobbyCancelRulesBtn" type="button">Cancel</button><button id="lobbySaveRulesBtn" class="lobbyRuleSave" type="button">✓ Save rules</button></div>
           </div>
         </div>`;
       }
@@ -1625,7 +1693,7 @@
       function lobbyRulesHtml() {
         if (lobbyRuleEditing && game.isCreator) {
           return `<section class="lobbyRules">
-            <div class="lobbyRulesHead"><div><h3>Edit health rules</h3><p>Set which activities earn troops and the maximum contribution each day.</p></div></div>
+            <div class="lobbyRulesHead"><div class="lobbyEditorTitle"><span class="lobbyEditorTitleIcon" aria-hidden="true">✨</span><div><h3>Edit health rules</h3><p>Set which activities earn troops and the maximum contribution each day.</p></div></div></div>
             ${lobbyRuleEditorHtml()}
           </section>`;
         }
@@ -1668,11 +1736,16 @@
             if (input.dataset.lobbyRuleField === 'trackingType' && input.value === 'checkbox') {
               rule.unitLabel = 'completion';
               rule.dailyUnitCap = '1';
+            }
+            if (
+              input.dataset.lobbyRuleField === 'category' ||
+              input.dataset.lobbyRuleField === 'trackingType'
+            ) {
               renderLobby();
             }
           };
-          input.oninput = update;
-          input.onchange = update;
+          if (input.tagName === 'SELECT') input.onchange = update;
+          else input.oninput = update;
         });
         document.querySelectorAll('[data-lobby-rule-remove]').forEach((button) => {
           button.onclick = () => {
