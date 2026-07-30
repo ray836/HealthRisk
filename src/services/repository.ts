@@ -76,6 +76,12 @@ export interface Member {
 }
 
 export interface GameRepository {
+  /**
+   * Run one logical game operation exclusively. Every read-modify-write flow
+   * that advances a game must honor this lock so separate serverless
+   * invocations cannot resolve the same turn concurrently.
+   */
+  withGameLock<T>(gameId: string, action: () => Promise<T>): Promise<T>;
   loadGame(gameId: string): Promise<GameState | null>;
   /** All persisted games, used to restore active schedules after a restart. */
   listGames(): Promise<GameState[]>;
@@ -116,6 +122,7 @@ export class InMemoryGameRepository implements GameRepository {
   private users = new Map<string, User>();
   private tokens = new Map<string, AuthToken>();
   private members = new Map<string, Member>(); // key: gameId:playerId
+  private gameLockTails = new Map<string, Promise<void>>();
 
   constructor(seed?: { games?: GameState[]; sessions?: DailySession[] }) {
     for (const g of seed?.games ?? []) this.games.set(g.id, clone(g));
@@ -128,6 +135,23 @@ export class InMemoryGameRepository implements GameRepository {
 
   private turnKey(gameId: string, dayNumber: number, playerId: string): string {
     return `${gameId}:${dayNumber}:${playerId}`;
+  }
+
+  async withGameLock<T>(gameId: string, action: () => Promise<T>): Promise<T> {
+    const previous = this.gameLockTails.get(gameId) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => gate);
+    this.gameLockTails.set(gameId, tail);
+    await previous;
+    try {
+      return await action();
+    } finally {
+      release();
+      if (this.gameLockTails.get(gameId) === tail) this.gameLockTails.delete(gameId);
+    }
   }
 
   async loadGame(gameId: string): Promise<GameState | null> {

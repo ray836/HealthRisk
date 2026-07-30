@@ -26,6 +26,8 @@ export interface DbHandle {
   location: string;
   persistent: boolean;
   migrationVersion: number;
+  /** Cross-request logical mutex for one game id. */
+  withGameLock: <T>(gameId: string, action: () => Promise<T>) => Promise<T>;
   check: () => Promise<void>;
   close: () => Promise<void>;
 }
@@ -80,16 +82,33 @@ export async function createDb(opts: CreateDbOptions = {}): Promise<DbHandle> {
     } finally {
       await migrationClient.end().catch(() => undefined);
     }
+    // Use a dedicated direct connection for advisory locks. Keeping it
+    // separate from the query pool avoids deadlocking when the app pool is
+    // intentionally limited to one connection.
+    const lockUrl = process.env.DATABASE_URL_UNPOOLED ?? url;
+    const lockClient = postgres(lockUrl, { max: 1 });
     return {
       db: drizzlePostgres(client),
       kind: 'postgres',
       location: describeDatabaseLocation(url),
       persistent: true,
       migrationVersion,
+      withGameLock: async <T>(gameId: string, action: () => Promise<T>): Promise<T> => {
+        const result = await lockClient.begin(async (sql) => {
+          await sql.unsafe(
+            'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+            [gameId],
+          );
+          return action();
+        });
+        return result as T;
+      },
       check: async () => {
         await client.unsafe('SELECT 1');
       },
-      close: () => client.end(),
+      close: async () => {
+        await Promise.all([client.end(), lockClient.end()]);
+      },
     };
   }
 
@@ -104,15 +123,40 @@ export async function createDb(opts: CreateDbOptions = {}): Promise<DbHandle> {
       (await pg.query<T>(sql)).rows,
   };
   const migrationVersion = await applyDatabaseMigrations(adapter);
+  const localLock = createLocalGameLock();
   return {
     db: drizzlePglite(pg),
     kind: 'pglite',
     location: dir,
     persistent: dir !== 'memory://' && dir !== ':memory:',
     migrationVersion,
+    withGameLock: localLock,
     check: async () => {
       await pg.query('SELECT 1');
     },
     close: () => pg.close(),
+  };
+}
+
+function createLocalGameLock(): <T>(
+  gameId: string,
+  action: () => Promise<T>,
+) => Promise<T> {
+  const tails = new Map<string, Promise<void>>();
+  return async <T>(gameId: string, action: () => Promise<T>): Promise<T> => {
+    const previous = tails.get(gameId) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => gate);
+    tails.set(gameId, tail);
+    await previous;
+    try {
+      return await action();
+    } finally {
+      release();
+      if (tails.get(gameId) === tail) tails.delete(gameId);
+    }
   };
 }

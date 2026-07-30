@@ -162,4 +162,34 @@ describe('GameScheduler daily cycle', () => {
     expect(playerWindows).toHaveLength(1);
     expect((playerWindows[0]!.data as { playerId: string }).playerId).toBe('a');
   });
+
+  it('does not skip a day when player windows fill the full 24-hour cycle', async () => {
+    const fullDayGame = {
+      ...makeGame(),
+      config: { ...config, perPlayerWindowMinutes: 12 * 60 },
+    };
+    const repo = new InMemoryGameRepository({ games: [fullDayGame] });
+    const queue = new FakeJobQueue();
+    let nowMs = Date.parse('2026-01-16T00:00:00Z');
+    const scheduler = new GameScheduler({
+      repo,
+      planner: noopPlanner,
+      queue,
+      clock: { now: () => new Date(nowMs) },
+    });
+    scheduler.register();
+
+    await scheduler.start('g');
+    await queue.runDue(new Date(nowMs));
+    nowMs = Date.parse('2026-01-16T12:00:00Z');
+    await scheduler.onPlayerCompleted('g', 1, 'a');
+    nowMs = Date.parse('2026-01-17T00:00:00Z');
+    await scheduler.onPlayerCompleted('g', 1, 'b');
+
+    const nextOpen = queue
+      .pending()
+      .find((job) => job.name === JOB_SESSION_OPEN);
+    expect(nextOpen).toBeDefined();
+    expect(new Date(nextOpen!.runAt).toISOString()).toBe('2026-01-17T00:00:00.000Z');
+  });
 });

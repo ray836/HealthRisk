@@ -27,17 +27,32 @@ Copy `.env.example` for the available local and hosted database settings.
 
 ## Daily turn scheduling
 
-Hosted Postgres deployments use `pg-boss` on the same database for durable
-player-window and next-day jobs. Local PGlite development uses lightweight
-in-process timers. In both modes, startup scans persisted active games and
-restores their next timer without extending the saved player deadline. An
-overdue deadline runs immediately, while duplicate or superseded deliveries
-are safe no-ops.
+The daily schedule and current player deadline are persisted with the game
+session. A late invocation advances from those planned timestamps rather than
+granting extra time, so it can safely catch up multiple missed windows.
 
-The current deployment target is one application instance. The durable queue
-can coordinate workers across instances, but HTTP game mutations still use a
-process-local lock; add a Postgres transaction/advisory lock before horizontally
-scaling the web server.
+- Local PGlite development uses lightweight in-process timers and startup
+  recovery.
+- A permanent Postgres process can use `pg-boss` workers.
+- Vercel uses request-safe reconciliation because a serverless function cannot
+  own resident timers. Loading a game or submitting a game mutation first
+  catches up that game. An authenticated Vercel Cron at `04:00 UTC` reconciles
+  idle games once per day as a backstop that fits the Hobby plan.
+
+Every scheduled transition and browser mutation takes the same logical
+per-game lock. Postgres uses a transaction-scoped advisory lock, so separate
+Vercel invocations cannot resolve one player window twice. Duplicate and
+superseded deliveries remain safe no-ops.
+
+Before deploying the cron route, create a high-entropy, single-line secret and
+set it as `CRON_SECRET` in the Vercel Production environment. Vercel sends it
+to the route as `Authorization: Bearer <CRON_SECRET>`; missing or incorrect
+credentials receive `401`.
+
+The Hobby cron is only an idle-game backstop. Player requests enforce due
+deadlines immediately. If idle games must advance close to the exact deadline,
+use a more frequent Vercel cron plan or an external scheduler to call the same
+signed endpoint; no game-logic changes are required.
 
 ## Sessions
 

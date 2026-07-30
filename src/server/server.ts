@@ -22,6 +22,11 @@ import { openDailySession, handleWindowExpiry, systemClock } from '../services/o
 import { GameScheduler } from '../services/scheduling/gameScheduler.js';
 import { InProcessJobQueue, PassiveJobQueue } from '../services/scheduling/jobQueue.js';
 import { PgBossJobQueue } from '../services/scheduling/pgBossJobQueue.js';
+import {
+  isAuthorizedCronRequest,
+  reconcileAllDue,
+  reconcileGameDue,
+} from '../services/scheduling/reconcile.js';
 import { logExercise } from '../services/exerciseApi.js';
 import { ensureTurnStarted } from '../services/turnStart.js';
 import { buildPlayerDashboard } from '../services/playerDashboard.js';
@@ -97,14 +102,32 @@ async function getActor(gameId: string): Promise<{ game: GameState; day: number;
 async function gameView(gameId: string, viewerId?: string) {
   let game = await repo.loadGame(gameId);
   if (!game) return null;
-  const day0 = game.dayNumber;
+  let day0 = game.dayNumber;
   let session = await repo.loadSession(gameId, day0);
-  const playerId = session ? currentPlayer(session) : null;
+  let playerId = session ? currentPlayer(session) : null;
 
   // Starting the turn grants the current player their standard reinforcements.
-  if (game.status === 'active' && playerId) await ensureTurnStarted(repo, gameId, day0, playerId);
+  if (game.status === 'active' && playerId) {
+    await repo.withGameLock(gameId, async () => {
+      const lockedGame = await repo.loadGame(gameId);
+      if (!lockedGame || lockedGame.status !== 'active') return;
+      const lockedSession = await repo.loadSession(gameId, lockedGame.dayNumber);
+      const lockedPlayerId = lockedSession ? currentPlayer(lockedSession) : null;
+      if (lockedPlayerId) {
+        await ensureTurnStarted(
+          repo,
+          gameId,
+          lockedGame.dayNumber,
+          lockedPlayerId,
+        );
+      }
+    });
+  }
 
   game = (await repo.loadGame(gameId))!;
+  day0 = game.dayNumber;
+  session = await repo.loadSession(gameId, day0);
+  playerId = session ? currentPlayer(session) : null;
   const colorOf = new Map(game.players.map((p, i) => [p.id, PLAYER_COLORS[i % PLAYER_COLORS.length]]));
   const turnState = playerId ? await repo.loadTurnState(gameId, game.dayNumber, playerId) : null;
   const members = await repo.listMembers(gameId);
@@ -355,26 +378,15 @@ async function actingSeat(req: express.Request, gameId: string): Promise<{ day: 
   return { day: game.dayNumber, playerId: currentSeat };
 }
 
-// All browser mutations for one game run in order. Combined with the revision
-// check, this makes double-clicks and stale tabs deterministic on a single app
-// instance instead of allowing two old actions to race through together.
-const mutationTails = new Map<string, Promise<void>>();
-
 async function mutateGame<T>(
   req: express.Request,
   gameId: string,
   action: () => Promise<T>,
   requireRevision = true,
 ): Promise<T> {
-  const previous = mutationTails.get(gameId) ?? Promise.resolve();
-  let release!: () => void;
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const tail = previous.then(() => gate);
-  mutationTails.set(gameId, tail);
-  await previous;
-  try {
+  requireUser(req);
+  await reconcileGameDue({ repo, planner: throwingPlanner }, gameId);
+  return repo.withGameLock(gameId, async () => {
     const before = await repo.loadGame(gameId);
     if (!before) throw new TurnError('no_game', 'Unknown game');
     const actualRevision = before.revision ?? 0;
@@ -393,10 +405,7 @@ async function mutateGame<T>(
     const after = await repo.loadGame(gameId);
     if (after) await repo.saveGame({ ...after, revision: actualRevision + 1 });
     return result;
-  } finally {
-    release();
-    if (mutationTails.get(gameId) === tail) mutationTails.delete(gameId);
-  }
+  });
 }
 
 const asyncH =
@@ -421,6 +430,36 @@ const asyncH =
       }
     });
   };
+
+/**
+ * Vercel Cron sends CRON_SECRET as a Bearer credential. This route deliberately
+ * fails closed when the secret is not configured.
+ */
+app.get(
+  '/api/cron/reconcile',
+  asyncH(async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    if (
+      !isAuthorizedCronRequest(
+        req.header('authorization'),
+        process.env.CRON_SECRET,
+      )
+    ) {
+      res.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+    const result = await reconcileAllDue({
+      repo,
+      planner: throwingPlanner,
+      maxSteps: 20,
+    });
+    res.json({
+      ok: true,
+      ...result,
+      checkedAt: new Date().toISOString(),
+    });
+  }),
+);
 
 // --- Auth ---
 app.post(
@@ -522,15 +561,17 @@ app.post(
     game.practice = practice;
     game.status = practice ? 'active' : 'setup';
     game.healthRulesVersion = 1;
-    await repo.saveGame(game);
+    await repo.withGameLock(id, async () => {
+      await repo.saveGame(game);
 
-    if (practice) await claimAllSeats(repo, id, players.map((p) => p.id), user.id);
-    else await claimSeat(repo, id, 'p1', user.id);
+      if (practice) await claimAllSeats(repo, id, players.map((p) => p.id), user.id);
+      else await claimSeat(repo, id, 'p1', user.id);
 
-    if (practice) {
-      await openDailySession(repo, id, 0);
-      await scheduler.armNextWindow(id, 0);
-    }
+      if (practice) {
+        await openDailySession(repo, id, 0);
+        await scheduler.armNextWindow(id, 0);
+      }
+    });
     res.json(await gameView(id, user.id));
   }),
 );
@@ -662,6 +703,7 @@ app.get(
     if (!(await seatFor(repo, id, user.id))) {
       throw new TurnError('no_seat', 'Join this game before viewing it');
     }
+    await reconcileGameDue({ repo, planner: throwingPlanner }, id);
     const view = await gameView(id, user.id);
     if (!view) return res.status(404).json({ error: 'no_game' });
     res.json(view);
@@ -899,7 +941,7 @@ async function initializeRuntimeOnce(): Promise<void> {
     console.log('Store: in-memory (ephemeral)');
   } else {
     database = await createDb();
-    repo = new DrizzleGameRepository(database.db);
+    repo = new DrizzleGameRepository(database.db, database.withGameLock);
     console.log(
       `Store: ${database.kind} @ ${database.location} (schema v${database.migrationVersion}, ${database.persistent ? 'persistent' : 'ephemeral'})`,
     );
@@ -910,9 +952,9 @@ async function initializeRuntimeOnce(): Promise<void> {
   const durableQueueUrl =
     process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
 
-  // A permanent local process can own pg-boss workers. Vercel functions cannot:
-  // they use a passive queue until the request-safe reconciliation endpoint is
-  // added in the next scheduler step.
+  // A permanent local process can own pg-boss workers. Vercel functions cannot,
+  // so browser requests and the authenticated cron route reconcile persisted
+  // deadlines through a passive scheduling boundary.
   const queue =
     isVercel
       ? new PassiveJobQueue()

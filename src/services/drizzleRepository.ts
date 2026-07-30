@@ -18,8 +18,36 @@ export class DrizzleGameRepository implements GameRepository {
   // drizzle's per-driver db types diverge in their generics; the pg query
   // builder surface is identical, so we widen to `any` at the boundary only.
   private db: any;
-  constructor(db: AppDatabase) {
+  private lock: <T>(gameId: string, action: () => Promise<T>) => Promise<T>;
+  private localLockTails = new Map<string, Promise<void>>();
+
+  constructor(
+    db: AppDatabase,
+    lock?: <T>(gameId: string, action: () => Promise<T>) => Promise<T>,
+  ) {
     this.db = db;
+    this.lock = lock ?? ((gameId, action) => this.withLocalLock(gameId, action));
+  }
+
+  async withGameLock<T>(gameId: string, action: () => Promise<T>): Promise<T> {
+    return this.lock(gameId, action);
+  }
+
+  private async withLocalLock<T>(gameId: string, action: () => Promise<T>): Promise<T> {
+    const previous = this.localLockTails.get(gameId) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => gate);
+    this.localLockTails.set(gameId, tail);
+    await previous;
+    try {
+      return await action();
+    } finally {
+      release();
+      if (this.localLockTails.get(gameId) === tail) this.localLockTails.delete(gameId);
+    }
   }
 
   async loadGame(gameId: string): Promise<GameState | null> {

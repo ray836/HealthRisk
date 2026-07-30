@@ -154,6 +154,32 @@ export class FakeJobQueue implements JobQueue {
   }
 
   /**
+   * Bounded production-friendly drain. Reaching the cap is reported instead of
+   * throwing so a later request can continue the catch-up.
+   */
+  async runDueBatch(
+    now: Date,
+    maxSteps: number,
+  ): Promise<{ ran: number; hasMoreDue: boolean }> {
+    const cutoff = now.getTime();
+    let ran = 0;
+    for (let step = 0; step < maxSteps; step++) {
+      const next = this.jobs
+        .filter((job) => !job.cancelled && job.runAt <= cutoff)
+        .sort((a, b) => a.runAt - b.runAt)[0];
+      if (!next) return { ran, hasMoreDue: false };
+      next.cancelled = true;
+      const handler = this.handlers.get(next.name);
+      if (handler) await handler(next.data);
+      ran++;
+    }
+    return {
+      ran,
+      hasMoreDue: this.jobs.some((job) => !job.cancelled && job.runAt <= cutoff),
+    };
+  }
+
+  /**
    * Run all due jobs at or before `now`, oldest first, until none remain due.
    * A safety cap prevents an accidental infinite reschedule loop from hanging
    * the test.

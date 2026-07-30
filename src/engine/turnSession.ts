@@ -30,6 +30,11 @@ export interface DailySession {
   autoResolved: PlayerId[];
   /** ISO deadline for the current front player's window (set by the scheduler). */
   windowExpiresAt?: string;
+  /**
+   * Exact opening for the following game day. Persisting this anchor prevents a
+   * delayed worker from shifting the daily cadence or skipping a day.
+   */
+  nextSessionOpensAt?: string;
 }
 
 export type TurnEffect =
