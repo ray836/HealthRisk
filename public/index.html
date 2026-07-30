@@ -116,9 +116,20 @@
       .noGameActions .primary { border-color:#6598cf; background:#2c5279; }
       .noGameActions .primary:hover { background:#35618e; }
       .noGameFoot { margin:14px 0 0; color:#7f8b9a; font-size:11px; }
+      .noGameShell.setup { display:block; min-height:545px; padding:clamp(22px,4vw,46px); }
+      .noGameSetup { width:min(1040px,100%); margin:0 auto; }
+      .noGameSetupHeader { display:grid; grid-template-columns:58px minmax(0,1fr); gap:16px; align-items:center; margin-bottom:24px; }
+      .noGameSetupHeader .noGameIcon { margin:0; }
+      .noGameSetupHeader h2 { margin:2px 0 5px; font-size:29px; }
+      .noGameSetupHeader .noGameCopy { max-width:none; margin:0; }
+      .noGameSetupGrid { display:grid; grid-template-columns:minmax(420px,1.45fr) minmax(260px,.75fr); gap:16px; align-items:start; }
+      .noGameSetupGrid .userSection { padding:20px; border-color:#405775; background:linear-gradient(145deg,#1d2938,#161e28); box-shadow:0 18px 42px rgba(0,0,0,.26); }
+      .noGameSetupGrid #joinGameSection { position:sticky; top:20px; }
+      .noGameSetupFoot { margin:16px 2px 0; color:#7f8b9a; font-size:11px; }
       .dashEmptyAction { display:grid; gap:9px; }
       .dashEmptyAction button { width:100%; border-color:#4b6f98; background:#29415e; }
-      @media (max-width:620px){ .noGameShell{min-height:390px;padding:16px}.noGameCard{padding:24px 18px}.noGameActions{grid-template-columns:1fr}.noGameCard h2{font-size:24px} }
+      @media (max-width:900px){ .noGameSetupGrid{grid-template-columns:1fr}.noGameSetupGrid #joinGameSection{position:static} }
+      @media (max-width:620px){ .noGameShell{min-height:390px;padding:16px}.noGameCard{padding:24px 18px}.noGameActions{grid-template-columns:1fr}.noGameCard h2{font-size:24px}.noGameSetupHeader{grid-template-columns:1fr;text-align:center}.noGameSetupHeader .noGameIcon{margin:auto}.noGameSetupHeader h2{font-size:24px} }
       #board svg { width:100%; height:auto; display:block; background:#0f151d; border:1px solid #263545; border-radius:9px; }
       #board svg .landBase { fill:#17212c; pointer-events:none; }
       #board svg .continentRegion { fill-opacity:.26; stroke:none; pointer-events:none; }
@@ -264,6 +275,10 @@
       .drawerActions { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-top:11px; }
       .drawerActions #newBtn { border-color:#4f7096; background:#2a4059; }
       .drawerActions button:only-child { grid-column:1 / -1; }
+      .gameOptionsSection { padding:13px 15px; }
+      .gameOptionsSection > summary { color:#cbd7e5; }
+      .gameOptionsBody { display:grid; gap:10px; }
+      .gameOptionsBody > .userSection { box-shadow:none; }
       .currentGameSection { border-color:#456385; background:linear-gradient(145deg,#1d2d40,#182330); }
       .currentGameMeta { display:flex; flex-wrap:wrap; gap:5px; margin:0 0 11px; }
       .currentGameMeta span { padding:3px 7px; border:1px solid #3a4e66; border-radius:999px; background:#172332; color:#9dabbc; font-size:9px; }
@@ -530,7 +545,7 @@
         <header>
           <div class="userIdentity">
             <span class="userAvatar">👤</span>
-            <div><div class="userEyebrow">Account &amp; game setup</div><h2 id="panelWhoami"></h2></div>
+            <div><div class="userEyebrow">Health &amp; account</div><h2 id="panelWhoami"></h2></div>
           </div>
           <button id="userPanelClose" aria-label="Close user panel">✕</button>
         </header>
@@ -558,8 +573,12 @@
           </div>
           <div id="healthLogHelp" class="muted" style="font-size:11px;margin-top:8px"></div>
         </section>
-        <section id="currentGameSection" class="userSection currentGameSection" style="display:none"></section>
-        <section id="newGameSection" class="userSection">
+        <section id="healthVoteSection" class="userSection" style="display:none"></section>
+        <details id="gameOptionsDisclosure" class="userSection disclosure gameOptionsSection" style="display:none">
+          <summary><span>Game options</span><span class="summaryMeta" id="gameOptionsSummary">Switch or leave</span></summary>
+          <div id="gameOptionsBody" class="disclosureBody gameOptionsBody">
+          <section id="currentGameSection" class="userSection currentGameSection" style="display:none"></section>
+          <section id="newGameSection" class="userSection">
           <div class="userSectionHeading">
             <span class="userSectionIcon">＋</span>
             <div><h3>Start a new game</h3><p class="muted">Use practice mode to control every player locally.</p></div>
@@ -604,7 +623,6 @@
             <button id="proposeRulesBtn" type="button" style="display:none">Propose changes</button>
           </div>
         </section>
-        <section id="healthVoteSection" class="userSection" style="display:none"></section>
         <section id="joinGameSection" class="userSection">
           <div class="userSectionHeading">
             <span class="userSectionIcon">→</span>
@@ -612,6 +630,8 @@
           </div>
           <div class="joinRow"><input id="joinCode" placeholder="Game code" style="width:140px" /><button id="joinBtn">Join game</button></div>
         </section>
+          </div>
+        </details>
         <footer class="userPanelFooter"><span>Your health details stay private.</span><button id="logoutBtn">Log out</button></footer>
         </div>
       </aside>
@@ -1127,14 +1147,20 @@
       function renderNoGameState() {
         if (game) return;
         const signedIn = !!currentUser;
+        const board = $('#board');
+        const optionsBody = $('#gameOptionsBody');
+        const newSection = $('#newGameSection');
+        const joinSection = $('#joinGameSection');
+        // These forms move between the onboarding canvas and the collapsed
+        // in-game options. Park them before replacing the board DOM.
+        if (board.contains(newSection)) optionsBody.append(newSection);
+        if (board.contains(joinSection)) optionsBody.append(joinSection);
+        $('#gameOptionsDisclosure').style.display = 'none';
         ['#dayPill', '#turnPill', '#statusPill', '#timerPill'].forEach((selector) => {
           $(selector).style.display = 'none';
         });
         $('#myDashboard').innerHTML = signedIn
-          ? `<div class="dashEmpty dashEmptyAction">
-              <span>You are signed in. Start a game or join one to establish your position.</span>
-              <button id="dashboardSetupBtn" type="button">Open game setup</button>
-            </div>`
+          ? '<div class="dashEmpty">Choose a game option in the main area to establish your position.</div>'
           : '<div class="dashEmpty">Sign in or create an account to start playing.</div>';
         $('#players').innerHTML = '';
         $('#playersSummary').textContent = 'No game yet';
@@ -1151,27 +1177,34 @@
           : 'Sign in to create or join a game.';
         $('#activitySummary').textContent = 'No events yet';
         $('#log').innerHTML = '<div class="activityEmpty">Game events will appear here after you start or join.</div>';
-        $('#board').innerHTML = `<div class="noGameShell"><div class="noGameCard">
-          <div class="noGameIcon" aria-hidden="true">${signedIn ? '&#9873;' : '&#9829;'}</div>
-          <div class="lobbyEyebrow">${signedIn ? 'Account ready' : 'Welcome to Exercise Risk'}</div>
-          <h2>${signedIn ? 'How would you like to play?' : 'Turn healthy habits into territory'}</h2>
-          <p class="noGameCopy">${signedIn
-            ? 'Create a new game and invite friends, start a private practice board, or enter a code from another player.'
-            : 'Create an account or sign in above. Then start your own daily strategy game or join one with a code.'}</p>
-          <div class="noGameActions">
-            ${signedIn
-              ? '<button id="emptyStartBtn" class="primary" type="button">Start a game</button><button id="emptyJoinBtn" type="button">Join with code</button>'
-              : '<button id="emptyAuthBtn" class="primary" type="button">Sign in or create account</button>'}
-          </div>
-          <p class="noGameFoot">${signedIn ? 'Practice mode lets you learn by controlling every player.' : 'Your individual health entries remain private.'}</p>
-        </div></div>`;
+        if (signedIn) {
+          board.innerHTML = `<div class="noGameShell setup"><div class="noGameSetup">
+            <div class="noGameSetupHeader">
+              <div class="noGameIcon" aria-hidden="true">&#9873;</div>
+              <div>
+                <div class="lobbyEyebrow">Account ready</div>
+                <h2>Choose how you want to play</h2>
+                <p class="noGameCopy">Create a game with your own health rules, start a private practice board, or join friends with an invite code.</p>
+              </div>
+            </div>
+            <div id="noGameSetupMount" class="noGameSetupGrid"></div>
+            <p class="noGameSetupFoot">Your individual health entries remain private. Other players only see the resulting daily progress.</p>
+          </div></div>`;
+          const setupMount = $('#noGameSetupMount');
+          newSection.style.display = '';
+          joinSection.style.display = '';
+          setupMount.append(newSection, joinSection);
+        } else {
+          board.innerHTML = `<div class="noGameShell"><div class="noGameCard">
+            <div class="noGameIcon" aria-hidden="true">&#9829;</div>
+            <div class="lobbyEyebrow">Welcome to Exercise Risk</div>
+            <h2>Turn healthy habits into territory</h2>
+            <p class="noGameCopy">Create an account or sign in above. Then start your own daily strategy game or join one with a code.</p>
+            <div class="noGameActions"><button id="emptyAuthBtn" class="primary" type="button">Sign in or create account</button></div>
+            <p class="noGameFoot">Your individual health entries remain private.</p>
+          </div></div>`;
+        }
 
-        const dashboardSetup = $('#dashboardSetupBtn');
-        if (dashboardSetup) dashboardSetup.onclick = () => openUserPanel('newGameSection');
-        const startButton = $('#emptyStartBtn');
-        if (startButton) startButton.onclick = () => openUserPanel('newGameSection');
-        const joinButton = $('#emptyJoinBtn');
-        if (joinButton) joinButton.onclick = () => openUserPanel('joinGameSection');
         const authButton = $('#emptyAuthBtn');
         if (authButton) authButton.onclick = () => $('#authUser').focus();
       }
@@ -1185,6 +1218,14 @@
             section?.scrollIntoView({ block: 'start' });
             if (sectionId === 'joinGameSection') $('#joinCode').focus();
           });
+        }
+      }
+      function openGameOptions(sectionId) {
+        openUserPanel();
+        const disclosure = $('#gameOptionsDisclosure');
+        disclosure.open = true;
+        if (sectionId) {
+          requestAnimationFrame(() => $(`#${sectionId}`)?.scrollIntoView({ block: 'start' }));
         }
       }
       function closeUserPanel() { $('#userPanelOverlay').classList.remove('show'); }
@@ -1231,7 +1272,7 @@
           status.className = 'success';
           updateAuthUI(); log('Logged in as ' + currentUser.username);
           if (gameId) await refresh();
-          if (kind === 'signup' && !game) openUserPanel('newGameSection');
+          if (kind === 'signup' && !game) closeUserPanel();
         } catch (e) {
           status.textContent = e.message;
           status.className = 'error';
@@ -1481,7 +1522,7 @@
         const leave = $('#lobbyLeaveBtn');
         if (leave) leave.onclick = leaveCurrentGame;
         const again = $('#lobbyNewGameBtn');
-        if (again) again.onclick = openUserPanel;
+        if (again) again.onclick = () => openGameOptions('newGameSection');
       }
 
       function terr(id) { return game.territories.find((t) => t.id === id); }
@@ -2068,21 +2109,36 @@
       }
 
       function renderGameAccess() {
+        const disclosure = $('#gameOptionsDisclosure');
+        const optionsBody = $('#gameOptionsBody');
+        const optionsSummary = $('#gameOptionsSummary');
         const currentSection = $('#currentGameSection');
         const newSection = $('#newGameSection');
         const joinSection = $('#joinGameSection');
         const lockedGameId = game?.activeMultiplayerGameId ?? activeMultiplayerGameId;
         const hasActiveMultiplayerGame = !!currentUser && !!lockedGameId;
+        const hasVisibleGame = !!currentUser && !!game;
+
+        if (!optionsBody.contains(currentSection)) optionsBody.append(currentSection);
+        if (!optionsBody.contains(newSection)) optionsBody.append(newSection);
+        if (!optionsBody.contains(joinSection)) optionsBody.append(joinSection);
+        disclosure.style.display = hasVisibleGame ? '' : 'none';
 
         newSection.style.display = hasActiveMultiplayerGame ? 'none' : '';
         joinSection.style.display = hasActiveMultiplayerGame ? 'none' : '';
         if (!hasActiveMultiplayerGame) {
           currentSection.style.display = 'none';
           currentSection.innerHTML = '';
+          optionsSummary.textContent = game?.practice
+            ? 'Practice & switching'
+            : game?.status === 'finished' || game?.status === 'cancelled'
+              ? 'Start or join another'
+              : 'Switch or start another';
           return;
         }
 
         activeMultiplayerGameId = lockedGameId;
+        optionsSummary.textContent = 'Current game & switching';
         currentSection.style.display = '';
         const practiceShortcutOpen = currentSection.querySelector('.practiceShortcut')?.open ?? false;
         const viewingMultiplayerGame = game?.id === lockedGameId && !game?.practice;
@@ -2153,11 +2209,15 @@
       function renderHealthRuleControls() {
         const loadButton = $('#loadRulesBtn');
         const proposeButton = $('#proposeRulesBtn');
+        const section = $('#healthVoteSection');
         loadButton.style.display = game?.isCreator ? '' : 'none';
         proposeButton.style.display = game?.isCreator ? '' : 'none';
-        if (!game) return;
+        if (!game) {
+          section.style.display = 'none';
+          section.innerHTML = '';
+          return;
+        }
 
-        const section = $('#healthVoteSection');
         section.style.display = '';
         const caps = ['movement', 'nutrition', 'recovery']
           .filter((category) => game.categoryTroopCaps?.[category] !== undefined)
@@ -2187,9 +2247,18 @@
             <div><h3>Current game rules</h3><p class="muted">The health settings active for this game.</p></div>
           </div>
           <p class="muted">${game.exercises.length} goals · ${caps || 'no category caps'} · overall cap ${game.dailyTotalTroopCap}. Mid-game changes: ${game.healthRuleGovernance === 'vote' ? 'majority vote' : 'creator decides'}.</p>
-          ${proposalHtml}`;
+          ${proposalHtml}
+          ${game.isCreator ? '<button id="editGameRulesBtn" type="button">Review or change rules</button>' : ''}`;
         if ($('#approveRulesBtn')) $('#approveRulesBtn').onclick = () => voteRules(true);
         if ($('#rejectRulesBtn')) $('#rejectRulesBtn').onclick = () => voteRules(false);
+        if ($('#editGameRulesBtn')) {
+          $('#editGameRulesBtn').onclick = () => {
+            loadCurrentRules();
+            openGameOptions('newGameSection');
+            const ruleDetails = $('#newGameSection').querySelector('details.panelDetails');
+            if (ruleDetails) ruleDetails.open = true;
+          };
+        }
       }
 
       function render() {
