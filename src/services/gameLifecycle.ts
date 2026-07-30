@@ -4,6 +4,7 @@
  */
 
 import { checkWin, forfeitPlayer } from '../engine/game.js';
+import { createGame } from '../engine/setup.js';
 import type { GameState } from '../engine/types.js';
 import type { DailySession } from '../engine/turnSession.js';
 import { pruneIneligiblePlayers } from '../engine/turnSession.js';
@@ -17,6 +18,14 @@ function dailyWindowMinutes(playerCount: number): number {
   return Math.max(1, Math.floor(MINUTES_PER_DAY / playerCount));
 }
 
+function lobbyStartSeed(gameId: string, playerIds: string[]): number {
+  let seed = 2166136261;
+  for (const character of `${gameId}:${playerIds.join(',')}`) {
+    seed = Math.imul(seed ^ character.charCodeAt(0), 16777619);
+  }
+  return seed >>> 0;
+}
+
 async function requireCreator(
   repo: GameRepository,
   game: GameState,
@@ -28,7 +37,7 @@ async function requireCreator(
   }
 }
 
-/** Start a full lobby and allocate one predictable slice of each day per seat. */
+/** Finalize an open lobby and allocate the board for whoever actually joined. */
 export async function startLobbyGame(
   repo: GameRepository,
   gameId: string,
@@ -40,17 +49,22 @@ export async function startLobbyGame(
   if (game.status !== 'setup') throw new TurnError('game_started', 'This game has already started');
 
   const members = await repo.listMembers(gameId);
-  if (members.length !== game.players.length) {
+  const joinedPlayerIds = new Set(members.map((member) => member.playerId));
+  const joinedPlayers = game.players.filter((player) => joinedPlayerIds.has(player.id));
+  if (joinedPlayers.length < 2) {
     throw new TurnError(
-      'lobby_not_full',
-      `Waiting for ${game.players.length - members.length} more player(s)`,
+      'lobby_needs_players',
+      'Invite at least one more player before starting',
     );
   }
-  const healthVotes = summarizeLobbyHealthVotes(game);
+  const healthVotes = summarizeLobbyHealthVotes(
+    game,
+    joinedPlayers.map((player) => player.id),
+  );
   if (!healthVotes.allSubmitted) {
     throw new TurnError(
       'health_votes_incomplete',
-      `Waiting for ${game.players.length - healthVotes.submittedPlayerIds.length} player(s) to review the health goals`,
+      `Waiting for ${joinedPlayers.length - healthVotes.submittedPlayerIds.length} player(s) to review the health goals`,
     );
   }
   if (!healthVotes.includedExerciseKeys.length) {
@@ -60,16 +74,24 @@ export async function startLobbyGame(
     );
   }
   const includedExerciseKeys = new Set(healthVotes.includedExerciseKeys);
-
+  const startedConfig = {
+    ...game.config,
+    exercises: game.config.exercises.filter((exercise) =>
+      includedExerciseKeys.has(exercise.key)),
+    perPlayerWindowMinutes: dailyWindowMinutes(joinedPlayers.length),
+  };
+  const initialized = createGame({
+    id: game.id,
+    config: startedConfig,
+    players: joinedPlayers.map((player) => ({ id: player.id, name: player.name })),
+    seed: lobbyStartSeed(game.id, joinedPlayers.map((player) => player.id)),
+  });
   const started: GameState = {
     ...game,
-    status: 'active',
-    config: {
-      ...game.config,
-      exercises: game.config.exercises.filter((exercise) =>
-        includedExerciseKeys.has(exercise.key)),
-      perPlayerWindowMinutes: dailyWindowMinutes(game.players.length),
-    },
+    ...initialized,
+    revision: game.revision,
+    practice: false,
+    lobbyHealthVotes: game.lobbyHealthVotes,
   };
   await repo.saveGame(started);
   return started;

@@ -131,6 +131,7 @@ export interface GameView {
   perPlayerWindowMinutes: number;
   schedule: GameScheduleView;
   claimedPlayerCount: number;
+  lobbyCapacity: number;
   lobbyHealthVoting: LobbyHealthVotingView;
   players: GamePlayerView[];
   exercises: ExerciseRuleView[];

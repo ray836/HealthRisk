@@ -19,11 +19,14 @@ const config: GameConfig = {
   timezone: 'America/Los_Angeles',
 };
 
-function lobby(id = 'lobby') {
+function lobby(id = 'lobby', playerCount = 4) {
   const state = createGame({
     id,
     config,
-    players: [{ id: 'p1', name: 'Creator' }, { id: 'p2', name: 'Guest' }],
+    players: Array.from({ length: playerCount }, (_, index) => ({
+      id: `p${index + 1}`,
+      name: index === 0 ? 'Creator' : `Player ${index + 1}`,
+    })),
     seed: 3,
   });
   state.status = 'setup';
@@ -31,16 +34,29 @@ function lobby(id = 'lobby') {
 }
 
 describe('multiplayer lifecycle', () => {
-  it('requires a full lobby and gives every player one half-day turn window', async () => {
+  it('starts an open lobby with the joined players and rebuilds their board', async () => {
     const state = lobby();
-    state.lobbyHealthVotes = { p1: ['run'], p2: ['run'] };
+    state.lobbyHealthVotes = { p1: ['run'] };
     const repo = new InMemoryGameRepository({ games: [state] });
     await repo.setMember({ gameId: 'lobby', playerId: 'p1', userId: 'creator' });
+
+    await expect(startLobbyGame(repo, 'lobby', 'creator')).rejects.toMatchObject({
+      code: 'lobby_needs_players',
+    });
+
     await repo.setMember({ gameId: 'lobby', playerId: 'p2', userId: 'guest' });
+    await repo.saveGame({
+      ...(await repo.loadGame('lobby'))!,
+      lobbyHealthVotes: { p1: ['run'], p2: ['run'] },
+    });
 
     const started = await startLobbyGame(repo, 'lobby', 'creator');
 
     expect(started.status).toBe('active');
+    expect(started.players.map((player) => player.id)).toEqual(['p1', 'p2']);
+    expect(new Set(started.territories.map((territory) => territory.owner))).toEqual(
+      new Set(['p1', 'p2']),
+    );
     expect(started.config.perPlayerWindowMinutes).toBe(720);
     expect(started.config.exercises.map((exercise) => exercise.key)).toEqual(['run']);
   });
@@ -88,7 +104,7 @@ describe('multiplayer lifecycle', () => {
   });
 
   it('turns an active departure into a forfeit and removes it from the queue', async () => {
-    const state = lobby('active');
+    const state = lobby('active', 2);
     state.status = 'active';
     const session = startDailySession(state, 0);
     const repo = new InMemoryGameRepository({ games: [state], sessions: [session] });

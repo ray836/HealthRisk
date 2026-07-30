@@ -12,7 +12,9 @@ interface GameView {
   isCreator: boolean;
   currentPlayerId: string | null;
   mySeats: string[];
+  perPlayerWindowMinutes: number;
   nextSessionOpensAt: string | null;
+  players: Array<{ id: string; name: string }>;
   exercises: Array<{
     key: string;
     label: string;
@@ -25,6 +27,8 @@ interface GameView {
   categoryTroopCaps: Record<string, number>;
   dailyTotalTroopCap: number;
   pendingHealthRuleProposal?: unknown;
+  claimedPlayerCount: number;
+  lobbyCapacity: number;
   lobbyHealthVoting: {
     voteCounts: Record<string, number>;
     submittedPlayerIds: string[];
@@ -114,12 +118,18 @@ describe('multiplayer route authorization', () => {
       token: creator.body.token,
       body: { players: 2, practice: false },
     });
+    expect(created.body.claimedPlayerCount).toBe(1);
+    expect(created.body.lobbyCapacity).toBe(4);
+    expect(created.body.players).toHaveLength(1);
+    expect(created.body.lobbyHealthVoting.requiredSubmissions).toBe(1);
     const gameId = created.body.id;
-    await request<GameResult>(`/api/games/${gameId}/join`, {
+    const joined = await request<GameResult>(`/api/games/${gameId}/join`, {
       method: 'POST',
       token: other.body.token,
       body: {},
     });
+    expect(joined.body.game.players).toHaveLength(2);
+    expect(joined.body.game.lobbyHealthVoting.requiredSubmissions).toBe(2);
     const guestView = await request<GameView>(`/api/games/${gameId}`, {
       token: other.body.token,
     });
@@ -221,6 +231,8 @@ describe('multiplayer route authorization', () => {
     });
 
     let game = started.body.game;
+    expect(game.players).toHaveLength(2);
+    expect(game.perPlayerWindowMinutes).toBe(720);
     const tokensBySeat = new Map<string, string>();
     for (const seat of game.mySeats) tokensBySeat.set(seat, creator.body.token);
     const otherView = await request<GameView>(`/api/games/${gameId}`, {

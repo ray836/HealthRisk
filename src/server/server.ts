@@ -55,6 +55,7 @@ import type { GameConfig, GameState, HealthRuleGovernance, TerritoryId } from '.
 
 const PLAYER_COLORS = ['#e05c4b', '#4b8fe0', '#3fae7a', '#c98a2b', '#8a63d2', '#d0518f'];
 const PRACTICE_WINDOW_MINUTES = 20;
+const MULTIPLAYER_LOBBY_CAPACITY = 4;
 const SUPPORTED_TIMEZONES = new Set([
   'America/Los_Angeles',
   'America/Denver',
@@ -147,7 +148,6 @@ async function gameView(gameId: string, viewerId?: string) {
   day0 = game.dayNumber;
   session = await repo.loadSession(gameId, day0);
   playerId = session ? currentPlayer(session) : null;
-  const colorOf = new Map(game.players.map((p, i) => [p.id, PLAYER_COLORS[i % PLAYER_COLORS.length]]));
   const turnState = playerId ? await repo.loadTurnState(gameId, game.dayNumber, playerId) : null;
   const members = await repo.listMembers(gameId);
   const seatOwner = new Map(members.map((m) => [m.playerId, m.userId]));
@@ -167,13 +167,26 @@ async function gameView(gameId: string, viewerId?: string) {
     sharedHealthProgress.map((progress) => [progress.playerId, progress]),
   );
   const practice = await isPracticeGame(repo, game);
-  const lobbyHealthVoteSummary = summarizeLobbyHealthVotes(game);
+  const lobbyParticipantIds = game.players
+    .filter((player) => seatOwner.has(player.id))
+    .map((player) => player.id);
+  const visiblePlayers =
+    game.status === 'setup' && !practice
+      ? game.players.filter((player) => seatOwner.has(player.id))
+      : game.players;
+  const colorOf = new Map(
+    visiblePlayers.map((player, index) => [
+      player.id,
+      PLAYER_COLORS[index % PLAYER_COLORS.length],
+    ]),
+  );
+  const lobbyHealthVoteSummary = summarizeLobbyHealthVotes(game, lobbyParticipantIds);
   const myLobbyHealthSelections = [...new Set(
     mySeats.flatMap((playerId) => game.lobbyHealthVotes?.[playerId] ?? []),
   )];
   const scheduledPlayerWindowMinutes =
     game.status === 'setup' && !practice
-      ? Math.floor((24 * 60) / game.players.length)
+      ? Math.floor((24 * 60) / Math.max(1, lobbyParticipantIds.length))
       : game.config.perPlayerWindowMinutes;
   const activeMultiplayerGameId = viewerId
     ? await findActiveMultiplayerGame(repo, viewerId)
@@ -207,7 +220,10 @@ async function gameView(gameId: string, viewerId?: string) {
     winnerId: game.winnerId ?? null,
     events: game.events ?? [],
     dayNumber: game.dayNumber,
-    turnOrder: game.turnOrder,
+    turnOrder:
+      game.status === 'setup' && !practice
+        ? visiblePlayers.map((player) => player.id)
+        : game.turnOrder,
     currentPlayerId: playerId,
     mySeats,
     isCreator: mySeats.includes(game.players[0]!.id),
@@ -235,13 +251,14 @@ async function gameView(gameId: string, viewerId?: string) {
       missedTurnPolicy: 'auto_resolve',
     },
     claimedPlayerCount: members.length,
+    lobbyCapacity: game.status === 'setup' && !practice ? game.players.length : visiblePlayers.length,
     lobbyHealthVoting: {
       enabled: game.status === 'setup' && !practice,
       voteCounts: lobbyHealthVoteSummary.voteCounts,
       submittedPlayerIds: lobbyHealthVoteSummary.submittedPlayerIds,
       includedExerciseKeys: lobbyHealthVoteSummary.includedExerciseKeys,
       submissionCount: lobbyHealthVoteSummary.submittedPlayerIds.length,
-      requiredSubmissions: game.players.length,
+      requiredSubmissions: lobbyParticipantIds.length,
       allSubmitted: lobbyHealthVoteSummary.allSubmitted,
       hasSubmitted:
         mySeats.length > 0 &&
@@ -249,7 +266,7 @@ async function gameView(gameId: string, viewerId?: string) {
           Object.prototype.hasOwnProperty.call(game.lobbyHealthVotes ?? {}, playerId)),
       mySelections: myLobbyHealthSelections,
     },
-    players: game.players.map((p) => ({
+    players: visiblePlayers.map((p) => ({
       id: p.id,
       name: p.name,
       status: p.status,
@@ -275,14 +292,17 @@ async function gameView(gameId: string, viewerId?: string) {
     pendingHealthRuleProposal: game.pendingHealthRuleProposal ?? null,
     dailyTotalTroopCap: game.config.dailyTotalTroopCap,
     continents: CONTINENTS.map((c) => ({ id: c.id, label: c.label, bonus: c.bonus })),
-    territories: game.territories.map((t) => ({
-      id: t.id,
-      owner: t.owner,
-      armies: t.armies,
-      continent: CONTINENT_OF[t.id],
-      neighbors: NEIGHBORS[t.id],
-      color: t.owner ? colorOf.get(t.owner) : '#9aa0a6',
-    })),
+    territories:
+      game.status === 'setup' && !practice
+        ? []
+        : game.territories.map((t) => ({
+          id: t.id,
+          owner: t.owner,
+          armies: t.armies,
+          continent: CONTINENT_OF[t.id],
+          neighbors: NEIGHBORS[t.id],
+          color: t.owner ? colorOf.get(t.owner) : '#9aa0a6',
+        })),
   };
 }
 
@@ -599,15 +619,17 @@ app.get(
 );
 
 /**
- * Create a game. The creator claims seat p1; with `practice: true` they claim
- * every seat (hot-seat play). Others join via /join with the returned game id.
+ * Create a game. Multiplayer always opens four possible join slots but exposes
+ * only the people who actually join; practice keeps an explicit seat count.
  */
 app.post(
   '/api/games',
   asyncH(async (req, res) => {
     const user = requireUser(req);
-    const count = Math.min(Math.max(Number(req.body?.players ?? 2), 2), 6);
     const practice = Boolean(req.body?.practice);
+    const count = practice
+      ? Math.min(Math.max(Number(req.body?.players ?? 2), 2), MULTIPLAYER_LOBBY_CAPACITY)
+      : MULTIPLAYER_LOBBY_CAPACITY;
     if (!practice) {
       const activeGameId = await findActiveMultiplayerGame(repo, user.id);
       if (activeGameId) {

@@ -54,4 +54,16 @@ describe('lobby health-goal voting', () => {
       submitLobbyHealthVotes(repo, 'vote-game', 'p1', ['swimming']),
     ).rejects.toMatchObject({ code: 'bad_health_vote' });
   });
+
+  it('requires submissions only from players who actually joined the open lobby', () => {
+    const game = votingGame();
+    game.lobbyHealthVotes = { p1: ['run'] };
+
+    expect(summarizeLobbyHealthVotes(game, ['p1'])).toMatchObject({
+      voteCounts: { run: 1, cycle: 0 },
+      submittedPlayerIds: ['p1'],
+      includedExerciseKeys: ['run'],
+      allSubmitted: true,
+    });
+  });
 });

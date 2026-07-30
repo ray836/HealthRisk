@@ -10,11 +10,16 @@ export interface LobbyHealthVoteSummary {
 }
 
 /** Build the public, privacy-light lobby tally without exposing who chose what. */
-export function summarizeLobbyHealthVotes(game: GameState): LobbyHealthVoteSummary {
+export function summarizeLobbyHealthVotes(
+  game: GameState,
+  participantPlayerIds = game.players.map((player) => player.id),
+): LobbyHealthVoteSummary {
   const votes = game.lobbyHealthVotes ?? {};
-  const playerIds = new Set(game.players.map((player) => player.id));
+  const gamePlayerIds = new Set(game.players.map((player) => player.id));
+  const playerIds = participantPlayerIds.filter((playerId) => gamePlayerIds.has(playerId));
   const exerciseKeys = new Set(game.config.exercises.map((exercise) => exercise.key));
-  const submittedPlayerIds = Object.keys(votes).filter((playerId) => playerIds.has(playerId));
+  const submittedPlayerIds = playerIds.filter((playerId) =>
+    Object.prototype.hasOwnProperty.call(votes, playerId));
   const voteCounts: Record<string, number> = Object.fromEntries(
     game.config.exercises.map((exercise) => [exercise.key, 0]),
   );
@@ -33,8 +38,8 @@ export function summarizeLobbyHealthVotes(game: GameState): LobbyHealthVoteSumma
     includedExerciseKeys: game.config.exercises
       .filter((exercise) => (voteCounts[exercise.key] ?? 0) > 0)
       .map((exercise) => exercise.key),
-    allSubmitted: game.players.every((player) =>
-      Object.prototype.hasOwnProperty.call(votes, player.id)),
+    allSubmitted: playerIds.every((playerId) =>
+      Object.prototype.hasOwnProperty.call(votes, playerId)),
   };
 }
 

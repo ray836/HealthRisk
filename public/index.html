@@ -381,6 +381,8 @@
       .practiceShortcut p { margin:7px 0 9px; font-size:10px; }
       .practiceLaunchRow { display:flex; justify-content:space-between; gap:8px; align-items:center; }
       .practiceLaunchRow label { display:flex; gap:6px; align-items:center; color:#8e9aaa; font-size:10px; }
+      .openLobbyHint { display:flex; align-items:center; gap:8px; color:#a9c7e8; font-size:11px; }
+      .openLobbyHint::before { content:"↗"; display:grid; place-items:center; width:25px; height:25px; border:1px solid #4d729a; border-radius:8px; background:#203853; color:#8fc1f5; font-weight:800; }
       .returnGameButton { width:100%; margin-top:11px; border-color:#4d7098; background:#29415e; }
       .joinRow { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; }
       .joinRow #joinCode { width:100% !important; min-width:0; }
@@ -670,11 +672,12 @@
           <section id="newGameSection" class="userSection">
           <div class="userSectionHeading">
             <span class="userSectionIcon">＋</span>
-            <div><h3>Start a new game</h3><p class="muted">Use practice mode to control every player locally.</p></div>
+            <div><h3>Start a new game</h3><p class="muted">Create an open lobby for friends or a private practice board.</p></div>
           </div>
           <div class="settingRow">
-            <label class="muted">Players <select id="newCount"><option>2</option><option>3</option><option>4</option></select></label>
-            <label class="muted"><input type="checkbox" id="practiceChk" checked /> Practice mode</label>
+            <div id="openLobbyHint" class="openLobbyHint">Anyone with the invite link can join · 2–4 players</div>
+            <label id="practiceCountSetting" class="muted" style="display:none">Practice players <select id="newCount"><option>2</option><option>3</option><option>4</option></select></label>
+            <label class="muted"><input type="checkbox" id="practiceChk" /> Practice mode</label>
           </div>
           <div class="settingRow">
             <label class="muted">Future game days start <input id="dailyStartTime" type="time" value="19:00" /></label>
@@ -747,7 +750,11 @@
       let recentActionIds = new Set();
       let recentActionTimer = null;
       const seenGameEventIds = new Set();
-      let gameId = localStorage.getItem('exriskGame');
+      const inviteCodeFromUrl = new URLSearchParams(window.location.search).get('join');
+      const validInviteCode = /^game-[a-z0-9]+$/i.test(inviteCodeFromUrl || '')
+        ? inviteCodeFromUrl
+        : null;
+      let gameId = validInviteCode ? null : localStorage.getItem('exriskGame');
       let token = localStorage.getItem('exriskToken');
       localStorage.removeItem('exriskToken');
       let currentUser = null;
@@ -1388,10 +1395,19 @@
         log('Logged out');
       }
 
+      function syncGameCreationMode() {
+        const practice = $('#practiceChk').checked;
+        $('#practiceCountSetting').style.display = practice ? '' : 'none';
+        $('#openLobbyHint').style.display = practice ? 'none' : '';
+        $('#newBtn').textContent = practice ? 'Start practice' : 'Create open lobby';
+      }
+
       async function newGame(options = {}) {
         if (!currentUser) { log('✋ Log in first'); return; }
         const practice = options.practice ?? $('#practiceChk').checked;
-        const players = options.players ?? Number($('#newCount').value);
+        const players = practice
+          ? options.players ?? Number($('#newCount').value)
+          : undefined;
         try {
           const healthRules = readHealthRulesEditor();
           const data = await post('/api/games', {
@@ -1434,11 +1450,16 @@
 
       async function copyGameCode(code) {
         if (!code) return;
+        const inviteUrl = new URL(window.location.href);
+        inviteUrl.search = '';
+        inviteUrl.hash = '';
+        inviteUrl.searchParams.set('join', code);
+        const invite = inviteUrl.toString();
         try {
-          await navigator.clipboard.writeText(code);
+          await navigator.clipboard.writeText(invite);
         } catch {
           const field = document.createElement('textarea');
-          field.value = code;
+          field.value = invite;
           field.style.position = 'fixed';
           field.style.opacity = '0';
           document.body.appendChild(field);
@@ -1446,7 +1467,7 @@
           document.execCommand('copy');
           field.remove();
         }
-        showToast('Game code copied');
+        showToast('Invite link copied');
       }
 
       async function proposeRules() {
@@ -1494,6 +1515,9 @@
           game = d.game;
           activeMultiplayerGameId = game.activeMultiplayerGameId ?? null;
           fromSel = null; lastTurnKey = null; render();
+          const inviteUrl = new URL(window.location.href);
+          inviteUrl.searchParams.delete('join');
+          window.history.replaceState({}, '', `${inviteUrl.pathname}${inviteUrl.search}${inviteUrl.hash}`);
           closeUserPanel();
           log('Joined ' + code + ' as ' + d.seat);
         } catch (e) {
@@ -1901,39 +1925,46 @@
       function renderLobby() {
         const cancelled = game.status === 'cancelled';
         const joined = game.claimedPlayerCount ?? game.players.filter((player) => player.claimed).length;
-        const full = joined === game.players.length;
+        const capacity = game.lobbyCapacity ?? 4;
+        const enoughPlayers = joined >= 2;
+        const atCapacity = joined >= capacity;
         const voting = game.lobbyHealthVoting;
         const votesReady = !voting?.enabled || (voting.allSubmitted && !lobbyVoteDirty);
         const hasIncludedGoals = !voting?.enabled || voting.includedExerciseKeys.length > 0;
-        const readyToStart = full && votesReady && hasIncludedGoals && !lobbyRuleEditing;
-        const seats = game.players.map((player, index) => `
+        const readyToStart = enoughPlayers && votesReady && hasIncludedGoals && !lobbyRuleEditing;
+        const joinedSeats = game.players.map((player, index) => `
           <div class="lobbySeat${player.claimed ? '' : ' open'}">
             <span class="lobbySeatIcon" style="${player.claimed ? `color:${player.color}` : ''}">${player.claimed ? '✓' : index + 1}</span>
             <div><b>${player.claimed ? esc(player.name) : 'Open seat'}</b><small>${player.claimed
               ? `${index === 0 ? 'Game creator' : 'Player'} · ${voting?.submittedPlayerIds?.includes(player.id) ? 'choices submitted' : 'reviewing health goals'}`
               : 'Waiting for a player'}</small></div>
           </div>`).join('');
+        const inviteSeat = !cancelled && !atCapacity
+          ? `<div class="lobbySeat open">
+              <span class="lobbySeatIcon">＋</span>
+              <div><b>Open lobby</b><small>${capacity - joined} more ${capacity - joined === 1 ? 'player' : 'players'} can join with the invite link</small></div>
+            </div>`
+          : '';
+        const seats = joinedSeats + inviteSeat;
         const actions = cancelled
           ? '<button id="lobbyNewGameBtn" class="primary" type="button">Start another game</button>'
           : `
             ${(game.mySeats || []).length ? `<button id="lobbyLeaveBtn" type="button">${game.isCreator ? 'Cancel lobby' : 'Leave lobby'}</button>` : ''}
-            ${game.isCreator ? `<button id="lobbyStartBtn" class="primary" type="button"${readyToStart ? '' : ' disabled'}>Start game</button>` : ''}
+            ${game.isCreator ? `<button id="lobbyStartBtn" class="primary" type="button"${readyToStart ? '' : ' disabled'}>Start with ${joined} ${joined === 1 ? 'player' : 'players'}</button>` : ''}
           `;
         const lobbyHeading = cancelled
           ? 'This game was cancelled'
-          : !full
-            ? `Waiting for ${game.players.length - joined} more`
+          : !enoughPlayers
+            ? 'Invite at least one player'
             : !votesReady
               ? lobbyVoteDirty ? 'Submit your updated health choices' : 'Waiting for health choices'
               : !hasIncludedGoals
                 ? 'Choose at least one health goal'
-                : 'Everyone is ready';
+                : `Ready to start with ${joined} players`;
         const lobbyDescription = cancelled
           ? 'No moves were made and this lobby no longer occupies a game slot.'
-          : !full
-            ? game.isCreator
-              ? 'Share the invite code. Everyone can review the health goals while the remaining seats fill.'
-              : 'Review the health goals while the creator waits for every player to join.'
+          : !enoughPlayers
+            ? 'Copy the invite link and send it to a friend. The lobby can hold up to four players.'
             : !votesReady
               ? lobbyVoteDirty
                 ? 'Your changes are not part of the lobby yet. Submit them before the game can begin.'
@@ -1941,13 +1972,13 @@
               : !hasIncludedGoals
                 ? 'No goal received interest. Change your choices so the game includes at least one health goal.'
                 : game.isCreator
-                  ? 'Every player has submitted. Start whenever you are ready.'
-                  : 'Your choices are locked in. The creator can now start the game.';
+                  ? `Everyone here has submitted. Start now${atCapacity ? '.' : ', or wait for more friends to join.'}`
+                  : `Your choices are locked in. The creator can start now${atCapacity ? '.' : ', or wait for more friends.'}`;
         $('#board').innerHTML = `<div class="lobbyShell"><div class="lobbyCard">
           <div class="lobbyEyebrow">${cancelled ? 'Lobby closed' : 'Multiplayer waiting room'}</div>
           <h2>${lobbyHeading}</h2>
           <p class="muted">${lobbyDescription}</p>
-          <div class="lobbyCode"><div><span>Invite code</span><code>${esc(game.id)}</code></div>${cancelled ? '' : '<button id="lobbyCopyBtn" type="button">Copy</button>'}</div>
+          <div class="lobbyCode"><div><span>Invite code</span><code>${esc(game.id)}</code></div>${cancelled ? '' : '<button id="lobbyCopyBtn" type="button">Copy invite link</button>'}</div>
           <div class="lobbySeats">${seats}</div>
           ${cancelled ? '' : lobbyRulesHtml()}
           ${cancelled ? '' : `<div class="lobbySchedule">
@@ -2607,7 +2638,7 @@
           const currentPlayer = game.players.find((player) => player.id === game.currentPlayerId);
           const inLobby = game.status === 'setup';
           const turnStatus = inLobby
-            ? `${game.claimedPlayerCount}/${game.players.length} players joined`
+            ? `${game.claimedPlayerCount} ${game.claimedPlayerCount === 1 ? 'player' : 'players'} joined`
             : game.yourTurn
               ? `Your turn · ${pretty(game.phase)}`
               : `Waiting for ${currentPlayer?.name || 'the next player'}`;
@@ -2623,7 +2654,7 @@
             </div>
             <div class="gameCodeBox">
               <span class="gameCodeLabel">Invite code</span>
-              <div class="gameCodeRow"><code>${esc(lockedGameId)}</code><button id="copyGameCodeBtn" type="button">Copy</button></div>
+              <div class="gameCodeRow"><code>${esc(lockedGameId)}</code><button id="copyGameCodeBtn" type="button">Copy link</button></div>
             </div>
             <button id="leaveCurrentGameBtn" type="button">${inLobby && game.isCreator ? 'Cancel lobby' : inLobby ? 'Leave lobby' : 'Leave & forfeit'}</button>
             <details class="practiceShortcut"${practiceShortcutOpen ? ' open' : ''}>
@@ -2646,7 +2677,7 @@
             </div>
             <div class="gameCodeBox">
               <span class="gameCodeLabel">Multiplayer game code</span>
-              <div class="gameCodeRow"><code>${esc(lockedGameId)}</code><button id="copyGameCodeBtn" type="button">Copy</button></div>
+              <div class="gameCodeRow"><code>${esc(lockedGameId)}</code><button id="copyGameCodeBtn" type="button">Copy link</button></div>
             </div>
             <button id="resumeMultiplayerBtn" class="returnGameButton" type="button">Return to multiplayer game</button>`;
         }
@@ -2740,7 +2771,7 @@
             : 'Day ' + game.dayNumber;
         const cur = game.status === 'active' ? game.players.find((p) => p.id === game.currentPlayerId) : null;
         $('#turnPill').innerHTML = game.status === 'setup'
-          ? `${game.claimedPlayerCount}/${game.players.length} joined`
+          ? `${game.claimedPlayerCount} joined`
           : game.status === 'cancelled'
             ? 'No game in progress'
             : game.status === 'finished'
@@ -2799,7 +2830,7 @@
         }).join('');
         const activePlayers = game.players.filter((player) => player.status !== 'eliminated' && player.status !== 'forfeited').length;
         $('#playersSummary').textContent = game.status === 'setup'
-          ? `${game.claimedPlayerCount}/${game.players.length} joined`
+          ? `${game.claimedPlayerCount} joined`
           : `${activePlayers}/${game.players.length} active · ${cur ? cur.name + "'s turn" : 'complete'}`;
 
         const allowed = allowedModes();
@@ -2886,6 +2917,7 @@
         }
       });
       $('#newBtn').onclick = () => newGame();
+      $('#practiceChk').onchange = syncGameCreationMode;
       $('#winNew').onclick = newGame;
       $('#reinforceConfirm').onclick = confirmReinforcement;
       $('#reinforceCancel').onclick = closeReinforceDialog;
@@ -2986,9 +3018,13 @@
         }
       });
       $('#authPass').onkeydown = (e) => { if (e.key === 'Enter') doAuth('login'); };
+      if (validInviteCode) {
+        $('#joinCode').value = validInviteCode;
+      }
 
       (async () => {
         renderRuleEditor();
+        syncGameCreationMode();
         await loadMe();
         updateAuthUI();
         if (gameId) await refresh();
