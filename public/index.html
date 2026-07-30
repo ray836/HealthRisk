@@ -1679,7 +1679,12 @@
       function hintText() {
         if (!currentUser) return 'Log in, then create or join a game.';
         if (game.status === 'finished') return '';
-        if (!me()) return 'No active turn.';
+        if (!me()) {
+          if (game.status === 'active' && game.nextSessionOpensAt) {
+            return `Today's moves are complete. The next daily session opens ${formatScheduleTime(game.nextSessionOpensAt)}.`;
+          }
+          return 'No active turn.';
+        }
         const cur = game.players.find((p) => p.id === me());
         if (!game.yourTurn) {
           const mine = (game.mySeats || []).length ? `you are ${game.mySeats.join(', ')}` : 'spectating';
@@ -1783,10 +1788,42 @@
 
       // Live window countdown; when it hits 0 the server auto-resolves, so we
       // refresh once to pick up the new turn.
+      function formatScheduleTime(value) {
+        if (!value) return '';
+        const options = {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          timeZoneName: 'short',
+        };
+        if (game?.schedule?.timezone) options.timeZone = game.schedule.timezone;
+        try {
+          return new Date(value).toLocaleString([], options);
+        } catch {
+          delete options.timeZone;
+          return new Date(value).toLocaleString([], options);
+        }
+      }
+
       function tickTimer() {
         if (!game) return;
         const pill = $('#timerPill');
         const exp = game.windowExpiresAt;
+        const nextSession = game.nextSessionOpensAt;
+        if (game.status === 'active' && !game.currentPlayerId && nextSession) {
+          const ms = new Date(nextSession).getTime() - Date.now();
+          pill.textContent = `Next day ${formatScheduleTime(nextSession)}`;
+          pill.title = 'Next daily session';
+          pill.style.color = '';
+          pill.style.display = '';
+          if (ms <= 0 && lastExpiryRefreshed !== nextSession) {
+            lastExpiryRefreshed = nextSession;
+            if (gameId) refresh();
+          }
+          return;
+        }
         if (!exp || game.status !== 'active' || !game.currentPlayerId) { pill.style.display = 'none'; return; }
         const ms = new Date(exp).getTime() - Date.now();
         const s = Math.max(0, Math.ceil(ms / 1000));
@@ -1893,7 +1930,9 @@
           ? (game.winnerId === d.playerId ? 'Victory' : 'Game over')
           : isUp
             ? (game.yourTurn ? `Your turn - ${game.phase}` : `${player.name}'s turn`)
-            : `Waiting for ${game.players.find((p) => p.id === game.currentPlayerId)?.name || 'the next turn'}`;
+            : game.status === 'active' && !game.currentPlayerId && game.nextSessionOpensAt
+              ? `Today's moves are complete`
+              : `Waiting for ${game.players.find((p) => p.id === game.currentPlayerId)?.name || 'the next turn'}`;
         const briefing = d.briefing;
         let briefingBlock = '';
         if (briefing) {
@@ -1981,7 +2020,7 @@
           <div class="dashHero">
             <div class="eyebrow">${player ? player.name : 'Your position'}</div>
             <div class="value">${turnLabel}</div>
-            <div class="sub">${d.controlledContinents.length ? `Controls ${continents}` : 'No complete continent yet'}${isUp && game.windowExpiresAt ? ` · Move & health cutoff ${new Date(game.windowExpiresAt).toLocaleString([], { weekday:'short', hour:'numeric', minute:'2-digit' })}` : ''}</div>
+            <div class="sub">${d.controlledContinents.length ? `Controls ${continents}` : 'No complete continent yet'}${isUp && game.windowExpiresAt ? ` · Move & health cutoff ${new Date(game.windowExpiresAt).toLocaleString([], { weekday:'short', hour:'numeric', minute:'2-digit' })}` : ''}${game.status === 'active' && !game.currentPlayerId && game.nextSessionOpensAt ? ` · Next daily session ${formatScheduleTime(game.nextSessionOpensAt)}` : ''}</div>
           </div>
           <div class="dashStats">
             <div class="dashStat"><b>${d.territoriesOwned}</b><span>Territories</span></div>
@@ -2179,7 +2218,9 @@
               ? 'Game over'
               : cur
                 ? `Turn: <b style="color:${cur.color}">${cur.name}</b> · ${game.phase}`
-                : 'Turn: —';
+                : game.nextSessionOpensAt
+                  ? `Next day: <b>${formatScheduleTime(game.nextSessionOpensAt)}</b>`
+                  : 'Turn: —';
         $('#statusPill').innerHTML = game.status === 'setup'
           ? 'Waiting room'
           : game.status === 'cancelled'
@@ -2187,6 +2228,7 @@
             : game.status === 'finished'
               ? `<span class="win">🏆 ${game.players.find((p) => p.id === game.winnerId)?.name} wins!</span>`
               : 'In progress';
+        tickTimer();
 
         const mine = new Set(game.mySeats || []);
         $('#players').innerHTML = game.players.map((p) => {
@@ -2238,7 +2280,7 @@
           b.classList.toggle('active', m === mode && !!allowed[m]);
         });
         $('#endBtn').disabled = !game.yourTurn || game.status !== 'active';
-        $('#expireBtn').disabled = !(game.mySeats || []).length || game.status !== 'active';
+        $('#expireBtn').disabled = !game.yourTurn || game.status !== 'active';
         $('#hint').textContent = hintText();
         renderTurnExperience();
 
@@ -2400,7 +2442,7 @@
       };
       $('#loadRulesBtn').onclick = loadCurrentRules;
       $('#proposeRulesBtn').onclick = proposeRules;
-      $('#userPanelBtn').onclick = openUserPanel;
+      $('#userPanelBtn').onclick = () => openUserPanel();
       $('#userPanelClose').onclick = closeUserPanel;
       $('#userPanelOverlay').onclick = (e) => { if (e.target === $('#userPanelOverlay')) closeUserPanel(); };
       $('#cardDetailClose').onclick = closeCardDetails;

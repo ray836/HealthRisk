@@ -176,12 +176,14 @@ async function gameView(gameId: string, viewerId?: string) {
     startBonus: turnState?.startBonus ?? 0,
     startContinents: turnState?.startContinents ?? [],
     windowExpiresAt: session?.windowExpiresAt ?? null,
+    nextSessionOpensAt: session?.nextSessionOpensAt ?? null,
     perPlayerWindowMinutes: scheduledPlayerWindowMinutes,
     schedule: {
       timezone: game.config.timezone,
       dailyStartMinuteOfDay: game.config.windowStartMinuteOfDay,
       playerWindowMinutes: scheduledPlayerWindowMinutes,
       healthCutoffAt: session?.windowExpiresAt ?? null,
+      nextSessionOpensAt: session?.nextSessionOpensAt ?? null,
       missedTurnPolicy: 'auto_resolve',
     },
     claimedPlayerCount: members.length,
@@ -787,16 +789,14 @@ app.post(
   }),
 );
 
-/** Dev: auto-resolve the current player's turn. Restricted to game members. */
+/** Dev: let the current player auto-resolve their own turn. */
 app.post(
   '/api/games/:id/expire',
   asyncH(async (req, res) => {
     const user = requireUser(req);
     const id = req.params.id as string;
-    if (!(await seatFor(repo, id, user.id))) throw new TurnError('no_seat', 'Not a member of this game');
     await mutateGame(req, id, async () => {
-      const { day, playerId } = await getActor(id);
-      if (!playerId) throw new TurnError('no_turn', 'No active turn');
+      const { day } = await actingSeat(req, id);
       await handleWindowExpiry(repo, throwingPlanner, id, day);
       await scheduler.armNextWindow(id, day);
     });
