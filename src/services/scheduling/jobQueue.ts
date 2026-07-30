@@ -21,6 +21,33 @@ export interface JobQueue {
 }
 
 /**
+ * Serverless scheduling boundary. It records no resident timers because a
+ * function can be frozen immediately after returning. GameScheduler still
+ * persists the current player's deadline before calling schedule(), which
+ * leaves enough durable state for the upcoming cron/reconciliation worker.
+ */
+export class PassiveJobQueue implements JobQueue {
+  private seq = 0;
+
+  work(_name: string, _handler: (data: unknown) => Promise<void>): void {
+    // A request function must not attach a long-running worker.
+  }
+
+  async schedule(
+    name: string,
+    _runAt: Date,
+    _data: unknown,
+    uniqueKey?: string,
+  ): Promise<string> {
+    return `passive:${name}:${uniqueKey ?? this.seq++}`;
+  }
+
+  async cancel(_id: string): Promise<void> {
+    // No resident timer exists to cancel.
+  }
+}
+
+/**
  * Real single-process timer queue (`setTimeout`), for the zero-setup PGlite mode
  * where there's no Postgres server for pg-boss. Timers don't survive a process
  * restart — on reboot the scheduler re-arms windows from persisted state — which

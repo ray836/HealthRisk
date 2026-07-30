@@ -59,14 +59,27 @@ export async function createDb(opts: CreateDbOptions = {}): Promise<DbHandle> {
   if (url) {
     const max = Math.max(1, Number(process.env.DATABASE_MAX_CONNECTIONS ?? 10) || 10);
     const client = postgres(url, { max });
+    // The generic migration runner uses explicit BEGIN/COMMIT statements.
+    // postgres.js requires those statements to stay on one reserved connection,
+    // so migrations get a short-lived single-connection client while the app
+    // keeps its independently configured pool.
+    const migrationClient = postgres(url, { max: 1 });
     const adapter: SqlMigrationAdapter = {
       execute: async (sql) => {
-        await client.unsafe(sql);
+        await migrationClient.unsafe(sql);
       },
       rows: async <T extends Record<string, unknown>>(sql: string) =>
-        (await client.unsafe(sql)) as unknown as T[],
+        (await migrationClient.unsafe(sql)) as unknown as T[],
     };
-    const migrationVersion = await applyDatabaseMigrations(adapter);
+    let migrationVersion: number;
+    try {
+      migrationVersion = await applyDatabaseMigrations(adapter);
+    } catch (error) {
+      await client.end().catch(() => undefined);
+      throw error;
+    } finally {
+      await migrationClient.end().catch(() => undefined);
+    }
     return {
       db: drizzlePostgres(client),
       kind: 'postgres',

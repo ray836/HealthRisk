@@ -1,5 +1,5 @@
 /**
- * Local HTTP server for playing/testing Exercise Risk.
+ * Shared Express application for local and Vercel runtimes.
  *
  * Wires a GameRepository + interactive TurnApi + orchestrator into a small JSON
  * API, and serves a single-page board UI from /public. State persists by default
@@ -7,7 +7,7 @@
  * DATABASE_URL for a real Postgres, or EXRISK_MEMORY=1 for an ephemeral in-memory
  * store. Hot-seat: the UI acts as whichever player is at the front of the line.
  *
- * Run:  npx tsx src/server/server.ts   (or: npm run serve)
+ * Local entry: src/server/local.ts. Vercel entry: src/server.ts.
  */
 
 import express from 'express';
@@ -20,7 +20,7 @@ import { createDb, type DbHandle } from '../../db/client.js';
 import { TurnApi, TurnError } from '../services/turnApi.js';
 import { openDailySession, handleWindowExpiry, systemClock } from '../services/orchestrator.js';
 import { GameScheduler } from '../services/scheduling/gameScheduler.js';
-import { InProcessJobQueue } from '../services/scheduling/jobQueue.js';
+import { InProcessJobQueue, PassiveJobQueue } from '../services/scheduling/jobQueue.js';
 import { PgBossJobQueue } from '../services/scheduling/pgBossJobQueue.js';
 import { logExercise } from '../services/exerciseApi.js';
 import { ensureTurnStarted } from '../services/turnStart.js';
@@ -61,6 +61,14 @@ let api: TurnApi;
 let scheduler: GameScheduler;
 let database: DbHandle | null = null;
 let durableSchedulerQueue: PgBossJobQueue | null = null;
+let runtimeInitialization: Promise<void> | null = null;
+
+class RuntimeInitializationError extends Error {
+  constructor(cause: unknown) {
+    super('The game service could not initialize.', { cause });
+    this.name = 'RuntimeInitializationError';
+  }
+}
 
 // Auto-resolution here uses the deterministic defensive fallback (a planner that
 // throws) so the demo never needs API credits. Swap in createAiPlanner() to use
@@ -192,8 +200,19 @@ async function gameView(gameId: string, viewerId?: string) {
 }
 
 const app = express();
-if (process.env.TRUST_PROXY === '1') app.set('trust proxy', 1);
+if (process.env.TRUST_PROXY === '1' || process.env.VERCEL === '1') {
+  app.set('trust proxy', 1);
+}
 app.use(express.json());
+
+// Vercel imports the app without running a permanent listener. Initialize the
+// database and request services lazily, once per warm function instance.
+app.use('/api', (_req, _res, next) => {
+  initializeRuntime().then(
+    () => next(),
+    (error: unknown) => next(new RuntimeInitializationError(error)),
+  );
+});
 
 /** Load-balancer/readiness probe. Never returns credentials or game data. */
 app.get('/api/health', async (_req, res) => {
@@ -821,7 +840,57 @@ function demoConfig(): GameConfig {
 const here = path.dirname(fileURLToPath(import.meta.url));
 app.use(express.static(path.join(here, '../../public')));
 
-async function main() {
+// Make startup failures explicit JSON instead of Express's default HTML page.
+app.use(
+  (
+    error: unknown,
+    req: express.Request,
+    res: express.Response,
+    _next: express.NextFunction,
+  ) => {
+    const httpError = error as { status?: unknown; statusCode?: unknown; type?: unknown };
+    const status =
+      typeof httpError.status === 'number'
+        ? httpError.status
+        : typeof httpError.statusCode === 'number'
+          ? httpError.statusCode
+          : null;
+
+    if (status === 400 || httpError.type === 'entity.parse.failed') {
+      res.status(400).json({
+        error: 'invalid_json',
+        message: 'The request body must contain valid JSON.',
+      });
+      return;
+    }
+
+    console.error('Request failed:', error);
+    if (error instanceof RuntimeInitializationError) {
+      res.status(503).json({
+        error: 'service_unavailable',
+        message: error.message,
+      });
+      return;
+    }
+    if (req.path.startsWith('/api/')) {
+      res.status(500).json({ error: 'internal', message: 'The request failed.' });
+      return;
+    }
+    res.status(500).send('The request failed.');
+  },
+);
+
+function initializeRuntime(): Promise<void> {
+  if (!runtimeInitialization) {
+    runtimeInitialization = initializeRuntimeOnce().catch((error) => {
+      runtimeInitialization = null;
+      throw error;
+    });
+  }
+  return runtimeInitialization;
+}
+
+async function initializeRuntimeOnce(): Promise<void> {
   if (process.env.EXRISK_MEMORY) {
     if (process.env.NODE_ENV === 'production') {
       throw new Error('EXRISK_MEMORY cannot be used when NODE_ENV=production');
@@ -837,13 +906,19 @@ async function main() {
   }
   api = new TurnApi({ repo, onPlayerCompleted });
 
-  // Hosted Postgres uses pg-boss so daily deadlines survive restarts. Local
-  // PGlite keeps zero-setup setTimeout timers, then reconstructs them from the
-  // persisted session deadline whenever the app starts again.
+  const isVercel = process.env.VERCEL === '1';
+  const durableQueueUrl =
+    process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
+
+  // A permanent local process can own pg-boss workers. Vercel functions cannot:
+  // they use a passive queue until the request-safe reconciliation endpoint is
+  // added in the next scheduler step.
   const queue =
-    database?.kind === 'postgres' && process.env.DATABASE_URL
-      ? (durableSchedulerQueue = new PgBossJobQueue(process.env.DATABASE_URL))
-      : new InProcessJobQueue();
+    isVercel
+      ? new PassiveJobQueue()
+      : database?.kind === 'postgres' && durableQueueUrl
+        ? (durableSchedulerQueue = new PgBossJobQueue(durableQueueUrl))
+        : new InProcessJobQueue();
   scheduler = new GameScheduler({
     repo,
     planner: throwingPlanner,
@@ -854,12 +929,22 @@ async function main() {
   if (durableSchedulerQueue) {
     await durableSchedulerQueue.start();
     console.log('Turn scheduler: pg-boss (durable)');
+  } else if (isVercel) {
+    console.log('Turn scheduler: passive serverless boundary');
   } else {
     console.log('Turn scheduler: in-process (startup recovery enabled)');
   }
-  const recoveredGames = await scheduler.recoverActiveGames();
-  if (recoveredGames) console.log(`Turn scheduler: restored ${recoveredGames} active game(s)`);
 
+  if (!isVercel) {
+    const recoveredGames = await scheduler.recoverActiveGames();
+    if (recoveredGames) {
+      console.log(`Turn scheduler: restored ${recoveredGames} active game(s)`);
+    }
+  }
+}
+
+export async function startLocalServer(): Promise<void> {
+  await initializeRuntime();
   const port = Number(process.env.PORT ?? 3000);
   const httpServer = app.listen(port, () => {
     console.log(`Exercise Risk demo running at http://localhost:${port}`);
@@ -882,7 +967,4 @@ async function main() {
   });
 }
 
-main().catch((err) => {
-  console.error('Failed to start:', err);
-  process.exit(1);
-});
+export default app;

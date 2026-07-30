@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { InProcessJobQueue } from '../jobQueue.js';
+import { InProcessJobQueue, PassiveJobQueue } from '../jobQueue.js';
 
 afterEach(() => vi.useRealTimers());
 
@@ -52,5 +52,22 @@ describe('InProcessJobQueue', () => {
 
     await vi.advanceTimersByTimeAsync(2500);
     expect(received).toEqual([{ attempt: 1 }]);
+  });
+});
+
+describe('PassiveJobQueue', () => {
+  it('records no resident work while returning stable logical ids', async () => {
+    const q = new PassiveJobQueue();
+    let fired = false;
+    q.work('job', async () => {
+      fired = true;
+    });
+
+    const first = await q.schedule('job', new Date(0), {}, 'same');
+    const second = await q.schedule('job', new Date(0), {}, 'same');
+
+    expect(first).toBe('passive:job:same');
+    expect(second).toBe(first);
+    expect(fired).toBe(false);
   });
 });
