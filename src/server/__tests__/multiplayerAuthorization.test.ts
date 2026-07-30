@@ -12,6 +12,13 @@ interface GameView {
   currentPlayerId: string | null;
   mySeats: string[];
   nextSessionOpensAt: string | null;
+  healthLogging: {
+    allowed: boolean;
+    playerId: string | null;
+    playerName: string | null;
+    appliesTo: 'current_move' | 'upcoming_move' | 'next_move' | null;
+    reason: 'game_not_active' | 'out_of_game' | 'no_seat' | null;
+  };
   schedule: {
     nextSessionOpensAt: string | null;
   };
@@ -19,6 +26,11 @@ interface GameView {
 
 interface GameResult {
   game: GameView;
+}
+
+interface ExerciseResult extends GameResult {
+  deltaTroops: number;
+  dayTotal: number;
 }
 
 let server: Server;
@@ -64,7 +76,7 @@ afterAll(async () => {
 });
 
 describe('multiplayer route authorization', () => {
-  it('only lets the current seat owner auto-resolve and exposes the next daily session', async () => {
+  it('lets active members log health anytime while keeping move actions turn-owned', async () => {
     const password = 'RouteTest@2026';
     const creator = await request<AuthResult>('/api/auth/signup', {
       method: 'POST',
@@ -106,6 +118,20 @@ describe('multiplayer route authorization', () => {
     const currentToken = tokensBySeat.get(game.currentPlayerId!);
     const wrongToken =
       currentToken === creator.body.token ? other.body.token : creator.body.token;
+    const loggedBetweenTurns = await request<ExerciseResult>(`/api/games/${gameId}/exercise`, {
+      method: 'POST',
+      token: wrongToken,
+      body: { revision: game.revision, exerciseKey: 'running', units: 1 },
+    });
+    expect(loggedBetweenTurns.response.status).toBe(200);
+    expect(loggedBetweenTurns.body.deltaTroops).toBe(1);
+    expect(loggedBetweenTurns.body.dayTotal).toBe(1);
+    expect(loggedBetweenTurns.body.game.healthLogging).toMatchObject({
+      allowed: true,
+      appliesTo: 'upcoming_move',
+    });
+    game = loggedBetweenTurns.body.game;
+
     const denied = await request<{ error: string }>(`/api/games/${gameId}/expire`, {
       method: 'POST',
       token: wrongToken,
@@ -130,5 +156,17 @@ describe('multiplayer route authorization', () => {
     expect(game.currentPlayerId).toBeNull();
     expect(game.nextSessionOpensAt).toMatch(/Z$/);
     expect(game.schedule.nextSessionOpensAt).toBe(game.nextSessionOpensAt);
+
+    const loggedAfterMoves = await request<ExerciseResult>(`/api/games/${gameId}/exercise`, {
+      method: 'POST',
+      token: creator.body.token,
+      body: { revision: game.revision, exerciseKey: 'running', units: 1 },
+    });
+    expect(loggedAfterMoves.response.status).toBe(200);
+    expect(loggedAfterMoves.body.game.currentPlayerId).toBeNull();
+    expect(loggedAfterMoves.body.game.healthLogging).toMatchObject({
+      allowed: true,
+      appliesTo: 'next_move',
+    });
   });
 });

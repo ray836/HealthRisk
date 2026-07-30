@@ -45,7 +45,7 @@ import { AuthRateLimiter } from '../services/authRateLimit.js';
 import { claimSeat, claimAllSeats, claimOpenSeat, seatFor } from '../services/membership.js';
 import { createGame } from '../engine/setup.js';
 import { CONTINENTS, CONTINENT_OF, NEIGHBORS } from '../engine/map.js';
-import { currentPlayer } from '../engine/turnSession.js';
+import { currentPlayer, type DailySession } from '../engine/turnSession.js';
 import type { ReinforcePlacement } from '../engine/reinforce.js';
 import type { GameConfig, GameState, HealthRuleGovernance, TerritoryId } from '../engine/types.js';
 
@@ -98,6 +98,21 @@ async function getActor(gameId: string): Promise<{ game: GameState; day: number;
   return { game, day, playerId: session ? currentPlayer(session) : null };
 }
 
+function healthLoggingSeat(
+  game: GameState,
+  session: DailySession | null,
+  ownedSeats: string[],
+): string | null {
+  if (game.status !== 'active') return null;
+  const eligibleSeats = ownedSeats.filter((seat) => {
+    const status = game.players.find((player) => player.id === seat)?.status;
+    return status === 'active' || status === 'auto_piloted';
+  });
+  if (!eligibleSeats.length) return null;
+  const activeSeat = session ? currentPlayer(session) : null;
+  return activeSeat && eligibleSeats.includes(activeSeat) ? activeSeat : eligibleSeats[0]!;
+}
+
 /** Serialize game state for the UI. `viewerId` marks which seat is "you". */
 async function gameView(gameId: string, viewerId?: string) {
   let game = await repo.loadGame(gameId);
@@ -134,8 +149,7 @@ async function gameView(gameId: string, viewerId?: string) {
   const seatOwner = new Map(members.map((m) => [m.playerId, m.userId]));
   const mySeats = viewerId ? members.filter((m) => m.userId === viewerId).map((m) => m.playerId) : [];
   const yourTurn = !!playerId && mySeats.includes(playerId);
-  const dashboardPlayerId =
-    game.status === 'active' ? (yourTurn ? playerId : mySeats[0] ?? null) : null;
+  const dashboardPlayerId = healthLoggingSeat(game, session, mySeats);
   const dashboardTurnState = dashboardPlayerId
     ? await repo.loadTurnState(gameId, game.dayNumber, dashboardPlayerId)
     : null;
@@ -156,6 +170,25 @@ async function gameView(gameId: string, viewerId?: string) {
   const activeMultiplayerGameId = viewerId
     ? await findActiveMultiplayerGame(repo, viewerId)
     : null;
+  const healthLoggingPlayer = dashboardPlayerId
+    ? game.players.find((player) => player.id === dashboardPlayerId) ?? null
+    : null;
+  const healthLoggingAppliesTo =
+    healthLoggingPlayer && playerId === healthLoggingPlayer.id
+      ? turnState?.phase === 'reinforce'
+        ? 'current_move'
+        : 'next_move'
+      : healthLoggingPlayer && session?.queue.includes(healthLoggingPlayer.id)
+        ? 'upcoming_move'
+        : 'next_move';
+  const healthLoggingReason =
+    game.status !== 'active'
+      ? 'game_not_active'
+      : mySeats.length && !healthLoggingPlayer
+        ? 'out_of_game'
+        : !mySeats.length
+          ? 'no_seat'
+          : null;
 
   return {
     id: game.id,
@@ -172,6 +205,13 @@ async function gameView(gameId: string, viewerId?: string) {
     isCreator: mySeats.includes(game.players[0]!.id),
     yourTurn,
     dashboard,
+    healthLogging: {
+      allowed: !!healthLoggingPlayer,
+      playerId: healthLoggingPlayer?.id ?? null,
+      playerName: healthLoggingPlayer?.name ?? null,
+      appliesTo: healthLoggingPlayer ? healthLoggingAppliesTo : null,
+      reason: healthLoggingReason,
+    },
     phase: turnState?.phase ?? 'reinforce',
     startBonus: turnState?.startBonus ?? 0,
     startContinents: turnState?.startContinents ?? [],
@@ -182,7 +222,7 @@ async function gameView(gameId: string, viewerId?: string) {
       timezone: game.config.timezone,
       dailyStartMinuteOfDay: game.config.windowStartMinuteOfDay,
       playerWindowMinutes: scheduledPlayerWindowMinutes,
-      healthCutoffAt: session?.windowExpiresAt ?? null,
+      moveDeadlineAt: session?.windowExpiresAt ?? null,
       nextSessionOpensAt: session?.nextSessionOpensAt ?? null,
       missedTurnPolicy: 'auto_resolve',
     },
@@ -378,6 +418,31 @@ async function actingSeat(req: express.Request, gameId: string): Promise<{ day: 
   const owner = await repo.getMemberBySeat(gameId, currentSeat);
   if (!owner || owner.userId !== user.id) throw new TurnError('not_your_turn', 'It is not your turn');
   return { day: game.dayNumber, playerId: currentSeat };
+}
+
+/**
+ * Health progress belongs to the signed-in user's eligible seat, regardless of
+ * whose move is open. Practice users own every seat, so their current seat is
+ * preferred while a move is in progress.
+ */
+async function healthSeat(req: express.Request, gameId: string): Promise<{ day: number; playerId: string }> {
+  const user = requireUser(req);
+  const game = await repo.loadGame(gameId);
+  if (!game) throw new TurnError('no_game', 'Unknown game');
+  if (game.status !== 'active') {
+    throw new TurnError('game_not_active', 'Health progress can be logged after the game starts');
+  }
+  const members = await repo.listMembers(gameId);
+  const ownedSeats = members
+    .filter((member) => member.userId === user.id)
+    .map((member) => member.playerId);
+  if (!ownedSeats.length) throw new TurnError('no_seat', 'Join this game before logging health progress');
+  const session = await repo.loadSession(gameId, game.dayNumber);
+  const playerId = healthLoggingSeat(game, session, ownedSeats);
+  if (!playerId) {
+    throw new TurnError('not_active_player', 'Players who are out of the game cannot earn troops');
+  }
+  return { day: game.dayNumber, playerId };
 }
 
 async function mutateGame<T>(
@@ -779,7 +844,7 @@ app.post(
   asyncH(async (req, res) => {
     const id = req.params.id as string;
     const out = await mutateGame(req, id, async () => {
-      const { day, playerId } = await actingSeat(req, id);
+      const { day, playerId } = await healthSeat(req, id);
       return logExercise(repo, id, day, playerId, {
         exerciseKey: String(req.body.exerciseKey),
         units: Number(req.body.units),

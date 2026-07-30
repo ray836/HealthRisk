@@ -553,7 +553,7 @@
         <section class="userSection healthSection">
           <div class="userSectionHeading">
             <span class="userSectionIcon">♥</span>
-            <div><h3>Log health progress</h3><p class="muted">Add today’s activity to the current player’s troop bank.</p></div>
+            <div><h3>Log health progress</h3><p class="muted">Log activity anytime. Troops are saved for your current or next move.</p></div>
           </div>
           <div class="goalLogGrid">
             <div class="healthGoalPicker">
@@ -981,9 +981,8 @@
         const notice = $('#endTurnNotice');
         notice.classList.remove('warning');
         if (myBank() > 0) {
-          notice.textContent = `${myBank()} reinforcements are still unplaced and will be lost if you finish now.`;
-          notice.classList.add('warning');
-          $('#endTurnConfirm').textContent = `Finish and lose ${myBank()}`;
+          notice.textContent = `${myBank()} unplaced reinforcement${myBank() === 1 ? '' : 's'} will remain banked for your next move.`;
+          $('#endTurnConfirm').textContent = 'Finish turn';
         } else if (summary.cardPending) {
           const cardTerritory = summary.territoriesCaptured[0];
           notice.textContent = cardTerritory
@@ -1817,10 +1816,26 @@
         $('#logBtn').textContent = checkbox ? 'Mark complete' : 'Log goal';
         const progress = game.dashboard?.exercise?.progress?.find((item) => item.key === cur?.key);
         const completed = checkbox && (progress?.unitsLogged ?? 0) >= 1;
+        const healthLogging = game.healthLogging || {};
+        const active = game.status === 'active' && healthLogging.allowed;
+        let timing = '';
+        if (active) {
+          const target = healthLogging.playerName || 'your player';
+          timing = healthLogging.appliesTo === 'current_move'
+            ? `Available during ${target}'s current move`
+            : healthLogging.appliesTo === 'upcoming_move'
+              ? `Banked for ${target}'s upcoming move`
+              : `Banked for ${target}'s next move`;
+        } else if (healthLogging.reason === 'out_of_game') {
+          timing = 'You are out of this game and can no longer earn troops';
+        } else if (game.status !== 'active') {
+          timing = 'Health progress opens when the game starts';
+        } else {
+          timing = 'Join this game before logging health progress';
+        }
         $('#healthLogHelp').textContent = cur
-          ? `${exercisePickerMeta(cur)}${completed ? ' · completed today' : ''}`
-          : '';
-        const active = !!game.yourTurn && game.status === 'active';
+          ? `${exercisePickerMeta(cur)}${completed ? ' · completed today' : ''} · ${timing}`
+          : timing;
         $('#logBtn').disabled = !active || completed;
         $('#exKey').disabled = !active;
         $('#exUnits').disabled = !active;
@@ -1871,7 +1886,7 @@
         pill.textContent = s >= 3600
           ? `⏳ ${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`
           : `⏳ ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-        pill.title = 'Move and health-progress deadline';
+        pill.title = 'Move deadline';
         pill.style.color = ms < 15 * 60 * 1000 ? '#e05c4b' : '';
         pill.style.display = '';
         if (ms <= 0 && lastExpiryRefreshed !== exp) {
@@ -2061,7 +2076,7 @@
           <div class="dashHero">
             <div class="eyebrow">${player ? player.name : 'Your position'}</div>
             <div class="value">${turnLabel}</div>
-            <div class="sub">${d.controlledContinents.length ? `Controls ${continents}` : 'No complete continent yet'}${isUp && game.windowExpiresAt ? ` · Move & health cutoff ${new Date(game.windowExpiresAt).toLocaleString([], { weekday:'short', hour:'numeric', minute:'2-digit' })}` : ''}${game.status === 'active' && !game.currentPlayerId && game.nextSessionOpensAt ? ` · Next daily session ${formatScheduleTime(game.nextSessionOpensAt)}` : ''}</div>
+            <div class="sub">${d.controlledContinents.length ? `Controls ${continents}` : 'No complete continent yet'}${isUp && game.windowExpiresAt ? ` · Move deadline ${new Date(game.windowExpiresAt).toLocaleString([], { weekday:'short', hour:'numeric', minute:'2-digit' })}` : ''}${game.status === 'active' && !game.currentPlayerId && game.nextSessionOpensAt ? ` · Next daily session ${formatScheduleTime(game.nextSessionOpensAt)}` : ''}</div>
           </div>
           <div class="dashStats">
             <div class="dashStat"><b>${d.territoriesOwned}</b><span>Territories</span></div>
