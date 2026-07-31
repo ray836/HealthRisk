@@ -70,6 +70,16 @@ export interface LobbyHealthVotingView {
   mySelections: string[];
 }
 
+export interface ChatMessageView {
+  id: string;
+  gameId: string;
+  userId: string;
+  playerId: string;
+  username: string;
+  body: string;
+  createdAt: string;
+}
+
 export interface GamePlayerView {
   id: string;
   name: string;
@@ -133,6 +143,7 @@ export interface GameView {
   claimedPlayerCount: number;
   lobbyCapacity: number;
   lobbyHealthVoting: LobbyHealthVotingView;
+  chatMessages: ChatMessageView[];
   players: GamePlayerView[];
   exercises: ExerciseRuleView[];
   categoryTroopCaps: Partial<Record<HealthCategory, number>>;
@@ -152,7 +163,8 @@ export interface HealthRulesRequest {
 }
 
 export interface CreateGameRequest {
-  players: number;
+  /** Required only for locally controlled practice games. */
+  players?: number;
   practice: boolean;
   healthRules?: HealthRulesRequest;
   healthRuleGovernance?: HealthRuleGovernance;
@@ -188,3 +200,11 @@ export interface LogHealthProgressResponse extends GameResponse {
 }
 
 export type GameMutationResponse = GameResponse & Record<string, unknown>;
+
+export interface SendChatMessageRequest {
+  body: string;
+}
+
+export interface SendChatMessageResponse {
+  message: ChatMessageView;
+}

@@ -6,10 +6,26 @@
  * The engine's load→run→save value semantics map directly onto upserts here.
  */
 
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import type { AppDatabase } from '../../db/client.js';
-import { games, sessions, turnStates, exerciseLogs, users, authTokens, members } from '../../db/store.js';
-import type { AuthToken, GameRepository, Member, TurnState, User } from './repository.js';
+import {
+  authTokens,
+  chatMessages,
+  exerciseLogs,
+  games,
+  members,
+  sessions,
+  turnStates,
+  users,
+} from '../../db/store.js';
+import type {
+  AuthToken,
+  ChatMessage,
+  GameRepository,
+  Member,
+  TurnState,
+  User,
+} from './repository.js';
 import type { GameState } from '../engine/types.js';
 import type { DailySession } from '../engine/turnSession.js';
 import type { ExerciseLogEntry } from '../engine/reinforce.js';
@@ -178,5 +194,18 @@ export class DrizzleGameRepository implements GameRepository {
   }
   async listMembersForUser(userId: string): Promise<Member[]> {
     return (await this.db.select().from(members).where(eq(members.userId, userId))) as Member[];
+  }
+  async saveChatMessage(message: ChatMessage): Promise<void> {
+    await this.db.insert(chatMessages).values(message);
+  }
+  async listChatMessages(gameId: string, limit = 50): Promise<ChatMessage[]> {
+    const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 100);
+    const rows = await this.db
+      .select()
+      .from(chatMessages)
+      .where(eq(chatMessages.gameId, gameId))
+      .orderBy(desc(chatMessages.createdAt), desc(chatMessages.id))
+      .limit(boundedLimit);
+    return (rows as ChatMessage[]).reverse();
   }
 }

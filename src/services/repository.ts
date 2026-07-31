@@ -75,6 +75,17 @@ export interface Member {
   userId: string;
 }
 
+/** A public, plain-text message in one multiplayer game's conversation. */
+export interface ChatMessage {
+  id: string;
+  gameId: string;
+  userId: string;
+  playerId: string;
+  username: string;
+  body: string;
+  createdAt: string;
+}
+
 export interface GameRepository {
   /**
    * Run one logical game operation exclusively. Every read-modify-write flow
@@ -107,6 +118,9 @@ export interface GameRepository {
   getMemberBySeat(gameId: string, playerId: string): Promise<Member | null>;
   listMembers(gameId: string): Promise<Member[]>;
   listMembersForUser(userId: string): Promise<Member[]>;
+  saveChatMessage(message: ChatMessage): Promise<void>;
+  /** Oldest-to-newest messages from the most recent bounded page. */
+  listChatMessages(gameId: string, limit?: number): Promise<ChatMessage[]>;
 }
 
 /** Deep-ish clone so callers can't mutate stored state by reference. */
@@ -122,11 +136,17 @@ export class InMemoryGameRepository implements GameRepository {
   private users = new Map<string, User>();
   private tokens = new Map<string, AuthToken>();
   private members = new Map<string, Member>(); // key: gameId:playerId
+  private chatMessages = new Map<string, ChatMessage>();
   private gameLockTails = new Map<string, Promise<void>>();
 
-  constructor(seed?: { games?: GameState[]; sessions?: DailySession[] }) {
+  constructor(seed?: {
+    games?: GameState[];
+    sessions?: DailySession[];
+    chatMessages?: ChatMessage[];
+  }) {
     for (const g of seed?.games ?? []) this.games.set(g.id, clone(g));
     for (const s of seed?.sessions ?? []) this.sessions.set(this.key(s.gameId, s.dayNumber), clone(s));
+    for (const message of seed?.chatMessages ?? []) this.chatMessages.set(message.id, clone(message));
   }
 
   private key(gameId: string, dayNumber: number): string {
@@ -238,5 +258,17 @@ export class InMemoryGameRepository implements GameRepository {
   }
   async listMembersForUser(userId: string): Promise<Member[]> {
     return [...this.members.values()].filter((m) => m.userId === userId).map(clone);
+  }
+  async saveChatMessage(message: ChatMessage): Promise<void> {
+    this.chatMessages.set(message.id, clone(message));
+  }
+  async listChatMessages(gameId: string, limit = 50): Promise<ChatMessage[]> {
+    const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 100);
+    return [...this.chatMessages.values()]
+      .filter((message) => message.gameId === gameId)
+      .sort((left, right) =>
+        left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id))
+      .slice(-boundedLimit)
+      .map(clone);
   }
 }

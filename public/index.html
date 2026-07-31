@@ -442,6 +442,42 @@
       .cardFact b { display:block; margin-top:3px; font-size:12px; }
       #cardDetailOwnership { margin:14px 0 0; padding:10px; border-left:3px solid #5e9fe9; border-radius:0 7px 7px 0; background:#182535; color:#c7d3df; font-size:11px; }
       @media (max-width:620px){ .cardDetailPanel{ grid-template-columns:1fr; max-height:calc(100vh - 32px); overflow:auto; } #cardDetailFace .territoryCard{ min-height:210px; } }
+      #chatLauncher { position:fixed; right:18px; bottom:18px; z-index:34; display:none; align-items:center; gap:8px; min-height:44px; padding:9px 13px; border-color:#527aa7; border-radius:999px; background:linear-gradient(145deg,#294c70,#203b58); box-shadow:0 12px 30px rgba(0,0,0,.38); font-weight:750; }
+      #chatLauncher.show { display:flex; }
+      #chatLauncher:hover,#chatLauncher[aria-expanded="true"] { border-color:#76a9df; background:linear-gradient(145deg,#315a83,#254666); }
+      #chatUnread { display:none; min-width:20px; height:20px; place-items:center; padding:0 5px; border:1px solid #ffb0a8; border-radius:999px; background:#d9534f; color:#fff; font-size:10px; }
+      #chatUnread.show { display:grid; }
+      #chatPanel { position:fixed; right:18px; bottom:74px; z-index:34; display:none; flex-direction:column; width:min(360px,calc(100vw - 32px)); height:min(520px,calc(100vh - 104px)); overflow:hidden; border:1px solid #4d6888; border-radius:16px; background:#121a24; box-shadow:0 22px 60px rgba(0,0,0,.5); }
+      #chatPanel.open { display:flex; }
+      .chatHeader { display:grid; grid-template-columns:40px minmax(0,1fr) auto; gap:10px; align-items:center; padding:13px 14px; border-bottom:1px solid #30445a; background:linear-gradient(145deg,#21354c,#172434); }
+      .chatHeaderIcon { display:grid; place-items:center; width:40px; height:40px; border:1px solid #4c7199; border-radius:12px; background:#274666; font-size:20px; }
+      .chatHeader h2 { margin:0; font-size:15px; }
+      .chatHeader p { margin:2px 0 0; color:#94a5b8; font-size:10px; }
+      #chatClose { width:34px; height:34px; padding:0; border-radius:10px; background:#1a2735; font-size:17px; }
+      #chatMessages { flex:1; display:flex; flex-direction:column; gap:10px; overflow:auto; padding:14px; background:radial-gradient(circle at 50% 0,rgba(64,102,145,.12),transparent 38%),#101720; }
+      .chatEmpty { margin:auto; padding:18px; color:#8492a3; text-align:center; }
+      .chatEmpty span { display:block; margin-bottom:6px; font-size:28px; }
+      .chatMessage { display:grid; grid-template-columns:30px minmax(0,1fr); gap:8px; align-items:start; }
+      .chatMessage.self { grid-template-columns:minmax(0,1fr) 30px; }
+      .chatMessage.self .chatAvatar { grid-column:2; }
+      .chatMessage.self .chatBubble { grid-column:1; grid-row:1; justify-self:end; border-color:#4d75a0; background:#244463; }
+      .chatAvatar { display:grid; place-items:center; width:30px; height:30px; border:1px solid color-mix(in srgb,var(--chat-color,#6ea8fe) 70%,#fff); border-radius:10px; background:color-mix(in srgb,var(--chat-color,#6ea8fe) 25%,#172231); font-size:12px; font-weight:800; }
+      .chatBubble { width:fit-content; max-width:100%; padding:8px 10px; border:1px solid #34475c; border-radius:4px 12px 12px; background:#1b2633; }
+      .chatMessage.self .chatBubble { border-radius:12px 4px 12px 12px; }
+      .chatMeta { display:flex; align-items:center; gap:6px; margin-bottom:3px; color:#91a1b4; font-size:9px; }
+      .chatMeta b { overflow:hidden; color:#cbd8e6; text-overflow:ellipsis; white-space:nowrap; }
+      .chatBody { overflow-wrap:anywhere; color:#eef3f8; font-size:12px; line-height:1.42; }
+      .chatComposer { padding:11px; border-top:1px solid #304156; background:#17212d; }
+      .chatComposerRow { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:end; }
+      #chatInput { width:100%; min-height:42px; max-height:98px; resize:vertical; padding:9px 10px; border:1px solid #405873; border-radius:10px; background:#101822; color:#eef3f8; font:inherit; }
+      #chatInput:focus { outline:none; border-color:#6b9bcf; box-shadow:0 0 0 2px rgba(107,155,207,.15); }
+      #chatSend { min-width:62px; min-height:42px; border-color:#5683b2; background:#2b5278; font-weight:750; }
+      .chatComposerMeta { display:flex; justify-content:space-between; gap:8px; margin-top:5px; color:#7f8c9c; font-size:9px; }
+      #chatError { color:#ef948b; }
+      @media (max-width:620px) {
+        #chatLauncher { right:12px; bottom:12px; }
+        #chatPanel { inset:auto 0 0; width:100%; height:min(70vh,590px); border-right:0; border-bottom:0; border-left:0; border-radius:18px 18px 0 0; }
+      }
       #gameToast { position:fixed; top:68px; right:18px; z-index:60; max-width:320px; padding:11px 14px; border:1px solid #5984b5; border-radius:10px; background:#20344d; color:#f4f7fb; box-shadow:0 12px 32px rgba(0,0,0,.34); opacity:0; transform:translateY(-8px); pointer-events:none; transition:opacity .18s ease,transform .18s ease; }
       #gameToast.show { opacity:1; transform:translateY(0); }
       #eliminationBanner { display:none; margin:12px 16px 0; padding:10px 14px; border:1px solid #804b55; border-radius:10px; background:linear-gradient(90deg,#351f26,#222632); color:#f5dce0; box-shadow:0 7px 22px rgba(0,0,0,.2); }
@@ -536,6 +572,33 @@
 
       <section class="panel" id="board"></section>
     </main>
+
+    <button id="chatLauncher" type="button" aria-controls="chatPanel" aria-expanded="false">
+      <span aria-hidden="true">💬</span>
+      <span id="chatLauncherLabel">Game chat</span>
+      <span id="chatUnread" aria-label="Unread messages"></span>
+    </button>
+    <aside id="chatPanel" aria-labelledby="chatTitle">
+      <div class="chatHeader">
+        <span class="chatHeaderIcon" aria-hidden="true">💬</span>
+        <div>
+          <h2 id="chatTitle">Game chat</h2>
+          <p id="chatSubtitle">Conversation with your game</p>
+        </div>
+        <button id="chatClose" type="button" aria-label="Close chat">×</button>
+      </div>
+      <div id="chatMessages" aria-live="polite"></div>
+      <form id="chatForm" class="chatComposer">
+        <div class="chatComposerRow">
+          <textarea id="chatInput" rows="2" maxlength="500" placeholder="Message your game…" aria-label="Chat message"></textarea>
+          <button id="chatSend" type="submit">Send</button>
+        </div>
+        <div class="chatComposerMeta">
+          <span id="chatError" role="alert"></span>
+          <span id="chatCount">0/500</span>
+        </div>
+      </form>
+    </aside>
 
     <div id="winOverlay"><div class="card">
       <h2 id="winText"></h2>
@@ -768,6 +831,10 @@
       let lobbyVoteDraftRevision = null;
       let lobbyVoteDraftRulesVersion = null;
       let lobbyVoteDirty = false;
+      let chatOpen = false;
+      let chatGameId = null;
+      let chatKnownIds = new Set();
+      let chatUnreadCount = 0;
       const apiBaseUrl =
         document.querySelector('meta[name="healthrisk-api-base-url"]')?.content ||
         globalThis.HEALTHRISK_API_BASE_URL ||
@@ -989,6 +1056,132 @@
         toast.classList.add('show');
         clearTimeout(toastTimer);
         toastTimer = setTimeout(() => toast.classList.remove('show'), 3600);
+      }
+
+      function chatTime(value) {
+        try {
+          return new Date(value).toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
+        } catch {
+          return '';
+        }
+      }
+
+      function setChatOpen(open) {
+        chatOpen = Boolean(open);
+        if (chatOpen) chatUnreadCount = 0;
+        renderChat();
+        if (chatOpen) requestAnimationFrame(() => $('#chatInput').focus());
+      }
+
+      function renderChat() {
+        const launcher = $('#chatLauncher');
+        const panel = $('#chatPanel');
+        const available = Boolean(
+          game &&
+          !game.practice &&
+          currentUser &&
+          (game.mySeats || []).length,
+        );
+        launcher.classList.toggle('show', available);
+        if (!available) {
+          chatOpen = false;
+          panel.classList.remove('open');
+          launcher.setAttribute('aria-expanded', 'false');
+          return;
+        }
+
+        const messages = game.chatMessages || [];
+        if (chatGameId !== game.id) {
+          chatGameId = game.id;
+          chatKnownIds = new Set(messages.map((message) => message.id));
+          chatUnreadCount = 0;
+          chatOpen = false;
+          $('#chatMessages').dataset.signature = '';
+        } else {
+          for (const message of messages) {
+            if (chatKnownIds.has(message.id)) continue;
+            chatKnownIds.add(message.id);
+            if (!chatOpen && message.userId !== currentUser.id) chatUnreadCount += 1;
+          }
+        }
+        if (chatOpen) chatUnreadCount = 0;
+
+        const lobby = game.status === 'setup';
+        const title = lobby ? 'Lobby chat' : 'Game chat';
+        $('#chatTitle').textContent = title;
+        $('#chatLauncherLabel').textContent = title;
+        $('#chatSubtitle').textContent = lobby
+          ? `${game.claimedPlayerCount} joined · This chat continues into the game`
+          : game.status === 'cancelled'
+            ? 'This conversation is now read-only'
+            : `${game.players.length} players · Same conversation since the lobby`;
+        launcher.setAttribute('aria-expanded', String(chatOpen));
+        panel.classList.toggle('open', chatOpen);
+
+        const unread = $('#chatUnread');
+        unread.textContent = chatUnreadCount > 9 ? '9+' : String(chatUnreadCount);
+        unread.classList.toggle('show', chatUnreadCount > 0);
+
+        const list = $('#chatMessages');
+        const signature = messages.map((message) => message.id).join('|');
+        if (list.dataset.signature !== signature) {
+          const wasAtBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 60;
+          list.innerHTML = messages.length
+            ? messages.map((message) => {
+              const self = message.userId === currentUser.id;
+              const player = game.players.find((candidate) => candidate.id === message.playerId);
+              const initial = (message.username || '?').slice(0, 1).toUpperCase();
+              return `<div class="chatMessage${self ? ' self' : ''}">
+                <span class="chatAvatar" style="--chat-color:${player?.color || '#6ea8fe'}">${esc(initial)}</span>
+                <div class="chatBubble">
+                  <div class="chatMeta"><b>${esc(self ? 'You' : message.username)}</b><span>${esc(chatTime(message.createdAt))}</span></div>
+                  <div class="chatBody">${esc(message.body).replace(/\n/g, '<br>')}</div>
+                </div>
+              </div>`;
+            }).join('')
+            : '<div class="chatEmpty"><span>💬</span><b>Start the conversation</b><div>Say hello before the first move.</div></div>';
+          list.dataset.signature = signature;
+          if (chatOpen && (wasAtBottom || messages.length <= 1)) {
+            requestAnimationFrame(() => { list.scrollTop = list.scrollHeight; });
+          }
+        }
+
+        const canSend = game.status !== 'cancelled';
+        $('#chatInput').disabled = !canSend;
+        $('#chatSend').disabled = !canSend;
+        $('#chatInput').placeholder = canSend ? 'Message your game…' : 'Chat closed';
+      }
+
+      async function sendChatMessage() {
+        if (!gameId || !game || game.practice || !(game.mySeats || []).length) return;
+        const input = $('#chatInput');
+        const body = input.value.trim();
+        if (!body) {
+          $('#chatError').textContent = 'Write a message first.';
+          input.focus();
+          return;
+        }
+        $('#chatError').textContent = '';
+        $('#chatSend').disabled = true;
+        try {
+          const data = await api.sendChatMessage(gameId, body);
+          const messages = game.chatMessages || [];
+          if (!messages.some((message) => message.id === data.message.id)) {
+            game.chatMessages = [...messages, data.message].slice(-50);
+          }
+          input.value = '';
+          $('#chatCount').textContent = '0/500';
+          chatKnownIds.add(data.message.id);
+          renderChat();
+          requestAnimationFrame(() => {
+            const list = $('#chatMessages');
+            list.scrollTop = list.scrollHeight;
+          });
+        } catch (error) {
+          $('#chatError').textContent = error.message;
+        } finally {
+          renderChat();
+        }
       }
 
       function markRecentAction(territoryIds) {
@@ -1251,6 +1444,7 @@
 
       function renderNoGameState() {
         if (game) return;
+        renderChat();
         const signedIn = !!currentUser;
         const board = $('#board');
         const optionsBody = $('#gameOptionsBody');
@@ -2759,6 +2953,7 @@
         });
         syncMode();
         renderMeta();
+        renderChat();
         renderGameActivity();
         renderDashboard();
         renderExercise();
@@ -3006,6 +3201,22 @@
       $('#userPanelBtn').onclick = () => openUserPanel();
       $('#userPanelClose').onclick = closeUserPanel;
       $('#userPanelOverlay').onclick = (e) => { if (e.target === $('#userPanelOverlay')) closeUserPanel(); };
+      $('#chatLauncher').onclick = () => setChatOpen(!chatOpen);
+      $('#chatClose').onclick = () => setChatOpen(false);
+      $('#chatForm').onsubmit = (event) => {
+        event.preventDefault();
+        sendChatMessage();
+      };
+      $('#chatInput').oninput = () => {
+        $('#chatCount').textContent = `${$('#chatInput').value.length}/500`;
+        if ($('#chatError').textContent) $('#chatError').textContent = '';
+      };
+      $('#chatInput').onkeydown = (event) => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+          event.preventDefault();
+          sendChatMessage();
+        }
+      };
       $('#cardDetailClose').onclick = closeCardDetails;
       $('#cardDetailOverlay').onclick = (e) => { if (e.target === $('#cardDetailOverlay')) closeCardDetails(); };
       document.addEventListener('keydown', (e) => {
@@ -3015,6 +3226,7 @@
           closeCardDetails();
           closeBattleResult();
           closeEndTurnReview();
+          setChatOpen(false);
         }
       });
       $('#authPass').onkeydown = (e) => { if (e.key === 'Enter') doAuth('login'); };

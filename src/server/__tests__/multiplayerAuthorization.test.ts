@@ -29,6 +29,14 @@ interface GameView {
   pendingHealthRuleProposal?: unknown;
   claimedPlayerCount: number;
   lobbyCapacity: number;
+  chatMessages: Array<{
+    id: string;
+    userId: string;
+    playerId: string;
+    username: string;
+    body: string;
+    createdAt: string;
+  }>;
   lobbyHealthVoting: {
     voteCounts: Record<string, number>;
     submittedPlayerIds: string[];
@@ -58,6 +66,10 @@ interface GameResult {
 interface ExerciseResult extends GameResult {
   deltaTroops: number;
   dayTotal: number;
+}
+
+interface ChatResult {
+  message: GameView['chatMessages'][number];
 }
 
 let server: Server;
@@ -293,5 +305,102 @@ describe('multiplayer route authorization', () => {
       allowed: true,
       appliesTo: 'next_move',
     });
+  });
+
+  it('keeps one member-only conversation from the lobby into the active game', async () => {
+    const password = 'RouteTest@2026';
+    const creator = await request<AuthResult>('/api/auth/signup', {
+      method: 'POST',
+      body: { username: 'chat-route-owner', password },
+    });
+    const other = await request<AuthResult>('/api/auth/signup', {
+      method: 'POST',
+      body: { username: 'chat-route-guest', password },
+    });
+    const created = await request<GameView>('/api/games', {
+      method: 'POST',
+      token: creator.body.token,
+      body: { practice: false },
+    });
+    const gameId = created.body.id;
+
+    const lobbyMessage = await request<ChatResult>(`/api/games/${gameId}/chat`, {
+      method: 'POST',
+      token: creator.body.token,
+      body: { body: 'Welcome to the lobby!' },
+    });
+    expect(lobbyMessage.response.status).toBe(201);
+    expect(lobbyMessage.body.message).toMatchObject({
+      username: 'chat-route-owner',
+      playerId: 'p1',
+      body: 'Welcome to the lobby!',
+    });
+
+    const denied = await request<{ error: string }>(`/api/games/${gameId}/chat`, {
+      method: 'POST',
+      token: other.body.token,
+      body: { body: 'Can I talk before joining?' },
+    });
+    expect(denied.response.status).toBe(403);
+    expect(denied.body.error).toBe('no_seat');
+
+    const joined = await request<GameResult>(`/api/games/${gameId}/join`, {
+      method: 'POST',
+      token: other.body.token,
+      body: {},
+    });
+    expect(joined.body.game.chatMessages).toHaveLength(1);
+
+    await request<ChatResult>(`/api/games/${gameId}/chat`, {
+      method: 'POST',
+      token: other.body.token,
+      body: { body: 'Thanks — ready to play.' },
+    });
+    let latest = await request<GameView>(`/api/games/${gameId}`, {
+      token: creator.body.token,
+    });
+    expect(latest.body.chatMessages.map((message) => message.body)).toEqual([
+      'Welcome to the lobby!',
+      'Thanks — ready to play.',
+    ]);
+
+    const creatorVote = await request<GameResult>(`/api/games/${gameId}/lobby-health-votes`, {
+      method: 'POST',
+      token: creator.body.token,
+      body: {
+        revision: latest.body.revision,
+        exerciseKeys: latest.body.exercises.map((exercise) => exercise.key),
+      },
+    });
+    const guestVote = await request<GameResult>(`/api/games/${gameId}/lobby-health-votes`, {
+      method: 'POST',
+      token: other.body.token,
+      body: {
+        revision: creatorVote.body.game.revision,
+        exerciseKeys: creatorVote.body.game.exercises.map((exercise) => exercise.key),
+      },
+    });
+    const started = await request<GameResult>(`/api/games/${gameId}/start`, {
+      method: 'POST',
+      token: creator.body.token,
+      body: { revision: guestVote.body.game.revision },
+    });
+    expect(started.body.game.status).toBe('active');
+    expect(started.body.game.chatMessages).toHaveLength(2);
+
+    const activeMessage = await request<ChatResult>(`/api/games/${gameId}/chat`, {
+      method: 'POST',
+      token: creator.body.token,
+      body: { body: 'The game has started.' },
+    });
+    expect(activeMessage.response.status).toBe(201);
+    const guestView = await request<GameView>(`/api/games/${gameId}`, {
+      token: other.body.token,
+    });
+    expect(guestView.body.chatMessages.map((message) => message.body)).toEqual([
+      'Welcome to the lobby!',
+      'Thanks — ready to play.',
+      'The game has started.',
+    ]);
   });
 });

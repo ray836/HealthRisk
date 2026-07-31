@@ -108,4 +108,31 @@ describe('DrizzleGameRepository (PGlite in-memory)', () => {
     expect((await repo.getMemberBySeat('g1', 'p1'))!.userId).toBe('u2');
     expect(await repo.listMembers('g1')).toHaveLength(1);
   });
+
+  it('stores a bounded game conversation in chronological order', async () => {
+    const newer = {
+      id: 'chat-2',
+      gameId: 'g1',
+      userId: 'u2',
+      playerId: 'p2',
+      username: 'bob',
+      body: 'Ready to play?',
+      createdAt: '2026-07-30T18:01:00.000Z',
+    };
+    const older = {
+      id: 'chat-1',
+      gameId: 'g1',
+      userId: 'u1',
+      playerId: 'p1',
+      username: 'alice',
+      body: 'Welcome!',
+      createdAt: '2026-07-30T18:00:00.000Z',
+    };
+    await repo.saveChatMessage(newer);
+    await repo.saveChatMessage(older);
+
+    expect(await repo.listChatMessages('g1')).toEqual([older, newer]);
+    expect(await repo.listChatMessages('g1', 1)).toEqual([newer]);
+    expect(await repo.listChatMessages('another-game')).toEqual([]);
+  });
 });

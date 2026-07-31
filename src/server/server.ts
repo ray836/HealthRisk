@@ -31,6 +31,7 @@ import { logExercise } from '../services/exerciseApi.js';
 import { ensureTurnStarted } from '../services/turnStart.js';
 import { buildPlayerDashboard } from '../services/playerDashboard.js';
 import { buildSharedHealthProgress } from '../services/sharedHealthProgress.js';
+import { sendGameChatMessage } from '../services/gameChat.js';
 import {
   submitLobbyHealthVotes,
   summarizeLobbyHealthVotes,
@@ -167,6 +168,10 @@ async function gameView(gameId: string, viewerId?: string) {
     sharedHealthProgress.map((progress) => [progress.playerId, progress]),
   );
   const practice = await isPracticeGame(repo, game);
+  const chatMessages =
+    mySeats.length && !practice
+      ? await repo.listChatMessages(gameId, 50)
+      : [];
   const lobbyParticipantIds = game.players
     .filter((player) => seatOwner.has(player.id))
     .map((player) => player.id);
@@ -266,6 +271,7 @@ async function gameView(gameId: string, viewerId?: string) {
           Object.prototype.hasOwnProperty.call(game.lobbyHealthVotes ?? {}, playerId)),
       mySelections: myLobbyHealthSelections,
     },
+    chatMessages,
     players: visiblePlayers.map((p) => ({
       id: p.id,
       name: p.name,
@@ -845,6 +851,16 @@ app.get(
     const view = await gameView(id, user.id);
     if (!view) return res.status(404).json({ error: 'no_game' });
     res.json(view);
+  }),
+);
+
+app.post(
+  '/api/games/:id/chat',
+  asyncH(async (req, res) => {
+    const user = requireUser(req);
+    const id = req.params.id as string;
+    const message = await sendGameChatMessage(repo, id, user, req.body?.body);
+    res.status(201).json({ message });
   }),
 );
 

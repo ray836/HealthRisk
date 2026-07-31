@@ -75,6 +75,16 @@ export const members = pgTable(
   (t) => ({ pk: primaryKey({ columns: [t.gameId, t.playerId] }) }),
 );
 
+export const chatMessages = pgTable('er_chat_messages', {
+  id: text('id').primaryKey(),
+  gameId: text('game_id').notNull(),
+  userId: text('user_id').notNull(),
+  playerId: text('player_id').notNull(),
+  username: text('username').notNull(),
+  body: text('body').notNull(),
+  createdAt: text('created_at').notNull(),
+});
+
 /** Initial snapshot-store schema, applied by db/migrations.ts as migration 1. */
 export const DDL_STATEMENTS: string[] = [
   `CREATE TABLE IF NOT EXISTS er_games (

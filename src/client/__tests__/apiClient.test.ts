@@ -53,6 +53,23 @@ describe('HealthRisk API client', () => {
     });
   });
 
+  it('sends chat independently from game revision state', async () => {
+    const fetch = vi.fn<ApiFetch>(async () => response(201, {
+      message: { id: 'chat-1', body: 'Hello team' },
+    }));
+    const api = createApiClient({ fetch });
+
+    await api.sendChatMessage('game-1', 'Hello team');
+
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/games/game-1/chat',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ body: 'Hello team' }),
+      }),
+    );
+  });
+
   it('normalizes server failures and refreshes after a stale revision', async () => {
     const onStaleGame = vi.fn(async () => undefined);
     const api = createApiClient({

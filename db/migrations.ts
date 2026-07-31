@@ -46,6 +46,23 @@ export const DATABASE_MIGRATIONS: DatabaseMigration[] = [
       'ALTER TABLE er_auth_tokens ALTER COLUMN expires_at SET NOT NULL',
     ],
   },
+  {
+    version: 4,
+    name: 'game_chat',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS er_chat_messages (
+         id text PRIMARY KEY,
+         game_id text NOT NULL,
+         user_id text NOT NULL,
+         player_id text NOT NULL,
+         username text NOT NULL,
+         body text NOT NULL,
+         created_at text NOT NULL
+       )`,
+      `CREATE INDEX IF NOT EXISTS er_chat_messages_game_created_idx
+       ON er_chat_messages (game_id, created_at)`,
+    ],
+  },
 ];
 
 export const LATEST_DATABASE_VERSION =

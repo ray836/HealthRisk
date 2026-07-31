@@ -7,6 +7,7 @@ import type {
   JoinGameResponse,
   LogHealthProgressRequest,
   LogHealthProgressResponse,
+  SendChatMessageResponse,
 } from '../src/client/apiTypes.js';
 
 export interface ApiErrorOptions {
@@ -63,6 +64,7 @@ export interface HealthRiskApiClient {
   getGame(gameId: string): Promise<GameView>;
   createGame(input: CreateGameRequest): Promise<GameView>;
   joinGame(gameId: string): Promise<JoinGameResponse>;
+  sendChatMessage(gameId: string, body: string): Promise<SendChatMessageResponse>;
   logHealthProgress(
     gameId: string,
     input: LogHealthProgressRequest,

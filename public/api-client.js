@@ -131,6 +131,8 @@ export function createApiClient(options = {}) {
     getGame: (gameId) => get(`/api/games/${encodeURIComponent(gameId)}`),
     createGame: (input) => post('/api/games', input),
     joinGame: (gameId) => post(`/api/games/${encodeURIComponent(gameId)}/join`),
+    sendChatMessage: (gameId, body) =>
+      post(`/api/games/${encodeURIComponent(gameId)}/chat`, { body }),
     logHealthProgress: (gameId, input, revision) =>
       post(`/api/games/${encodeURIComponent(gameId)}/exercise`, input, { revision }),
   };
