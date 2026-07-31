@@ -104,6 +104,42 @@ export interface LeaveGameResult {
   session?: DailySession;
 }
 
+/** Creator-only lobby moderation. Removed seats immediately become joinable. */
+export async function removeLobbyMember(
+  repo: GameRepository,
+  gameId: string,
+  creatorUserId: string,
+  playerId: string,
+): Promise<GameState> {
+  const game = await repo.loadGame(gameId);
+  if (!game) throw new TurnError('no_game', 'Unknown game');
+  await requireCreator(repo, game, creatorUserId);
+  if (game.status !== 'setup') {
+    throw new TurnError('game_started', 'Players can only be removed before the game starts');
+  }
+  if (playerId === game.players[0]?.id) {
+    throw new TurnError('cannot_remove_creator', 'The creator can cancel the lobby instead');
+  }
+  if (!(await repo.getMemberBySeat(gameId, playerId))) {
+    throw new TurnError('no_seat', 'That player is no longer in the lobby');
+  }
+
+  await repo.deleteMember(gameId, playerId);
+  const lobbyHealthVotes = { ...(game.lobbyHealthVotes ?? {}) };
+  delete lobbyHealthVotes[playerId];
+  const updated: GameState = {
+    ...game,
+    lobbyHealthVotes,
+    players: game.players.map((player) =>
+      player.id === playerId
+        ? { ...player, name: `Player ${Number(playerId.replace(/\D/g, '')) || ''}`.trim() }
+        : player,
+    ),
+  };
+  await repo.saveGame(updated);
+  return updated;
+}
+
 /**
  * Before play, a non-creator simply frees their seat; the creator cancels the
  * lobby. During play, leaving is an explicit forfeit and their land becomes

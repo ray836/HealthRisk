@@ -60,7 +60,66 @@ export const DATABASE_MIGRATIONS: DatabaseMigration[] = [
          created_at text NOT NULL
        )`,
       `CREATE INDEX IF NOT EXISTS er_chat_messages_game_created_idx
-       ON er_chat_messages (game_id, created_at)`,
+      ON er_chat_messages (game_id, created_at)`,
+    ],
+  },
+  {
+    version: 5,
+    name: 'mobile_readiness',
+    statements: [
+      'ALTER TABLE er_chat_messages ADD COLUMN IF NOT EXISTS deleted_at text',
+      `CREATE TABLE IF NOT EXISTS er_idempotency_records (
+         user_id text NOT NULL,
+         scope text NOT NULL,
+         idempotency_key text NOT NULL,
+         request_hash text NOT NULL,
+         response_status integer,
+         response_body jsonb,
+         created_at text NOT NULL,
+         expires_at text NOT NULL,
+         PRIMARY KEY (user_id, scope, idempotency_key)
+       )`,
+      'CREATE INDEX IF NOT EXISTS er_idempotency_expiry_idx ON er_idempotency_records (expires_at)',
+      `CREATE TABLE IF NOT EXISTS er_device_registrations (
+         id text PRIMARY KEY,
+         user_id text NOT NULL,
+         platform text NOT NULL,
+         token text NOT NULL UNIQUE,
+         environment text NOT NULL,
+         created_at text NOT NULL,
+         updated_at text NOT NULL,
+         disabled_at text
+       )`,
+      'CREATE INDEX IF NOT EXISTS er_device_registrations_user_idx ON er_device_registrations (user_id)',
+      `CREATE TABLE IF NOT EXISTS er_user_notifications (
+         id text PRIMARY KEY,
+         user_id text NOT NULL,
+         game_id text,
+         type text NOT NULL,
+         title text NOT NULL,
+         body text NOT NULL,
+         deep_link text,
+         created_at text NOT NULL,
+         read_at text
+       )`,
+      'CREATE INDEX IF NOT EXISTS er_user_notifications_user_created_idx ON er_user_notifications (user_id, created_at)',
+      `CREATE TABLE IF NOT EXISTS er_chat_mutes (
+         game_id text NOT NULL,
+         user_id text NOT NULL,
+         muted_user_id text NOT NULL,
+         created_at text NOT NULL,
+         PRIMARY KEY (game_id, user_id, muted_user_id)
+       )`,
+      `CREATE TABLE IF NOT EXISTS er_chat_reports (
+         id text PRIMARY KEY,
+         game_id text NOT NULL,
+         message_id text NOT NULL,
+         reporter_user_id text NOT NULL,
+         reason text NOT NULL,
+         status text NOT NULL,
+         created_at text NOT NULL
+       )`,
+      'CREATE UNIQUE INDEX IF NOT EXISTS er_chat_reports_unique_idx ON er_chat_reports (message_id, reporter_user_id)',
     ],
   },
 ];

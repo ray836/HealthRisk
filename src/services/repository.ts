@@ -84,6 +84,60 @@ export interface ChatMessage {
   username: string;
   body: string;
   createdAt: string;
+  deletedAt?: string | null;
+}
+
+export interface IdempotencyRecord {
+  userId: string;
+  scope: string;
+  key: string;
+  requestHash: string;
+  responseStatus: number | null;
+  responseBody: unknown | null;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface DeviceRegistration {
+  id: string;
+  userId: string;
+  platform: 'ios';
+  token: string;
+  environment: 'sandbox' | 'production';
+  createdAt: string;
+  updatedAt: string;
+  disabledAt?: string | null;
+}
+
+export type NotificationType =
+  | 'lobby_joined'
+  | 'lobby_removed'
+  | 'game_started'
+  | 'turn_started'
+  | 'turn_deadline'
+  | 'chat_message'
+  | 'game_finished';
+
+export interface UserNotification {
+  id: string;
+  userId: string;
+  gameId?: string | null;
+  type: NotificationType;
+  title: string;
+  body: string;
+  deepLink?: string | null;
+  createdAt: string;
+  readAt?: string | null;
+}
+
+export interface ChatReport {
+  id: string;
+  gameId: string;
+  messageId: string;
+  reporterUserId: string;
+  reason: string;
+  status: 'open' | 'reviewed';
+  createdAt: string;
 }
 
 export interface GameRepository {
@@ -109,9 +163,11 @@ export interface GameRepository {
   createUser(user: User): Promise<void>;
   getUserByUsername(username: string): Promise<User | null>;
   getUserById(id: string): Promise<User | null>;
+  deleteUser(id: string): Promise<void>;
   createToken(token: AuthToken): Promise<void>;
   getToken(tokenHash: string): Promise<AuthToken | null>;
   deleteToken(tokenHash: string): Promise<void>;
+  deleteTokensForUser(userId: string): Promise<void>;
   setMember(member: Member): Promise<void>;
   deleteMember(gameId: string, playerId: string): Promise<void>;
   getMemberByUser(gameId: string, userId: string): Promise<Member | null>;
@@ -121,6 +177,25 @@ export interface GameRepository {
   saveChatMessage(message: ChatMessage): Promise<void>;
   /** Oldest-to-newest messages from the most recent bounded page. */
   listChatMessages(gameId: string, limit?: number): Promise<ChatMessage[]>;
+  getChatMessage(messageId: string): Promise<ChatMessage | null>;
+  softDeleteChatMessage(messageId: string, deletedAt: string): Promise<void>;
+  countRecentChatMessages(gameId: string, userId: string, since: string): Promise<number>;
+  setChatMute(gameId: string, userId: string, mutedUserId: string, createdAt: string): Promise<void>;
+  deleteChatMute(gameId: string, userId: string, mutedUserId: string): Promise<void>;
+  listMutedUserIds(gameId: string, userId: string): Promise<string[]>;
+  saveChatReport(report: ChatReport): Promise<void>;
+  anonymizeChatMessagesByUser(userId: string): Promise<void>;
+  reserveIdempotency(record: IdempotencyRecord): Promise<boolean>;
+  getIdempotency(userId: string, scope: string, key: string): Promise<IdempotencyRecord | null>;
+  completeIdempotency(userId: string, scope: string, key: string, responseStatus: number, responseBody: unknown): Promise<void>;
+  deleteIdempotency(userId: string, scope: string, key: string): Promise<void>;
+  upsertDeviceRegistration(registration: DeviceRegistration): Promise<DeviceRegistration>;
+  listDeviceRegistrations(userId: string): Promise<DeviceRegistration[]>;
+  deleteDeviceRegistration(id: string, userId: string): Promise<void>;
+  saveNotification(notification: UserNotification): Promise<void>;
+  listNotifications(userId: string, limit?: number): Promise<UserNotification[]>;
+  markNotificationRead(id: string, userId: string, readAt: string): Promise<void>;
+  deletePrivateUserData(userId: string): Promise<void>;
 }
 
 /** Deep-ish clone so callers can't mutate stored state by reference. */
@@ -137,6 +212,11 @@ export class InMemoryGameRepository implements GameRepository {
   private tokens = new Map<string, AuthToken>();
   private members = new Map<string, Member>(); // key: gameId:playerId
   private chatMessages = new Map<string, ChatMessage>();
+  private idempotency = new Map<string, IdempotencyRecord>();
+  private devices = new Map<string, DeviceRegistration>();
+  private notifications = new Map<string, UserNotification>();
+  private chatMutes = new Map<string, string>();
+  private chatReports = new Map<string, ChatReport>();
   private gameLockTails = new Map<string, Promise<void>>();
 
   constructor(seed?: {
@@ -229,6 +309,9 @@ export class InMemoryGameRepository implements GameRepository {
     const u = this.users.get(id);
     return u ? clone(u) : null;
   }
+  async deleteUser(id: string): Promise<void> {
+    this.users.delete(id);
+  }
   async createToken(token: AuthToken): Promise<void> {
     this.tokens.set(token.tokenHash, clone(token));
   }
@@ -238,6 +321,11 @@ export class InMemoryGameRepository implements GameRepository {
   }
   async deleteToken(tokenHash: string): Promise<void> {
     this.tokens.delete(tokenHash);
+  }
+  async deleteTokensForUser(userId: string): Promise<void> {
+    for (const [key, token] of this.tokens) {
+      if (token.userId === userId) this.tokens.delete(key);
+    }
   }
   async setMember(member: Member): Promise<void> {
     this.members.set(`${member.gameId}:${member.playerId}`, clone(member));
@@ -270,5 +358,115 @@ export class InMemoryGameRepository implements GameRepository {
         left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id))
       .slice(-boundedLimit)
       .map(clone);
+  }
+  async getChatMessage(messageId: string): Promise<ChatMessage | null> {
+    const message = this.chatMessages.get(messageId);
+    return message ? clone(message) : null;
+  }
+  async softDeleteChatMessage(messageId: string, deletedAt: string): Promise<void> {
+    const message = this.chatMessages.get(messageId);
+    if (message) this.chatMessages.set(messageId, { ...message, body: '', deletedAt });
+  }
+  async countRecentChatMessages(gameId: string, userId: string, since: string): Promise<number> {
+    return [...this.chatMessages.values()].filter(
+      (message) => message.gameId === gameId && message.userId === userId && message.createdAt >= since,
+    ).length;
+  }
+  async setChatMute(gameId: string, userId: string, mutedUserId: string, createdAt: string): Promise<void> {
+    this.chatMutes.set(`${gameId}:${userId}:${mutedUserId}`, createdAt);
+  }
+  async deleteChatMute(gameId: string, userId: string, mutedUserId: string): Promise<void> {
+    this.chatMutes.delete(`${gameId}:${userId}:${mutedUserId}`);
+  }
+  async listMutedUserIds(gameId: string, userId: string): Promise<string[]> {
+    const prefix = `${gameId}:${userId}:`;
+    return [...this.chatMutes.keys()]
+      .filter((key) => key.startsWith(prefix))
+      .map((key) => key.slice(prefix.length));
+  }
+  async saveChatReport(report: ChatReport): Promise<void> {
+    const duplicate = [...this.chatReports.values()].some(
+      (item) => item.messageId === report.messageId && item.reporterUserId === report.reporterUserId,
+    );
+    if (!duplicate) this.chatReports.set(report.id, clone(report));
+  }
+  async anonymizeChatMessagesByUser(userId: string): Promise<void> {
+    for (const [id, message] of this.chatMessages) {
+      if (message.userId === userId) {
+        this.chatMessages.set(id, { ...message, userId: 'deleted-user', username: 'Deleted player' });
+      }
+    }
+  }
+  private idempotencyKey(userId: string, scope: string, key: string): string {
+    return `${userId}:${scope}:${key}`;
+  }
+  async reserveIdempotency(record: IdempotencyRecord): Promise<boolean> {
+    const key = this.idempotencyKey(record.userId, record.scope, record.key);
+    if (this.idempotency.has(key)) return false;
+    this.idempotency.set(key, clone(record));
+    return true;
+  }
+  async getIdempotency(userId: string, scope: string, key: string): Promise<IdempotencyRecord | null> {
+    const record = this.idempotency.get(this.idempotencyKey(userId, scope, key));
+    return record ? clone(record) : null;
+  }
+  async completeIdempotency(
+    userId: string,
+    scope: string,
+    key: string,
+    responseStatus: number,
+    responseBody: unknown,
+  ): Promise<void> {
+    const storageKey = this.idempotencyKey(userId, scope, key);
+    const record = this.idempotency.get(storageKey);
+    if (record) {
+      this.idempotency.set(storageKey, { ...record, responseStatus, responseBody: clone(responseBody) });
+    }
+  }
+  async deleteIdempotency(userId: string, scope: string, key: string): Promise<void> {
+    this.idempotency.delete(this.idempotencyKey(userId, scope, key));
+  }
+  async upsertDeviceRegistration(registration: DeviceRegistration): Promise<DeviceRegistration> {
+    const existing = [...this.devices.values()].find((device) => device.token === registration.token);
+    const stored = existing
+      ? { ...registration, id: existing.id, createdAt: existing.createdAt }
+      : registration;
+    this.devices.set(stored.id, clone(stored));
+    return clone(stored);
+  }
+  async listDeviceRegistrations(userId: string): Promise<DeviceRegistration[]> {
+    return [...this.devices.values()].filter((device) => device.userId === userId).map(clone);
+  }
+  async deleteDeviceRegistration(id: string, userId: string): Promise<void> {
+    const device = this.devices.get(id);
+    if (device?.userId === userId) this.devices.delete(id);
+  }
+  async saveNotification(notification: UserNotification): Promise<void> {
+    this.notifications.set(notification.id, clone(notification));
+  }
+  async listNotifications(userId: string, limit = 50): Promise<UserNotification[]> {
+    const bounded = Math.min(Math.max(Math.trunc(limit), 1), 100);
+    return [...this.notifications.values()]
+      .filter((notification) => notification.userId === userId)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+      .slice(0, bounded)
+      .map(clone);
+  }
+  async markNotificationRead(id: string, userId: string, readAt: string): Promise<void> {
+    const notification = this.notifications.get(id);
+    if (notification?.userId === userId) this.notifications.set(id, { ...notification, readAt });
+  }
+  async deletePrivateUserData(userId: string): Promise<void> {
+    for (const [id, device] of this.devices) if (device.userId === userId) this.devices.delete(id);
+    for (const [id, notification] of this.notifications) {
+      if (notification.userId === userId) this.notifications.delete(id);
+    }
+    for (const [key] of this.chatMutes) if (key.includes(`:${userId}:`)) this.chatMutes.delete(key);
+    for (const [id, report] of this.chatReports) {
+      if (report.reporterUserId === userId) this.chatReports.delete(id);
+    }
+    for (const [key, record] of this.idempotency) {
+      if (record.userId === userId) this.idempotency.delete(key);
+    }
   }
 }

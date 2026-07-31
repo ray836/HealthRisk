@@ -81,12 +81,14 @@ async function request<T>(
     method?: string;
     token?: string;
     body?: Record<string, unknown>;
+    idempotencyKey?: string;
   } = {},
 ): Promise<{ response: Response; body: T }> {
   const response = await fetch(`${baseUrl}${path}`, {
     method: options.method ?? 'GET',
     headers: {
       ...(options.token ? { authorization: `Bearer ${options.token}` } : {}),
+      ...(options.idempotencyKey ? { 'idempotency-key': options.idempotencyKey } : {}),
       ...(options.body ? { 'content-type': 'application/json' } : {}),
     },
     ...(options.body ? { body: JSON.stringify(options.body) } : {}),
@@ -164,7 +166,7 @@ describe('multiplayer route authorization', () => {
       token: other.body.token,
       body: { ...rules, revision: guestView.body.revision },
     });
-    expect(denied.response.status).toBe(400);
+    expect(denied.response.status).toBe(403);
     expect(denied.body.error).toBe('not_creator');
 
     const creatorView = await request<GameView>(`/api/games/${gameId}`, {
@@ -402,5 +404,76 @@ describe('multiplayer route authorization', () => {
       'Thanks — ready to play.',
       'The game has started.',
     ]);
+  });
+
+  it('replays mobile retries and exposes lifecycle and notification resources', async () => {
+    const password = 'RouteTest@2026';
+    const creator = await request<AuthResult>('/api/auth/signup', {
+      method: 'POST',
+      body: { username: 'mobile-route-owner', password },
+    });
+    const guest = await request<AuthResult>('/api/auth/signup', {
+      method: 'POST',
+      body: { username: 'mobile-route-guest', password },
+    });
+    const createInput = { practice: false };
+    const first = await request<GameView>('/api/games', {
+      method: 'POST',
+      token: creator.body.token,
+      idempotencyKey: 'create-mobile-game-1',
+      body: createInput,
+    });
+    const replay = await request<GameView>('/api/games', {
+      method: 'POST',
+      token: creator.body.token,
+      idempotencyKey: 'create-mobile-game-1',
+      body: createInput,
+    });
+    expect(first.response.status).toBe(201);
+    expect(replay.response.status).toBe(201);
+    expect(replay.response.headers.get('idempotency-replayed')).toBe('true');
+    expect(replay.body.id).toBe(first.body.id);
+
+    const gameId = first.body.id;
+    await request<GameResult>(`/api/games/${gameId}/join`, {
+      method: 'POST',
+      token: guest.body.token,
+      idempotencyKey: 'join-mobile-game-1',
+      body: {},
+    });
+    const games = await request<{ games: Array<{ id: string; status: string; inviteLink: string }> }>(
+      '/api/games',
+      { token: creator.body.token },
+    );
+    expect(games.body.games).toContainEqual(expect.objectContaining({
+      id: gameId,
+      status: 'setup',
+      inviteLink: `/join/${gameId}`,
+    }));
+
+    const latest = await request<GameView>(`/api/games/${gameId}`, { token: creator.body.token });
+    const guestSeat = latest.body.players.find((player) => player.name === 'mobile-route-guest')!.id;
+    const removed = await request<GameResult>(`/api/games/${gameId}/members/${guestSeat}`, {
+      method: 'DELETE',
+      token: creator.body.token,
+      idempotencyKey: 'remove-mobile-guest-1',
+      body: { revision: latest.body.revision },
+    });
+    expect(removed.response.status).toBe(200);
+    expect(removed.body.game.players).toHaveLength(1);
+
+    const notifications = await request<{
+      notifications: Array<{ type: string; title: string }>;
+      unreadCount: number;
+    }>('/api/notifications', { token: guest.body.token });
+    expect(notifications.body.notifications).toContainEqual(expect.objectContaining({
+      type: 'lobby_removed',
+      title: 'Removed from lobby',
+    }));
+    expect(notifications.body.unreadCount).toBeGreaterThan(0);
+
+    const inviteResponse = await fetch(`${baseUrl}/join/${gameId}`);
+    expect(inviteResponse.status).toBe(200);
+    expect(await inviteResponse.text()).toContain('Exercise Risk');
   });
 });

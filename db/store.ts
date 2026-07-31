@@ -83,6 +83,69 @@ export const chatMessages = pgTable('er_chat_messages', {
   username: text('username').notNull(),
   body: text('body').notNull(),
   createdAt: text('created_at').notNull(),
+  deletedAt: text('deleted_at'),
+});
+
+/** Durable request results used to make native retries safe. */
+export const idempotencyRecords = pgTable(
+  'er_idempotency_records',
+  {
+    userId: text('user_id').notNull(),
+    scope: text('scope').notNull(),
+    key: text('idempotency_key').notNull(),
+    requestHash: text('request_hash').notNull(),
+    responseStatus: integer('response_status'),
+    responseBody: jsonb('response_body'),
+    createdAt: text('created_at').notNull(),
+    expiresAt: text('expires_at').notNull(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.userId, t.scope, t.key] }) }),
+);
+
+/** APNs device tokens registered by native clients. */
+export const deviceRegistrations = pgTable('er_device_registrations', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  platform: text('platform').notNull(),
+  token: text('token').notNull().unique(),
+  environment: text('environment').notNull(),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  disabledAt: text('disabled_at'),
+});
+
+/** Durable notification inbox; APNs is a delivery optimization over this data. */
+export const userNotifications = pgTable('er_user_notifications', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  gameId: text('game_id'),
+  type: text('type').notNull(),
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  deepLink: text('deep_link'),
+  createdAt: text('created_at').notNull(),
+  readAt: text('read_at'),
+});
+
+export const chatMutes = pgTable(
+  'er_chat_mutes',
+  {
+    gameId: text('game_id').notNull(),
+    userId: text('user_id').notNull(),
+    mutedUserId: text('muted_user_id').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.gameId, t.userId, t.mutedUserId] }) }),
+);
+
+export const chatReports = pgTable('er_chat_reports', {
+  id: text('id').primaryKey(),
+  gameId: text('game_id').notNull(),
+  messageId: text('message_id').notNull(),
+  reporterUserId: text('reporter_user_id').notNull(),
+  reason: text('reason').notNull(),
+  status: text('status').notNull(),
+  createdAt: text('created_at').notNull(),
 });
 
 /** Initial snapshot-store schema, applied by db/migrations.ts as migration 1. */

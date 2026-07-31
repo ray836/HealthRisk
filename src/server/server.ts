@@ -13,6 +13,7 @@
 import express from 'express';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 import { InMemoryGameRepository, type GameRepository } from '../services/repository.js';
 import { DrizzleGameRepository } from '../services/drizzleRepository.js';
@@ -31,13 +32,22 @@ import { logExercise } from '../services/exerciseApi.js';
 import { ensureTurnStarted } from '../services/turnStart.js';
 import { buildPlayerDashboard } from '../services/playerDashboard.js';
 import { buildSharedHealthProgress } from '../services/sharedHealthProgress.js';
-import { sendGameChatMessage } from '../services/gameChat.js';
+import {
+  deleteOwnChatMessage,
+  reportChatMessage,
+  sendGameChatMessage,
+  setChatMuted,
+} from '../services/gameChat.js';
 import {
   submitLobbyHealthVotes,
   summarizeLobbyHealthVotes,
 } from '../services/lobbyHealthVoting.js';
 import { findActiveMultiplayerGame, isPracticeGame } from '../services/activeGame.js';
-import { leaveGame, startLobbyGame } from '../services/gameLifecycle.js';
+import { leaveGame, removeLobbyMember, startLobbyGame } from '../services/gameLifecycle.js';
+import { listUserGames } from '../services/gameLibrary.js';
+import { deleteAccount } from '../services/accountLifecycle.js';
+import { executeIdempotent } from '../services/idempotency.js';
+import { NotificationService } from '../services/notifications.js';
 import {
   proposeHealthRules,
   voteOnHealthRules,
@@ -73,6 +83,7 @@ let scheduler: GameScheduler;
 let database: DbHandle | null = null;
 let durableSchedulerQueue: PgBossJobQueue | null = null;
 let runtimeInitialization: Promise<void> | null = null;
+let notifier: NotificationService;
 
 class RuntimeInitializationError extends Error {
   constructor(cause: unknown) {
@@ -92,6 +103,44 @@ const throwingPlanner = async () => {
 // window timer (or opens the next day).
 async function onPlayerCompleted(gameId: string, dayNumber: number, playerId: string): Promise<void> {
   await scheduler.onPlayerCompleted(gameId, dayNumber, playerId);
+  const game = await repo.loadGame(gameId);
+  if (!game || game.practice) return;
+  if (game.status === 'finished') {
+    const winner = game.players.find((player) => player.id === game.winnerId)?.name ?? 'A player';
+    await notifier.notifyGameMembers(gameId, {
+      type: 'game_finished',
+      title: 'Game finished',
+      body: `${winner} won the game.`,
+      deepLink: gameDeepLink(gameId),
+    });
+    return;
+  }
+  const session = await repo.loadSession(gameId, game.dayNumber);
+  const nextPlayerId = session ? currentPlayer(session) : null;
+  const owner = nextPlayerId ? await repo.getMemberBySeat(gameId, nextPlayerId) : null;
+  if (owner) {
+    await notifier.notifyUsers([owner.userId], {
+      gameId,
+      type: 'turn_started',
+      title: 'Your move is ready',
+      body: `Your HealthRisk turn is ready for Day ${game.dayNumber}.`,
+      deepLink: gameDeepLink(gameId),
+    });
+  }
+}
+
+function publicAppUrl(): string {
+  return String(process.env.PUBLIC_APP_URL ?? '').replace(/\/$/, '');
+}
+
+function gameDeepLink(gameId: string): string {
+  const base = publicAppUrl();
+  return base ? `${base}/game/${encodeURIComponent(gameId)}` : `/game/${encodeURIComponent(gameId)}`;
+}
+
+function inviteLink(gameId: string): string {
+  const base = publicAppUrl();
+  return base ? `${base}/join/${encodeURIComponent(gameId)}` : `/join/${encodeURIComponent(gameId)}`;
 }
 
 
@@ -168,9 +217,16 @@ async function gameView(gameId: string, viewerId?: string) {
     sharedHealthProgress.map((progress) => [progress.playerId, progress]),
   );
   const practice = await isPracticeGame(repo, game);
+  const mutedUserIds =
+    viewerId && mySeats.length && !practice
+      ? await repo.listMutedUserIds(gameId, viewerId)
+      : [];
+  const mutedUsers = new Set(mutedUserIds);
   const chatMessages =
     mySeats.length && !practice
-      ? await repo.listChatMessages(gameId, 50)
+      ? (await repo.listChatMessages(gameId, 50)).filter(
+          (message) => !mutedUsers.has(message.userId),
+        )
       : [];
   const lobbyParticipantIds = game.players
     .filter((player) => seatOwner.has(player.id))
@@ -272,6 +328,7 @@ async function gameView(gameId: string, viewerId?: string) {
       mySelections: myLobbyHealthSelections,
     },
     chatMessages,
+    mutedUserIds,
     players: visiblePlayers.map((p) => ({
       id: p.id,
       name: p.name,
@@ -316,7 +373,13 @@ const app = express();
 if (process.env.TRUST_PROXY === '1' || process.env.VERCEL === '1') {
   app.set('trust proxy', 1);
 }
-app.use(express.json());
+app.use(express.json({ limit: '32kb' }));
+app.use((req, res, next) => {
+  const requestId = req.header('x-request-id')?.slice(0, 128) || randomUUID();
+  (req as express.Request & { requestId: string }).requestId = requestId;
+  res.setHeader('X-Request-Id', requestId);
+  next();
+});
 
 // Vercel imports the app without running a permanent listener. Initialize the
 // database and request services lazily, once per warm function instance.
@@ -468,6 +531,31 @@ async function actingSeat(req: express.Request, gameId: string): Promise<{ day: 
   return { day: game.dayNumber, playerId: currentSeat };
 }
 
+function requestId(req: express.Request): string {
+  return (req as express.Request & { requestId?: string }).requestId ?? 'unknown';
+}
+
+async function respondIdempotently<T>(
+  req: express.Request,
+  res: express.Response,
+  scope: string,
+  action: () => Promise<{ status: number; body: T }>,
+): Promise<void> {
+  const user = requireUser(req);
+  const result = await executeIdempotent(
+    repo,
+    {
+      userId: user.id,
+      scope,
+      key: req.header('idempotency-key') ?? undefined,
+      payload: req.body ?? null,
+    },
+    action,
+  );
+  if (result.replayed) res.setHeader('Idempotency-Replayed', 'true');
+  res.status(result.status).json(result.body);
+}
+
 /**
  * Health progress belongs to the signed-in user's eligible seat, regardless of
  * whose move is open. Practice users own every seat, so their current seat is
@@ -528,23 +616,47 @@ const asyncH =
   (req: express.Request, res: express.Response) => {
     fn(req, res).catch((err) => {
       if (err instanceof TurnError) {
-        const code =
-          err.code === 'unauthorized'
-            ? 401
-            : err.code === 'auth_rate_limited'
-              ? 429
-              : err.code === 'no_seat'
-                ? 403
-                : err.code === 'not_your_turn' || err.code === 'stale_game'
-                  ? 409
-                  : 400;
-        res.status(code).json({ error: err.code, message: err.message });
+        const status = apiStatus(err.code);
+        res.status(status).json({
+          error: err.code,
+          message: err.message,
+          requestId: requestId(req),
+          retryable:
+            err.code === 'auth_rate_limited' ||
+            err.code === 'chat_rate_limited' ||
+            err.code === 'idempotency_in_progress',
+        });
       } else {
         console.error(err);
-        res.status(500).json({ error: 'internal', message: String((err as Error)?.message ?? err) });
+        res.status(500).json({
+          error: 'internal',
+          message: 'The request failed.',
+          requestId: requestId(req),
+          retryable: true,
+        });
       }
     });
   };
+
+function apiStatus(code: string): number {
+  if (code === 'unauthorized' || code === 'bad_credentials') return 401;
+  if (
+    code === 'no_seat' ||
+    code === 'not_creator' ||
+    code === 'not_message_owner'
+  ) return 403;
+  if (code === 'no_game' || code === 'no_message') return 404;
+  if (code === 'auth_rate_limited' || code === 'chat_rate_limited') return 429;
+  if (
+    code === 'not_your_turn' ||
+    code === 'stale_game' ||
+    code === 'active_multiplayer_game' ||
+    code === 'game_started' ||
+    code === 'idempotency_conflict' ||
+    code === 'idempotency_in_progress'
+  ) return 409;
+  return 400;
+}
 
 /**
  * Vercel Cron sends CRON_SECRET as a Bearer credential. This route deliberately
@@ -560,7 +672,12 @@ app.get(
         process.env.CRON_SECRET,
       )
     ) {
-      res.status(401).json({ error: 'unauthorized' });
+      res.status(401).json({
+        error: 'unauthorized',
+        message: 'A valid cron credential is required.',
+        requestId: requestId(req),
+        retryable: false,
+      });
       return;
     }
     const result = await reconcileAllDue({
@@ -624,6 +741,116 @@ app.get(
   }),
 );
 
+app.delete(
+  '/api/account',
+  asyncH(async (req, res) => {
+    const user = requireUser(req);
+    await deleteAccount(repo, user.id, String(req.body?.password ?? ''));
+    clearSessionCookie(res);
+    res.json({ ok: true });
+  }),
+);
+
+app.get(
+  '/api/meta',
+  asyncH(async (_req, res) => {
+    res.json({
+      apiVersion: 1,
+      minimumIosApiVersion: 1,
+      openApiUrl: '/openapi.json',
+      capabilities: {
+        idempotency: true,
+        notifications: true,
+        apnsConfigured: notifier.pushConfigured,
+        universalInvites: true,
+        chatSafety: true,
+      },
+    });
+  }),
+);
+
+app.get(
+  '/api/games',
+  asyncH(async (req, res) => {
+    const user = requireUser(req);
+    const games = await listUserGames(repo, user.id);
+    res.json({
+      games: games.map((game) => ({
+        ...game,
+        inviteLink: game.status === 'setup' && !game.practice ? inviteLink(game.id) : null,
+        deepLink: gameDeepLink(game.id),
+      })),
+    });
+  }),
+);
+
+app.get(
+  '/api/devices',
+  asyncH(async (req, res) => {
+    const user = requireUser(req);
+    const devices = await repo.listDeviceRegistrations(user.id);
+    res.json({ devices: devices.map(publicDeviceRegistration) });
+  }),
+);
+
+app.post(
+  '/api/devices',
+  asyncH(async (req, res) => {
+    const user = requireUser(req);
+    const device = await notifier.registerIosDevice(user.id, req.body ?? {});
+    res.status(201).json({ device: publicDeviceRegistration(device) });
+  }),
+);
+
+app.delete(
+  '/api/devices/:id',
+  asyncH(async (req, res) => {
+    const user = requireUser(req);
+    await repo.deleteDeviceRegistration(String(req.params.id), user.id);
+    res.json({ ok: true });
+  }),
+);
+
+app.get(
+  '/api/notifications',
+  asyncH(async (req, res) => {
+    const user = requireUser(req);
+    const limit = Number(req.query.limit ?? 50);
+    const notifications = await repo.listNotifications(user.id, limit);
+    res.json({
+      notifications,
+      unreadCount: notifications.filter((notification) => !notification.readAt).length,
+    });
+  }),
+);
+
+app.post(
+  '/api/notifications/:id/read',
+  asyncH(async (req, res) => {
+    const user = requireUser(req);
+    await repo.markNotificationRead(String(req.params.id), user.id, new Date().toISOString());
+    res.json({ ok: true });
+  }),
+);
+
+function publicDeviceRegistration(device: {
+  id: string;
+  platform: string;
+  environment: string;
+  token: string;
+  createdAt: string;
+  updatedAt: string;
+}) {
+  return {
+    id: device.id,
+    platform: device.platform,
+    environment: device.environment,
+    tokenSuffix: device.token.slice(-6),
+    createdAt: device.createdAt,
+    updatedAt: device.updatedAt,
+  };
+}
+
 /**
  * Create a game. Multiplayer always opens four possible join slots but exposes
  * only the people who actually join; practice keeps an explicit seat count.
@@ -632,6 +859,7 @@ app.post(
   '/api/games',
   asyncH(async (req, res) => {
     const user = requireUser(req);
+    await respondIdempotently(req, res, 'games:create', async () => {
     const practice = Boolean(req.body?.practice);
     const count = practice
       ? Math.min(Math.max(Number(req.body?.players ?? 2), 2), MULTIPLAYER_LOBBY_CAPACITY)
@@ -690,7 +918,8 @@ app.post(
         await scheduler.armNextWindow(id, 0);
       }
     });
-    res.json(await gameView(id, user.id));
+    return { status: 201, body: await gameView(id, user.id) };
+    });
   }),
 );
 
@@ -699,12 +928,36 @@ app.post(
   asyncH(async (req, res) => {
     const user = requireUser(req);
     const id = req.params.id as string;
-    await mutateGame(req, id, async () => {
-      await startLobbyGame(repo, id, user.id);
-      await openDailySession(repo, id, 0);
-      await scheduler.armNextWindow(id, 0);
+    await respondIdempotently(req, res, `game:${id}:start`, async () => {
+      await mutateGame(req, id, async () => {
+        await startLobbyGame(repo, id, user.id);
+        await openDailySession(repo, id, 0);
+        await scheduler.armNextWindow(id, 0);
+      });
+      await notifier.notifyGameMembers(id, {
+        type: 'game_started',
+        title: 'The game has started',
+        body: 'The board is ready. Open HealthRisk to see the first move.',
+        deepLink: gameDeepLink(id),
+        senderUserId: user.id,
+      });
+      const view = await gameView(id, user.id);
+      const owner = view?.currentPlayerId
+        ? await repo.getMemberBySeat(id, view.currentPlayerId)
+        : null;
+      if (owner && owner.userId !== user.id) {
+        await notifier.notifyUsers([owner.userId], {
+          gameId: id,
+          type: 'turn_started',
+          title: 'Your first move is ready',
+          body: view?.windowExpiresAt
+            ? `Your move is open until ${view.windowExpiresAt}.`
+            : 'Your move is ready.',
+          deepLink: gameDeepLink(id),
+        });
+      }
+      return { status: 200, body: { game: view } };
     });
-    res.json({ game: await gameView(id, user.id) });
   }),
 );
 
@@ -713,26 +966,59 @@ app.post(
   asyncH(async (req, res) => {
     const user = requireUser(req);
     const id = req.params.id as string;
-    await mutateGame(req, id, async () => {
-      const before = await getActor(id);
-      const result = await leaveGame(repo, id, user.id);
-      if (
-        result.game.status === 'active' &&
-        result.session &&
-        currentPlayer(result.session) !== before.playerId
-      ) {
-        await scheduler.armNextWindow(id, result.game.dayNumber);
-      }
-    });
-    await loadActiveGameForResponse();
-
-    async function loadActiveGameForResponse() {
-      res.json({
-        ok: true,
-        activeMultiplayerGameId: await findActiveMultiplayerGame(repo, user.id),
-        game: await gameView(id, user.id),
+    await respondIdempotently(req, res, `game:${id}:leave`, async () => {
+      await mutateGame(req, id, async () => {
+        const before = await getActor(id);
+        const result = await leaveGame(repo, id, user.id);
+        if (
+          result.game.status === 'active' &&
+          result.session &&
+          currentPlayer(result.session) !== before.playerId
+        ) {
+          await scheduler.armNextWindow(id, result.game.dayNumber);
+        }
       });
-    }
+      await notifier.notifyGameMembers(id, {
+        type: 'lobby_removed',
+        title: 'Player left',
+        body: `${user.username} left the game.`,
+        deepLink: gameDeepLink(id),
+        senderUserId: user.id,
+      });
+      return {
+        status: 200,
+        body: {
+          ok: true as const,
+          activeMultiplayerGameId: await findActiveMultiplayerGame(repo, user.id),
+          game: await gameView(id, user.id),
+        },
+      };
+    });
+  }),
+);
+
+app.delete(
+  '/api/games/:id/members/:playerId',
+  asyncH(async (req, res) => {
+    const user = requireUser(req);
+    const id = String(req.params.id);
+    const playerId = String(req.params.playerId);
+    const removedMember = await repo.getMemberBySeat(id, playerId);
+    await respondIdempotently(req, res, `game:${id}:remove:${playerId}`, async () => {
+      await mutateGame(req, id, async () => {
+        await removeLobbyMember(repo, id, user.id, playerId);
+      });
+      if (removedMember) {
+        await notifier.notifyUsers([removedMember.userId], {
+          gameId: id,
+          type: 'lobby_removed',
+          title: 'Removed from lobby',
+          body: 'The game creator removed you from the waiting room.',
+          deepLink: inviteLink(id),
+        });
+      }
+      return { status: 200, body: { game: await gameView(id, user.id) } };
+    });
   }),
 );
 
@@ -748,14 +1034,16 @@ app.post(
     if (!creator || creator.userId !== user.id) {
       throw new TurnError('not_creator', 'Only the game creator can propose health-rule changes');
     }
-    await mutateGame(req, id, async () => {
-      try {
-        await proposeHealthRules(repo, id, creatorSeat, req.body as HealthRulesInput);
-      } catch (error) {
-        throw new TurnError('bad_health_rules', (error as Error).message);
-      }
+    await respondIdempotently(req, res, `game:${id}:health-rules:propose`, async () => {
+      await mutateGame(req, id, async () => {
+        try {
+          await proposeHealthRules(repo, id, creatorSeat, req.body as HealthRulesInput);
+        } catch (error) {
+          throw new TurnError('bad_health_rules', (error as Error).message);
+        }
+      });
+      return { status: 200, body: { game: await gameView(id, user.id) } };
     });
-    res.json({ game: await gameView(id, user.id) });
   }),
 );
 
@@ -767,14 +1055,16 @@ app.post(
     const members = await repo.listMembers(id);
     const mySeats = members.filter((member) => member.userId === user.id).map((member) => member.playerId);
     if (!mySeats.length) throw new TurnError('no_seat', 'Join this game before voting');
-    await mutateGame(req, id, async () => {
-      for (const playerId of mySeats) {
-        const latest = await repo.loadGame(id);
-        if (latest?.pendingHealthRuleProposal?.status !== 'pending') break;
-        await voteOnHealthRules(repo, id, playerId, Boolean(req.body?.approve));
-      }
+    await respondIdempotently(req, res, `game:${id}:health-rules:vote`, async () => {
+      await mutateGame(req, id, async () => {
+        for (const playerId of mySeats) {
+          const latest = await repo.loadGame(id);
+          if (latest?.pendingHealthRuleProposal?.status !== 'pending') break;
+          await voteOnHealthRules(repo, id, playerId, Boolean(req.body?.approve));
+        }
+      });
+      return { status: 200, body: { game: await gameView(id, user.id) } };
     });
-    res.json({ game: await gameView(id, user.id) });
   }),
 );
 
@@ -790,28 +1080,42 @@ app.post(
     if (!existing && game.status !== 'setup') {
       throw new TurnError('game_started', 'This game has already started');
     }
-    let seat = existing?.playerId ?? '';
-    await mutateGame(req, gameId, async () => {
-      const latest = (await repo.loadGame(gameId))!;
-      const activeGameId = await findActiveMultiplayerGame(repo, user.id);
-      if (!(await isPracticeGame(repo, latest)) && activeGameId && activeGameId !== gameId) {
-        throw new TurnError(
-          'active_multiplayer_game',
-          `You are already playing an active multiplayer game (${activeGameId})`,
-        );
+    await respondIdempotently(req, res, `game:${gameId}:join`, async () => {
+      let seat = existing?.playerId ?? '';
+      await mutateGame(req, gameId, async () => {
+        const latest = (await repo.loadGame(gameId))!;
+        const activeGameId = await findActiveMultiplayerGame(repo, user.id);
+        if (!(await isPracticeGame(repo, latest)) && activeGameId && activeGameId !== gameId) {
+          throw new TurnError(
+            'active_multiplayer_game',
+            `You are already playing an active multiplayer game (${activeGameId})`,
+          );
+        }
+        seat = await claimOpenSeat(repo, gameId, latest.players.map((p) => p.id), user.id);
+        const lobbyHealthVotes = { ...(latest.lobbyHealthVotes ?? {}) };
+        if (!existing) delete lobbyHealthVotes[seat];
+        await repo.saveGame({
+          ...latest,
+          lobbyHealthVotes,
+          players: latest.players.map((player) =>
+            player.id === seat ? { ...player, name: user.username } : player,
+          ),
+        });
+      }, false);
+      if (!existing) {
+        await notifier.notifyGameMembers(gameId, {
+          type: 'lobby_joined',
+          title: 'A player joined',
+          body: `${user.username} joined the waiting room.`,
+          deepLink: inviteLink(gameId),
+          senderUserId: user.id,
+        });
       }
-      seat = await claimOpenSeat(repo, gameId, latest.players.map((p) => p.id), user.id);
-      const lobbyHealthVotes = { ...(latest.lobbyHealthVotes ?? {}) };
-      if (!existing) delete lobbyHealthVotes[seat];
-      await repo.saveGame({
-        ...latest,
-        lobbyHealthVotes,
-        players: latest.players.map((player) =>
-          player.id === seat ? { ...player, name: user.username } : player,
-        ),
-      });
-    }, false);
-    res.json({ seat, game: await gameView(gameId, user.id) });
+      return {
+        status: 200,
+        body: { seat, game: await gameView(gameId, user.id) },
+      };
+    });
   }),
 );
 
@@ -829,12 +1133,14 @@ app.post(
       throw new TurnError('bad_health_vote', 'Submit a list of selected health goals');
     }
     const exerciseKeys = req.body.exerciseKeys.map((value: unknown) => String(value));
-    await mutateGame(req, id, async () => {
-      for (const playerId of mySeats) {
-        await submitLobbyHealthVotes(repo, id, playerId, exerciseKeys);
-      }
+    await respondIdempotently(req, res, `game:${id}:lobby-health-votes`, async () => {
+      await mutateGame(req, id, async () => {
+        for (const playerId of mySeats) {
+          await submitLobbyHealthVotes(repo, id, playerId, exerciseKeys);
+        }
+      });
+      return { status: 200, body: { game: await gameView(id, user.id) } };
     });
-    res.json({ game: await gameView(id, user.id) });
   }),
 );
 
@@ -843,13 +1149,13 @@ app.get(
   asyncH(async (req, res) => {
     const user = requireUser(req);
     const id = req.params.id as string;
-    if (!(await repo.loadGame(id))) return res.status(404).json({ error: 'no_game' });
+    if (!(await repo.loadGame(id))) throw new TurnError('no_game', 'Unknown game');
     if (!(await seatFor(repo, id, user.id))) {
       throw new TurnError('no_seat', 'Join this game before viewing it');
     }
     await reconcileGameDue({ repo, planner: throwingPlanner }, id);
     const view = await gameView(id, user.id);
-    if (!view) return res.status(404).json({ error: 'no_game' });
+    if (!view) throw new TurnError('no_game', 'Unknown game');
     res.json(view);
   }),
 );
@@ -859,8 +1165,70 @@ app.post(
   asyncH(async (req, res) => {
     const user = requireUser(req);
     const id = req.params.id as string;
-    const message = await sendGameChatMessage(repo, id, user, req.body?.body);
-    res.status(201).json({ message });
+    await respondIdempotently(req, res, `game:${id}:chat`, async () => {
+      const message = await sendGameChatMessage(repo, id, user, req.body?.body);
+      await notifier.notifyGameMembers(id, {
+        type: 'chat_message',
+        title: user.username,
+        body: message.body.length > 120 ? `${message.body.slice(0, 117)}…` : message.body,
+        deepLink: gameDeepLink(id),
+        senderUserId: user.id,
+      });
+      return { status: 201, body: { message } };
+    });
+  }),
+);
+
+app.delete(
+  '/api/games/:id/chat/:messageId',
+  asyncH(async (req, res) => {
+    const user = requireUser(req);
+    const id = String(req.params.id);
+    const messageId = String(req.params.messageId);
+    await respondIdempotently(req, res, `game:${id}:chat:delete:${messageId}`, async () => {
+      await deleteOwnChatMessage(repo, id, messageId, user.id);
+      return { status: 200, body: { ok: true as const } };
+    });
+  }),
+);
+
+app.post(
+  '/api/games/:id/chat/mutes',
+  asyncH(async (req, res) => {
+    const user = requireUser(req);
+    const id = String(req.params.id);
+    const mutedUserId = String(req.body?.userId ?? '');
+    await setChatMuted(repo, id, user.id, mutedUserId, true);
+    res.json({ ok: true, mutedUserIds: await repo.listMutedUserIds(id, user.id) });
+  }),
+);
+
+app.delete(
+  '/api/games/:id/chat/mutes/:userId',
+  asyncH(async (req, res) => {
+    const user = requireUser(req);
+    const id = String(req.params.id);
+    await setChatMuted(repo, id, user.id, String(req.params.userId), false);
+    res.json({ ok: true, mutedUserIds: await repo.listMutedUserIds(id, user.id) });
+  }),
+);
+
+app.post(
+  '/api/games/:id/chat/:messageId/report',
+  asyncH(async (req, res) => {
+    const user = requireUser(req);
+    const id = String(req.params.id);
+    const messageId = String(req.params.messageId);
+    await respondIdempotently(req, res, `game:${id}:chat:report:${messageId}`, async () => {
+      const reportId = await reportChatMessage(
+        repo,
+        id,
+        messageId,
+        user.id,
+        req.body?.reason,
+      );
+      return { status: 201, body: { ok: true as const, reportId } };
+    });
   }),
 );
 
@@ -869,11 +1237,13 @@ app.post(
   asyncH(async (req, res) => {
     const id = req.params.id as string;
     const placements = reinforcementPlacements(req.body?.placements);
-    const out = await mutateGame(req, id, async () => {
-      const { day, playerId } = await actingSeat(req, id);
-      return api.placeReinforcements(id, day, playerId, placements);
+    await respondIdempotently(req, res, `game:${id}:reinforce`, async () => {
+      const out = await mutateGame(req, id, async () => {
+        const { day, playerId } = await actingSeat(req, id);
+        return api.placeReinforcements(id, day, playerId, placements);
+      });
+      return { status: 200, body: { ...out, game: await gameView(id, currentUser(req)?.id) } };
     });
-    res.json({ ...out, game: await gameView(id, currentUser(req)?.id) });
   }),
 );
 
@@ -881,11 +1251,13 @@ app.post(
   '/api/games/:id/cards/trade',
   asyncH(async (req, res) => {
     const id = req.params.id as string;
-    const out = await mutateGame(req, id, async () => {
-      const { day, playerId } = await actingSeat(req, id);
-      return api.tradeCards(id, day, playerId);
+    await respondIdempotently(req, res, `game:${id}:cards:trade`, async () => {
+      const out = await mutateGame(req, id, async () => {
+        const { day, playerId } = await actingSeat(req, id);
+        return api.tradeCards(id, day, playerId);
+      });
+      return { status: 200, body: { ...out, game: await gameView(id, currentUser(req)?.id) } };
     });
-    res.json({ ...out, game: await gameView(id, currentUser(req)?.id) });
   }),
 );
 
@@ -893,11 +1265,13 @@ app.post(
   '/api/games/:id/attack',
   asyncH(async (req, res) => {
     const id = req.params.id as string;
-    const result = await mutateGame(req, id, async () => {
-      const { day, playerId } = await actingSeat(req, id);
-      return api.attack(id, day, playerId, req.body);
+    await respondIdempotently(req, res, `game:${id}:attack`, async () => {
+      const result = await mutateGame(req, id, async () => {
+        const { day, playerId } = await actingSeat(req, id);
+        return api.attack(id, day, playerId, req.body);
+      });
+      return { status: 200, body: { result, game: await gameView(id, currentUser(req)?.id) } };
     });
-    res.json({ result, game: await gameView(id, currentUser(req)?.id) });
   }),
 );
 
@@ -905,11 +1279,13 @@ app.post(
   '/api/games/:id/fortify',
   asyncH(async (req, res) => {
     const id = req.params.id as string;
-    await mutateGame(req, id, async () => {
-      const { day, playerId } = await actingSeat(req, id);
-      await api.fortify(id, day, playerId, req.body);
+    await respondIdempotently(req, res, `game:${id}:fortify`, async () => {
+      await mutateGame(req, id, async () => {
+        const { day, playerId } = await actingSeat(req, id);
+        await api.fortify(id, day, playerId, req.body);
+      });
+      return { status: 200, body: { game: await gameView(id, currentUser(req)?.id) } };
     });
-    res.json({ game: await gameView(id, currentUser(req)?.id) });
   }),
 );
 
@@ -917,11 +1293,13 @@ app.post(
   '/api/games/:id/end',
   asyncH(async (req, res) => {
     const id = req.params.id as string;
-    const out = await mutateGame(req, id, async () => {
-      const { day, playerId } = await actingSeat(req, id);
-      return api.endTurn(id, day, playerId);
+    await respondIdempotently(req, res, `game:${id}:end`, async () => {
+      const out = await mutateGame(req, id, async () => {
+        const { day, playerId } = await actingSeat(req, id);
+        return api.endTurn(id, day, playerId);
+      });
+      return { status: 200, body: { ...out, game: await gameView(id, currentUser(req)?.id) } };
     });
-    res.json({ ...out, game: await gameView(id, currentUser(req)?.id) });
   }),
 );
 
@@ -930,14 +1308,16 @@ app.post(
   '/api/games/:id/exercise',
   asyncH(async (req, res) => {
     const id = req.params.id as string;
-    const out = await mutateGame(req, id, async () => {
-      const { day, playerId } = await healthSeat(req, id);
-      return logExercise(repo, id, day, playerId, {
-        exerciseKey: String(req.body.exerciseKey),
-        units: Number(req.body.units),
+    await respondIdempotently(req, res, `game:${id}:exercise`, async () => {
+      const out = await mutateGame(req, id, async () => {
+        const { day, playerId } = await healthSeat(req, id);
+        return logExercise(repo, id, day, playerId, {
+          exerciseKey: String(req.body.exerciseKey),
+          units: Number(req.body.units),
+        });
       });
+      return { status: 200, body: { ...out, game: await gameView(id, currentUser(req)?.id) } };
     });
-    res.json({ ...out, game: await gameView(id, currentUser(req)?.id) });
   }),
 );
 
@@ -947,12 +1327,14 @@ app.post(
   asyncH(async (req, res) => {
     const user = requireUser(req);
     const id = req.params.id as string;
-    await mutateGame(req, id, async () => {
-      const { day } = await actingSeat(req, id);
-      await handleWindowExpiry(repo, throwingPlanner, id, day);
-      await scheduler.armNextWindow(id, day);
+    await respondIdempotently(req, res, `game:${id}:expire`, async () => {
+      await mutateGame(req, id, async () => {
+        const { day } = await actingSeat(req, id);
+        await handleWindowExpiry(repo, throwingPlanner, id, day);
+        await scheduler.armNextWindow(id, day);
+      });
+      return { status: 200, body: { game: await gameView(id, user.id) } };
     });
-    res.json({ game: await gameView(id, user.id) });
   }),
 );
 
@@ -1032,7 +1414,35 @@ function demoConfig(): GameConfig {
 }
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+app.get(
+  ['/.well-known/apple-app-site-association', '/apple-app-site-association'],
+  (_req, res) => {
+    const teamId = process.env.APPLE_TEAM_ID;
+    const bundleId = process.env.IOS_BUNDLE_ID;
+    const appId = teamId && bundleId ? `${teamId}.${bundleId}` : null;
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.json({
+      applinks: {
+        apps: [],
+        details: appId
+          ? [{
+              appIDs: [appId],
+              components: [
+                { '/': '/join/*', comment: 'HealthRisk multiplayer invitations' },
+                { '/': '/game/*', comment: 'Open an existing HealthRisk game' },
+              ],
+            }]
+          : [],
+      },
+      webcredentials: { apps: appId ? [appId] : [] },
+    });
+  },
+);
 app.use(express.static(path.join(here, '../../public')));
+app.get(['/join/:gameId', '/game/:gameId'], (_req, res) => {
+  res.sendFile(path.join(here, '../../public/index.html'));
+});
 
 // Make startup failures explicit JSON instead of Express's default HTML page.
 app.use(
@@ -1054,6 +1464,8 @@ app.use(
       res.status(400).json({
         error: 'invalid_json',
         message: 'The request body must contain valid JSON.',
+        requestId: requestId(req),
+        retryable: false,
       });
       return;
     }
@@ -1063,11 +1475,18 @@ app.use(
       res.status(503).json({
         error: 'service_unavailable',
         message: error.message,
+        requestId: requestId(req),
+        retryable: true,
       });
       return;
     }
     if (req.path.startsWith('/api/')) {
-      res.status(500).json({ error: 'internal', message: 'The request failed.' });
+      res.status(500).json({
+        error: 'internal',
+        message: 'The request failed.',
+        requestId: requestId(req),
+        retryable: true,
+      });
       return;
     }
     res.status(500).send('The request failed.');
@@ -1098,6 +1517,7 @@ async function initializeRuntimeOnce(): Promise<void> {
       `Store: ${database.kind} @ ${database.location} (schema v${database.migrationVersion}, ${database.persistent ? 'persistent' : 'ephemeral'})`,
     );
   }
+  notifier = new NotificationService(repo);
   api = new TurnApi({ repo, onPlayerCompleted });
 
   const isVercel = process.env.VERCEL === '1';

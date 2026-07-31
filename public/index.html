@@ -93,7 +93,7 @@
       .lobbyCode span { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.08em; }
       .lobbyCode code { font-size:18px; font-weight:800; color:#dbeaff; }
       .lobbySeats { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:9px; margin:18px 0; }
-      .lobbySeat { display:grid; grid-template-columns:34px 1fr; gap:8px; align-items:center; padding:11px; border:1px solid #35465a; border-radius:10px; background:#151e29; }
+      .lobbySeat { display:grid; grid-template-columns:34px minmax(0,1fr) auto; gap:8px; align-items:center; padding:11px; border:1px solid #35465a; border-radius:10px; background:#151e29; }
       .lobbySeat.open { border-style:dashed; opacity:.68; }
       .lobbySeatIcon { display:grid; place-items:center; width:34px; height:34px; border-radius:50%; background:#24344a; font-weight:800; }
       .lobbySeat small { display:block; color:var(--muted); }
@@ -366,6 +366,10 @@
       .drawerActions button:only-child { grid-column:1 / -1; }
       .gameOptionsSection { padding:13px 15px; }
       .gameOptionsSection > summary { color:#cbd7e5; }
+      .myGamesList { display:grid; gap:7px; }
+      .myGameRow { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:center; padding:9px 10px; border:1px solid #33485e; border-radius:10px; background:#131d28; }
+      .myGameRow b,.myGameRow small { display:block; }
+      .myGameRow small { margin-top:2px; color:#91a0b1; }
       .gameOptionsBody { display:grid; gap:10px; }
       .gameOptionsBody > .userSection { box-shadow:none; }
       .currentGameSection { border-color:#456385; background:linear-gradient(145deg,#1d2d40,#182330); }
@@ -388,6 +392,8 @@
       .joinRow #joinCode { width:100% !important; min-width:0; }
       .userPanelFooter { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:3px 2px 0; color:#7f8b99; font-size:10px; }
       .userPanelFooter #logoutBtn { padding:6px 9px; background:transparent; }
+      .userPanelFooterActions { display:flex; gap:7px; }
+      .userPanelFooter #deleteAccountBtn { padding:6px 9px; border-color:#754843; background:transparent; color:#e99289; }
       @media (max-width:480px) {
         #userPanel { width:100%; }
         .goalEntryRow #exUnits { width:76px !important; }
@@ -466,13 +472,18 @@
       .chatMessage.self .chatBubble { border-radius:12px 4px 12px 12px; }
       .chatMeta { display:flex; align-items:center; gap:6px; margin-bottom:3px; color:#91a1b4; font-size:9px; }
       .chatMeta b { overflow:hidden; color:#cbd8e6; text-overflow:ellipsis; white-space:nowrap; }
+      .chatActions { display:flex; gap:4px; margin-left:auto; }
+      .chatActions button { min-height:0; padding:1px 4px; border:0; background:transparent; color:#8da4bc; font-size:8px; }
+      .chatActions button:hover { color:#dce9f6; }
       .chatBody { overflow-wrap:anywhere; color:#eef3f8; font-size:12px; line-height:1.42; }
+      .chatBody.deleted { color:#7f8c9b; font-style:italic; }
       .chatComposer { padding:11px; border-top:1px solid #304156; background:#17212d; }
       .chatComposerRow { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:end; }
       #chatInput { width:100%; min-height:42px; max-height:98px; resize:vertical; padding:9px 10px; border:1px solid #405873; border-radius:10px; background:#101822; color:#eef3f8; font:inherit; }
       #chatInput:focus { outline:none; border-color:#6b9bcf; box-shadow:0 0 0 2px rgba(107,155,207,.15); }
       #chatSend { min-width:62px; min-height:42px; border-color:#5683b2; background:#2b5278; font-weight:750; }
       .chatComposerMeta { display:flex; justify-content:space-between; gap:8px; margin-top:5px; color:#7f8c9c; font-size:9px; }
+      #chatUnmute { display:none; min-height:0; padding:0; border:0; background:transparent; color:#8fb5dc; font-size:9px; }
       #chatError { color:#ef948b; }
       @media (max-width:620px) {
         #chatLauncher { right:12px; bottom:12px; }
@@ -594,7 +605,7 @@
           <button id="chatSend" type="submit">Send</button>
         </div>
         <div class="chatComposerMeta">
-          <span id="chatError" role="alert"></span>
+          <span><span id="chatError" role="alert"></span><button id="chatUnmute" type="button"></button></span>
           <span id="chatCount">0/500</span>
         </div>
       </form>
@@ -731,6 +742,7 @@
         <details id="gameOptionsDisclosure" class="userSection disclosure gameOptionsSection" style="display:none">
           <summary><span>Game options</span><span class="summaryMeta" id="gameOptionsSummary">Switch or leave</span></summary>
           <div id="gameOptionsBody" class="disclosureBody gameOptionsBody">
+          <section id="myGamesSection" class="userSection" style="display:none"></section>
           <section id="currentGameSection" class="userSection currentGameSection" style="display:none"></section>
           <section id="newGameSection" class="userSection">
           <div class="userSectionHeading">
@@ -787,7 +799,7 @@
         </section>
           </div>
         </details>
-        <footer class="userPanelFooter"><span>Your health details stay private.</span><button id="logoutBtn">Log out</button></footer>
+        <footer class="userPanelFooter"><span>Your health details stay private.</span><span class="userPanelFooterActions"><button id="deleteAccountBtn" type="button">Delete account</button><button id="logoutBtn">Log out</button></span></footer>
         </div>
       </aside>
     </div>
@@ -813,11 +825,13 @@
       let recentActionIds = new Set();
       let recentActionTimer = null;
       const seenGameEventIds = new Set();
-      const inviteCodeFromUrl = new URLSearchParams(window.location.search).get('join');
+      const invitePathMatch = window.location.pathname.match(/^\/join\/(game-[a-z0-9]+)\/?$/i);
+      const gamePathMatch = window.location.pathname.match(/^\/game\/(game-[a-z0-9]+)\/?$/i);
+      const inviteCodeFromUrl = invitePathMatch?.[1] || new URLSearchParams(window.location.search).get('join');
       const validInviteCode = /^game-[a-z0-9]+$/i.test(inviteCodeFromUrl || '')
         ? inviteCodeFromUrl
         : null;
-      let gameId = validInviteCode ? null : localStorage.getItem('exriskGame');
+      let gameId = validInviteCode ? null : gamePathMatch?.[1] || localStorage.getItem('exriskGame');
       let token = localStorage.getItem('exriskToken');
       localStorage.removeItem('exriskToken');
       let currentUser = null;
@@ -835,6 +849,7 @@
       let chatGameId = null;
       let chatKnownIds = new Set();
       let chatUnreadCount = 0;
+      let gameLibrary = [];
       const apiBaseUrl =
         document.querySelector('meta[name="healthrisk-api-base-url"]')?.content ||
         globalThis.HEALTHRISK_API_BASE_URL ||
@@ -1123,7 +1138,7 @@
         unread.classList.toggle('show', chatUnreadCount > 0);
 
         const list = $('#chatMessages');
-        const signature = messages.map((message) => message.id).join('|');
+        const signature = messages.map((message) => `${message.id}:${message.deletedAt || ''}`).join('|');
         if (list.dataset.signature !== signature) {
           const wasAtBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 60;
           list.innerHTML = messages.length
@@ -1131,11 +1146,16 @@
               const self = message.userId === currentUser.id;
               const player = game.players.find((candidate) => candidate.id === message.playerId);
               const initial = (message.username || '?').slice(0, 1).toUpperCase();
+              const actions = message.deletedAt
+                ? ''
+                : self
+                  ? `<span class="chatActions"><button type="button" data-chat-delete="${esc(message.id)}">Delete</button></span>`
+                  : `<span class="chatActions"><button type="button" data-chat-mute="${esc(message.userId)}">Mute</button><button type="button" data-chat-report="${esc(message.id)}">Report</button></span>`;
               return `<div class="chatMessage${self ? ' self' : ''}">
                 <span class="chatAvatar" style="--chat-color:${player?.color || '#6ea8fe'}">${esc(initial)}</span>
                 <div class="chatBubble">
-                  <div class="chatMeta"><b>${esc(self ? 'You' : message.username)}</b><span>${esc(chatTime(message.createdAt))}</span></div>
-                  <div class="chatBody">${esc(message.body).replace(/\n/g, '<br>')}</div>
+                  <div class="chatMeta"><b>${esc(self ? 'You' : message.username)}</b><span>${esc(chatTime(message.createdAt))}</span>${actions}</div>
+                  <div class="chatBody${message.deletedAt ? ' deleted' : ''}">${message.deletedAt ? 'Message deleted' : esc(message.body).replace(/\n/g, '<br>')}</div>
                 </div>
               </div>`;
             }).join('')
@@ -1150,6 +1170,9 @@
         $('#chatInput').disabled = !canSend;
         $('#chatSend').disabled = !canSend;
         $('#chatInput').placeholder = canSend ? 'Message your game…' : 'Chat closed';
+        const muted = game.mutedUserIds || [];
+        $('#chatUnmute').style.display = muted.length ? 'inline' : 'none';
+        $('#chatUnmute').textContent = muted.length ? `Unmute ${muted.length}` : '';
       }
 
       async function sendChatMessage() {
@@ -1181,6 +1204,28 @@
           $('#chatError').textContent = error.message;
         } finally {
           renderChat();
+        }
+      }
+
+      async function handleChatAction(button) {
+        if (!gameId || !button) return;
+        try {
+          if (button.dataset.chatDelete) {
+            if (!confirm('Delete this message?')) return;
+            await api.deleteChatMessage(gameId, button.dataset.chatDelete);
+          } else if (button.dataset.chatMute) {
+            if (!confirm('Mute this player? Their messages and chat notifications will be hidden for you.')) return;
+            await api.muteChatUser(gameId, button.dataset.chatMute);
+            showToast('Player muted');
+          } else if (button.dataset.chatReport) {
+            const reason = prompt('Why are you reporting this message?');
+            if (!reason) return;
+            await api.reportChatMessage(gameId, button.dataset.chatReport, reason);
+            showToast('Message reported');
+          }
+          await refresh();
+        } catch (error) {
+          $('#chatError').textContent = error.message;
         }
       }
 
@@ -1511,6 +1556,7 @@
       function openUserPanel(sectionId) {
         $('#userPanel').scrollTop = 0;
         $('#userPanelOverlay').classList.add('show');
+        refreshGameLibrary();
         if (sectionId) {
           requestAnimationFrame(() => {
             const section = $(`#${sectionId}`);
@@ -1529,6 +1575,14 @@
       }
       function closeUserPanel() { $('#userPanelOverlay').classList.remove('show'); }
 
+      async function refreshGameLibrary() {
+        if (!currentUser) return;
+        try {
+          gameLibrary = (await api.listGames()).games;
+          renderGameAccess();
+        } catch {}
+      }
+
       async function loadMe() {
         const d = await api.me();
         currentUser = d.user;
@@ -1536,7 +1590,23 @@
         if (!currentUser) {
           token = null;
           activeMultiplayerGameId = null;
+          gameLibrary = [];
+        } else {
+          await refreshGameLibrary();
         }
+      }
+
+      function renderGameLibrary() {
+        const section = $('#myGamesSection');
+        const visible = gameLibrary.filter((entry) => entry.id !== game?.id || entry.status === 'finished' || entry.status === 'cancelled');
+        section.style.display = visible.length ? '' : 'none';
+        section.innerHTML = visible.length
+          ? `<div class="userSectionHeading"><span class="userSectionIcon">☰</span><div><h3>My games</h3><p class="muted">Resume a lobby, active game, or past board.</p></div></div><div class="myGamesList">${visible.map((entry) => `
+              <div class="myGameRow"><span><b>${entry.practice ? 'Practice' : entry.status === 'setup' ? 'Waiting room' : entry.status === 'active' ? (entry.yourTurn ? 'Your turn' : 'Active game') : entry.status === 'finished' ? 'Finished game' : 'Cancelled lobby'}</b><small>${esc(entry.id)} · ${entry.playerCount} player${entry.playerCount === 1 ? '' : 's'}${entry.status === 'active' ? ` · Day ${entry.dayNumber}` : ''}</small></span><button type="button" data-open-game="${esc(entry.id)}">Open</button></div>`).join('')}</div>`
+          : '';
+        section.querySelectorAll('[data-open-game]').forEach((button) => {
+          button.onclick = () => switchToGame(button.dataset.openGame);
+        });
       }
 
       async function doAuth(kind) {
@@ -1587,6 +1657,19 @@
           return;
         }
         log('Logged out');
+      }
+
+      async function doDeleteAccount() {
+        const password = prompt('Enter your password to permanently delete your HealthRisk account:');
+        if (!password) return;
+        if (!confirm('Delete your account, private health data, and active participation? This cannot be undone.')) return;
+        try {
+          await api.deleteAccount(password);
+          localStorage.removeItem('exriskGame');
+          window.location.href = '/';
+        } catch (error) {
+          showToast(error.message);
+        }
       }
 
       function syncGameCreationMode() {
@@ -1644,11 +1727,7 @@
 
       async function copyGameCode(code) {
         if (!code) return;
-        const inviteUrl = new URL(window.location.href);
-        inviteUrl.search = '';
-        inviteUrl.hash = '';
-        inviteUrl.searchParams.set('join', code);
-        const invite = inviteUrl.toString();
+        const invite = new URL(`/join/${encodeURIComponent(code)}`, window.location.origin).toString();
         try {
           await navigator.clipboard.writeText(invite);
         } catch {
@@ -1709,9 +1788,7 @@
           game = d.game;
           activeMultiplayerGameId = game.activeMultiplayerGameId ?? null;
           fromSel = null; lastTurnKey = null; render();
-          const inviteUrl = new URL(window.location.href);
-          inviteUrl.searchParams.delete('join');
-          window.history.replaceState({}, '', `${inviteUrl.pathname}${inviteUrl.search}${inviteUrl.hash}`);
+          window.history.replaceState({}, '', `/game/${encodeURIComponent(code)}`);
           closeUserPanel();
           log('Joined ' + code + ' as ' + d.seat);
         } catch (e) {
@@ -2132,6 +2209,7 @@
             <div><b>${player.claimed ? esc(player.name) : 'Open seat'}</b><small>${player.claimed
               ? `${index === 0 ? 'Game creator' : 'Player'} · ${voting?.submittedPlayerIds?.includes(player.id) ? 'choices submitted' : 'reviewing health goals'}`
               : 'Waiting for a player'}</small></div>
+            ${game.isCreator && index > 0 ? `<button type="button" data-remove-lobby-player="${esc(player.id)}">Remove</button>` : ''}
           </div>`).join('');
         const inviteSeat = !cancelled && !atCapacity
           ? `<div class="lobbySeat open">
@@ -2191,6 +2269,24 @@
         if (leave) leave.onclick = leaveCurrentGame;
         const again = $('#lobbyNewGameBtn');
         if (again) again.onclick = () => openGameOptions('newGameSection');
+        document.querySelectorAll('[data-remove-lobby-player]').forEach((button) => {
+          button.onclick = async () => {
+            const player = game.players.find((candidate) => candidate.id === button.dataset.removeLobbyPlayer);
+            if (!player || !confirm(`Remove ${player.name} from this waiting room?`)) return;
+            try {
+              const data = await api.delete(
+                `/api/games/${encodeURIComponent(gameId)}/members/${encodeURIComponent(player.id)}`,
+                undefined,
+                { revision: game.revision },
+              );
+              game = data.game;
+              showToast(`${player.name} was removed`);
+              render();
+            } catch (error) {
+              showToast(error.message);
+            }
+          };
+        });
         if (!cancelled) wireLobbyRuleEditor();
       }
 
@@ -2798,6 +2894,7 @@
         const optionsBody = $('#gameOptionsBody');
         const optionsSummary = $('#gameOptionsSummary');
         const currentSection = $('#currentGameSection');
+        const myGamesSection = $('#myGamesSection');
         const newSection = $('#newGameSection');
         const joinSection = $('#joinGameSection');
         const lockedGameId = game?.activeMultiplayerGameId ?? activeMultiplayerGameId;
@@ -2805,9 +2902,11 @@
         const hasVisibleGame = !!currentUser && !!game;
 
         if (!optionsBody.contains(currentSection)) optionsBody.append(currentSection);
+        if (!optionsBody.contains(myGamesSection)) optionsBody.prepend(myGamesSection);
         if (!optionsBody.contains(newSection)) optionsBody.append(newSection);
         if (!optionsBody.contains(joinSection)) optionsBody.append(joinSection);
         disclosure.style.display = hasVisibleGame ? '' : 'none';
+        renderGameLibrary();
 
         newSection.style.display = hasActiveMultiplayerGame ? 'none' : '';
         joinSection.style.display = hasActiveMultiplayerGame ? 'none' : '';
@@ -3181,6 +3280,7 @@
       $('#loginBtn').onclick = () => doAuth('login');
       $('#signupBtn').onclick = () => doAuth('signup');
       $('#logoutBtn').onclick = doLogout;
+      $('#deleteAccountBtn').onclick = doDeleteAccount;
       $('#joinBtn').onclick = joinGame;
       $('#addRuleBtn').onclick = () => {
         ruleDraft = readHealthRulesEditor().exercises;
@@ -3206,6 +3306,20 @@
       $('#chatForm').onsubmit = (event) => {
         event.preventDefault();
         sendChatMessage();
+      };
+      $('#chatMessages').onclick = (event) => {
+        handleChatAction(event.target.closest('[data-chat-delete],[data-chat-mute],[data-chat-report]'));
+      };
+      $('#chatUnmute').onclick = async () => {
+        const muted = game?.mutedUserIds || [];
+        if (!muted.length || !confirm(`Unmute ${muted.length} player${muted.length === 1 ? '' : 's'}?`)) return;
+        try {
+          for (const userId of muted) await api.unmuteChatUser(gameId, userId);
+          await refresh();
+          showToast('Chat mute cleared');
+        } catch (error) {
+          $('#chatError').textContent = error.message;
+        }
       };
       $('#chatInput').oninput = () => {
         $('#chatCount').textContent = `${$('#chatInput').value.length}/500`;

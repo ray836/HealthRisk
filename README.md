@@ -80,6 +80,12 @@ Serializable request and response contracts live in
 `src/client/apiTypes.ts`, with declarations for the JavaScript client in
 `public/api-client.d.ts`.
 
+Mutating requests accept an `Idempotency-Key` header. The server stores a
+request fingerprint and successful response for 24 hours, so a SwiftUI client
+can safely retry a move or health log after a timeout without applying it
+twice. Reusing a key with a different body is rejected. Every response also
+includes `X-Request-Id`, and JSON errors include `requestId` and `retryable`.
+
 The hosted API can be selected in a client with:
 
 ```js
@@ -94,3 +100,46 @@ const api = createApiClient({
 The current browser remains same-origin by default. Its API origin can be
 overridden with the `healthrisk-api-base-url` meta tag in `public/index.html`
 when a separate frontend host is introduced.
+
+## Native iOS readiness
+
+The server remains authoritative; a SwiftUI app should never write Postgres or
+reimplement turn validation. Native clients use the bearer token returned by
+signup/login and can discover supported behavior at `GET /api/meta`. The
+OpenAPI 3.1 contract at `/openapi.json` can drive Swift model/client generation.
+
+Account and game lifecycle endpoints include:
+
+- `GET /api/games` for waiting, active, practice, completed, and cancelled games;
+- `POST /api/games/:id/leave` to leave a lobby or forfeit an active game;
+- `DELETE /api/games/:id/members/:playerId` for creator lobby moderation;
+- `DELETE /api/account` with `{ "password": "..." }` for in-app account deletion.
+
+### Notifications
+
+`POST /api/devices` registers an APNs token and `GET /api/notifications` returns
+the durable notification inbox. Lobby joins/removals, game starts, turns, chat,
+and game completion create inbox records. If Apple credentials are configured,
+the same events are delivered through APNs. The iOS client should schedule a
+local deadline reminder from `game.schedule.moveDeadlineAt`; APNs delivery is a
+prompt to refresh, never the source of truth.
+
+Configure `PUBLIC_APP_URL`, `APPLE_TEAM_ID`, `IOS_BUNDLE_ID`, `APNS_KEY_ID`, and
+`APNS_PRIVATE_KEY` in Vercel when the Apple identifiers exist. Until then the
+notification inbox works and APNs delivery remains safely disabled.
+
+### Universal links
+
+Invitations use `/join/:gameId` and existing games use `/game/:gameId`. Both
+paths fall back to the web app. The server publishes
+`/.well-known/apple-app-site-association` from `APPLE_TEAM_ID` and
+`IOS_BUNDLE_ID`; add the production domain to the SwiftUI target's Associated
+Domains entitlement as `applinks:<domain>`.
+
+### Chat safety
+
+Game chat is member-only, limited to six messages per ten seconds, and supports
+deleting your own message, muting a participant, and reporting a message.
+Muted senders are removed from the viewer's chat and do not create chat push
+notifications for that viewer. Account deletion anonymizes retained public game
+conversation while removing private account, device, and notification data.

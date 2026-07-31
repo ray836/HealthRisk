@@ -42,7 +42,10 @@ describe('HealthRisk API client', () => {
     const api = createApiClient({ fetch });
     const payload = { exerciseKey: 'running', units: 2 };
 
-    await api.post('/api/games/game-1/exercise', payload, { revision: 7 });
+    await api.post('/api/games/game-1/exercise', payload, {
+      revision: 7,
+      idempotencyKey: 'health-log-request-1',
+    });
 
     expect(payload).toEqual({ exerciseKey: 'running', units: 2 });
     const init = fetch.mock.calls[0]![1]!;
@@ -51,6 +54,9 @@ describe('HealthRisk API client', () => {
       units: 2,
       revision: 7,
     });
+    expect(init.headers).toEqual(expect.objectContaining({
+      'idempotency-key': 'health-log-request-1',
+    }));
   });
 
   it('sends chat independently from game revision state', async () => {

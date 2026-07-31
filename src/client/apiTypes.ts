@@ -39,6 +39,8 @@ export interface CurrentUserResponse {
 export interface ApiErrorResponse {
   error: string;
   message?: string;
+  requestId: string;
+  retryable: boolean;
 }
 
 export interface HealthLoggingView {
@@ -78,6 +80,7 @@ export interface ChatMessageView {
   username: string;
   body: string;
   createdAt: string;
+  deletedAt?: string | null;
 }
 
 export interface GamePlayerView {
@@ -144,6 +147,7 @@ export interface GameView {
   lobbyCapacity: number;
   lobbyHealthVoting: LobbyHealthVotingView;
   chatMessages: ChatMessageView[];
+  mutedUserIds: string[];
   players: GamePlayerView[];
   exercises: ExerciseRuleView[];
   categoryTroopCaps: Partial<Record<HealthCategory, number>>;
@@ -207,4 +211,71 @@ export interface SendChatMessageRequest {
 
 export interface SendChatMessageResponse {
   message: ChatMessageView;
+}
+
+export interface GameSummaryView {
+  id: string;
+  status: GameView['status'];
+  practice: boolean;
+  isCreator: boolean;
+  myPlayerIds: string[];
+  playerCount: number;
+  lobbyCapacity: number;
+  dayNumber: number;
+  currentPlayerId: string | null;
+  yourTurn: boolean;
+  winnerId: string | null;
+  playerNames: string[];
+  inviteLink: string | null;
+  deepLink: string;
+}
+
+export interface ListGamesResponse {
+  games: GameSummaryView[];
+}
+
+export interface DeviceRegistrationView {
+  id: string;
+  platform: 'ios';
+  environment: 'sandbox' | 'production';
+  tokenSuffix: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UserNotificationView {
+  id: string;
+  userId: string;
+  gameId?: string | null;
+  type:
+    | 'lobby_joined'
+    | 'lobby_removed'
+    | 'game_started'
+    | 'turn_started'
+    | 'turn_deadline'
+    | 'chat_message'
+    | 'game_finished';
+  title: string;
+  body: string;
+  deepLink?: string | null;
+  createdAt: string;
+  readAt?: string | null;
+}
+
+export interface NotificationsResponse {
+  notifications: UserNotificationView[];
+  unreadCount: number;
+}
+
+export interface ApiMetaResponse {
+  apiVersion: number;
+  minimumIosApiVersion: number;
+  openApiUrl: string;
+  capabilities: {
+    idempotency: boolean;
+    notifications: boolean;
+    apnsConfigured: boolean;
+    universalInvites: boolean;
+    chatSafety: boolean;
+  };
 }

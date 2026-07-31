@@ -1,0 +1,333 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "HealthRisk API",
+    "version": "1.0.0",
+    "description": "Authoritative multiplayer API used by the HealthRisk web and native clients. Mutations support Idempotency-Key and return X-Request-Id."
+  },
+  "servers": [{ "url": "/" }],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer" },
+      "cookieAuth": { "type": "apiKey", "in": "cookie", "name": "exrisk_session" }
+    },
+    "parameters": {
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": false,
+        "schema": { "type": "string", "minLength": 8, "maxLength": 128 },
+        "description": "Reuse the same key when retrying the identical mutation."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": ["error", "message", "requestId", "retryable"],
+        "properties": {
+          "error": { "type": "string" },
+          "message": { "type": "string" },
+          "requestId": { "type": "string" },
+          "retryable": { "type": "boolean" }
+        }
+      },
+      "AuthRequest": {
+        "type": "object",
+        "required": ["username", "password"],
+        "properties": {
+          "username": { "type": "string", "minLength": 3, "maxLength": 24 },
+          "password": { "type": "string", "minLength": 8, "maxLength": 128 }
+        }
+      },
+      "PublicUser": {
+        "type": "object",
+        "required": ["id", "username"],
+        "properties": {
+          "id": { "type": "string" },
+          "username": { "type": "string" }
+        }
+      },
+      "GameView": {
+        "type": "object",
+        "required": ["id", "revision", "status", "players", "territories", "chatMessages"],
+        "properties": {
+          "id": { "type": "string" },
+          "revision": { "type": "integer" },
+          "status": { "enum": ["setup", "active", "finished", "cancelled"] },
+          "practice": { "type": "boolean" },
+          "yourTurn": { "type": "boolean" },
+          "players": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "territories": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "chatMessages": { "type": "array", "items": { "$ref": "#/components/schemas/ChatMessage" } },
+          "schedule": { "type": "object", "additionalProperties": true }
+        },
+        "additionalProperties": true
+      },
+      "ChatMessage": {
+        "type": "object",
+        "required": ["id", "gameId", "userId", "playerId", "username", "body", "createdAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "gameId": { "type": "string" },
+          "userId": { "type": "string" },
+          "playerId": { "type": "string" },
+          "username": { "type": "string" },
+          "body": { "type": "string", "maxLength": 500 },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "deletedAt": { "type": ["string", "null"], "format": "date-time" }
+        }
+      },
+      "Notification": {
+        "type": "object",
+        "required": ["id", "userId", "type", "title", "body", "createdAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "userId": { "type": "string" },
+          "gameId": { "type": ["string", "null"] },
+          "type": { "type": "string" },
+          "title": { "type": "string" },
+          "body": { "type": "string" },
+          "deepLink": { "type": ["string", "null"] },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "readAt": { "type": ["string", "null"], "format": "date-time" }
+        }
+      },
+      "GameMutationResponse": {
+        "type": "object",
+        "required": ["game"],
+        "properties": { "game": { "$ref": "#/components/schemas/GameView" } },
+        "additionalProperties": true
+      },
+      "RevisionBody": {
+        "type": "object",
+        "required": ["revision"],
+        "properties": { "revision": { "type": "integer", "minimum": 0 } },
+        "additionalProperties": true
+      },
+      "OkResponse": {
+        "type": "object",
+        "required": ["ok"],
+        "properties": { "ok": { "const": true } },
+        "additionalProperties": true
+      }
+    }
+  },
+  "security": [{ "bearerAuth": [] }, { "cookieAuth": [] }],
+  "paths": {
+    "/api/meta": {
+      "get": { "security": [], "responses": { "200": { "description": "API capabilities" } } }
+    },
+    "/api/auth/signup": {
+      "post": {
+        "security": [],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AuthRequest" } } } },
+        "responses": { "200": { "description": "Session token and user" }, "400": { "description": "Invalid account", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } } }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "security": [],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AuthRequest" } } } },
+        "responses": { "200": { "description": "Session token and user" }, "401": { "description": "Invalid credentials" } }
+      }
+    },
+    "/api/auth/me": {
+      "get": { "responses": { "200": { "description": "Current account and active game" } } }
+    },
+    "/api/auth/logout": {
+      "post": { "responses": { "200": { "description": "Session ended", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OkResponse" } } } } } }
+    },
+    "/api/account": {
+      "delete": {
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["password"], "properties": { "password": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "Account deleted" }, "401": { "description": "Password confirmation failed" } }
+      }
+    },
+    "/api/games": {
+      "get": { "responses": { "200": { "description": "Current and historical games" } } },
+      "post": {
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["practice"], "additionalProperties": true } } } },
+        "responses": { "201": { "description": "Created game", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GameView" } } } } }
+      }
+    },
+    "/api/games/{gameId}": {
+      "parameters": [{ "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "get": { "responses": { "200": { "description": "Authoritative game view", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GameView" } } } } } }
+    },
+    "/api/games/{gameId}/join": {
+      "post": {
+        "parameters": [{ "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKey" }],
+        "responses": { "200": { "description": "Joined lobby" } }
+      }
+    },
+    "/api/games/{gameId}/start": {
+      "post": {
+        "parameters": [{ "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RevisionBody" } } } },
+        "responses": { "200": { "description": "Lobby started" } }
+      }
+    },
+    "/api/games/{gameId}/leave": {
+      "post": {
+        "parameters": [{ "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RevisionBody" } } } },
+        "responses": { "200": { "description": "Left lobby or forfeited game" } }
+      }
+    },
+    "/api/games/{gameId}/members/{playerId}": {
+      "delete": {
+        "parameters": [
+          { "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "playerId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "$ref": "#/components/parameters/IdempotencyKey" }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RevisionBody" } } } },
+        "responses": { "200": { "description": "Lobby member removed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GameMutationResponse" } } } } }
+      }
+    },
+    "/api/games/{gameId}/health-rules/propose": {
+      "post": {
+        "parameters": [{ "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RevisionBody" } } } },
+        "responses": { "200": { "description": "Health-rule change proposed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GameMutationResponse" } } } } }
+      }
+    },
+    "/api/games/{gameId}/health-rules/vote": {
+      "post": {
+        "parameters": [{ "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "allOf": [{ "$ref": "#/components/schemas/RevisionBody" }, { "type": "object", "required": ["approve"], "properties": { "approve": { "type": "boolean" } } }] } } } },
+        "responses": { "200": { "description": "Health-rule vote recorded", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GameMutationResponse" } } } } }
+      }
+    },
+    "/api/games/{gameId}/lobby-health-votes": {
+      "post": {
+        "parameters": [{ "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "allOf": [{ "$ref": "#/components/schemas/RevisionBody" }, { "type": "object", "required": ["exerciseKeys"], "properties": { "exerciseKeys": { "type": "array", "items": { "type": "string" } } } }] } } } },
+        "responses": { "200": { "description": "Lobby health choices saved", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GameMutationResponse" } } } } }
+      }
+    },
+    "/api/games/{gameId}/reinforce": {
+      "post": {
+        "parameters": [{ "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "allOf": [{ "$ref": "#/components/schemas/RevisionBody" }, { "type": "object", "properties": { "placements": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } } } }] } } } },
+        "responses": { "200": { "description": "Reinforcements placed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GameMutationResponse" } } } } }
+      }
+    },
+    "/api/games/{gameId}/cards/trade": {
+      "post": {
+        "parameters": [{ "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RevisionBody" } } } },
+        "responses": { "200": { "description": "Conquest cards traded", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GameMutationResponse" } } } } }
+      }
+    },
+    "/api/games/{gameId}/attack": {
+      "post": {
+        "parameters": [{ "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RevisionBody" } } } },
+        "responses": { "200": { "description": "Attack resolved", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GameMutationResponse" } } } } }
+      }
+    },
+    "/api/games/{gameId}/fortify": {
+      "post": {
+        "parameters": [{ "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RevisionBody" } } } },
+        "responses": { "200": { "description": "Troops fortified", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GameMutationResponse" } } } } }
+      }
+    },
+    "/api/games/{gameId}/end": {
+      "post": {
+        "parameters": [{ "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RevisionBody" } } } },
+        "responses": { "200": { "description": "Turn completed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GameMutationResponse" } } } } }
+      }
+    },
+    "/api/games/{gameId}/expire": {
+      "post": {
+        "parameters": [{ "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RevisionBody" } } } },
+        "responses": { "200": { "description": "Current move auto-resolved", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GameMutationResponse" } } } } }
+      }
+    },
+    "/api/games/{gameId}/exercise": {
+      "post": {
+        "parameters": [{ "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["exerciseKey", "units", "revision"], "properties": { "exerciseKey": { "type": "string" }, "units": { "type": "number" }, "revision": { "type": "integer" } } } } } },
+        "responses": { "200": { "description": "Health progress logged" } }
+      }
+    },
+    "/api/games/{gameId}/chat": {
+      "post": {
+        "parameters": [{ "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["body"], "properties": { "body": { "type": "string", "maxLength": 500 } } } } } },
+        "responses": { "201": { "description": "Message sent" }, "429": { "description": "Chat rate limited" } }
+      }
+    },
+    "/api/games/{gameId}/chat/{messageId}": {
+      "delete": {
+        "parameters": [
+          { "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "messageId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "$ref": "#/components/parameters/IdempotencyKey" }
+        ],
+        "responses": { "200": { "description": "Own message deleted", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OkResponse" } } } } }
+      }
+    },
+    "/api/games/{gameId}/chat/mutes": {
+      "post": {
+        "parameters": [{ "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["userId"], "properties": { "userId": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "Participant muted" } }
+      }
+    },
+    "/api/games/{gameId}/chat/mutes/{userId}": {
+      "delete": {
+        "parameters": [
+          { "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "userId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Participant unmuted" } }
+      }
+    },
+    "/api/games/{gameId}/chat/{messageId}/report": {
+      "post": {
+        "parameters": [
+          { "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "messageId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "$ref": "#/components/parameters/IdempotencyKey" }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["reason"], "properties": { "reason": { "type": "string", "minLength": 3, "maxLength": 300 } } } } } },
+        "responses": { "201": { "description": "Message reported" } }
+      }
+    },
+    "/api/devices": {
+      "get": { "responses": { "200": { "description": "Registered devices" } } },
+      "post": {
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["token", "environment"], "properties": { "token": { "type": "string" }, "environment": { "enum": ["sandbox", "production"] } } } } } },
+        "responses": { "201": { "description": "APNs device registered" } }
+      }
+    },
+    "/api/devices/{deviceId}": {
+      "delete": {
+        "parameters": [{ "name": "deviceId", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Device unregistered", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OkResponse" } } } } }
+      }
+    },
+    "/api/notifications": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Durable notification inbox",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "notifications": { "type": "array", "items": { "$ref": "#/components/schemas/Notification" } }, "unreadCount": { "type": "integer" } } } } }
+          }
+        }
+      }
+    },
+    "/api/notifications/{notificationId}/read": {
+      "post": {
+        "parameters": [{ "name": "notificationId", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Notification marked read", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OkResponse" } } } } }
+      }
+    }
+  }
+}

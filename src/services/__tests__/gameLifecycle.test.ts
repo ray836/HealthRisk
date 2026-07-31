@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createGame } from '../../engine/setup.js';
 import type { GameConfig } from '../../engine/types.js';
 import { startDailySession } from '../../engine/turnSession.js';
-import { leaveGame, startLobbyGame } from '../gameLifecycle.js';
+import { leaveGame, removeLobbyMember, startLobbyGame } from '../gameLifecycle.js';
 import { InMemoryGameRepository } from '../repository.js';
 
 const config: GameConfig = {
@@ -116,5 +116,18 @@ describe('multiplayer lifecycle', () => {
     expect(result.forfeited).toBe(true);
     expect(result.game.players.find((player) => player.id === 'p2')?.status).toBe('forfeited');
     expect(result.session?.queue).not.toContain('p2');
+  });
+
+  it('lets only the creator free another lobby seat', async () => {
+    const repo = new InMemoryGameRepository({ games: [lobby()] });
+    await repo.setMember({ gameId: 'lobby', playerId: 'p1', userId: 'creator' });
+    await repo.setMember({ gameId: 'lobby', playerId: 'p2', userId: 'guest' });
+
+    await expect(removeLobbyMember(repo, 'lobby', 'guest', 'p1'))
+      .rejects.toMatchObject({ code: 'not_creator' });
+    await removeLobbyMember(repo, 'lobby', 'creator', 'p2');
+
+    expect(await repo.getMemberBySeat('lobby', 'p2')).toBeNull();
+    expect((await repo.loadGame('lobby'))?.players[1]?.name).toBe('Player 2');
   });
 });

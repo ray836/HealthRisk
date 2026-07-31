@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import { createGame } from '../../engine/setup.js';
 import type { GameConfig } from '../../engine/types.js';
-import { CHAT_MESSAGE_MAX_LENGTH, sendGameChatMessage } from '../gameChat.js';
+import {
+  CHAT_MESSAGE_MAX_LENGTH,
+  CHAT_RATE_LIMIT_COUNT,
+  deleteOwnChatMessage,
+  reportChatMessage,
+  sendGameChatMessage,
+  setChatMuted,
+} from '../gameChat.js';
 import { InMemoryGameRepository } from '../repository.js';
 
 const config: GameConfig = {
@@ -74,5 +81,31 @@ describe('game chat', () => {
     await practiceRepo.setMember({ gameId: 'chat-game', playerId: 'p1', userId: 'u1' });
     await expect(sendGameChatMessage(practiceRepo, 'chat-game', user, 'Hello'))
       .rejects.toMatchObject({ code: 'chat_unavailable' });
+  });
+
+  it('rate-limits bursts and supports delete, mute, and report controls', async () => {
+    const repo = new InMemoryGameRepository({ games: [game()] });
+    await repo.setMember({ gameId: 'chat-game', playerId: 'p1', userId: 'u1' });
+    await repo.setMember({ gameId: 'chat-game', playerId: 'p2', userId: 'u2' });
+    const alice = { id: 'u1', username: 'alice' };
+    let message = await sendGameChatMessage(repo, 'chat-game', alice, 'First');
+    for (let index = 1; index < CHAT_RATE_LIMIT_COUNT; index += 1) {
+      message = await sendGameChatMessage(repo, 'chat-game', alice, `Message ${index}`);
+    }
+    await expect(sendGameChatMessage(repo, 'chat-game', alice, 'Too fast'))
+      .rejects.toMatchObject({ code: 'chat_rate_limited' });
+
+    await expect(deleteOwnChatMessage(repo, 'chat-game', message.id, 'u2'))
+      .rejects.toMatchObject({ code: 'not_message_owner' });
+    await deleteOwnChatMessage(repo, 'chat-game', message.id, 'u1');
+    expect(await repo.getChatMessage(message.id)).toMatchObject({ body: '', deletedAt: expect.any(String) });
+
+    await setChatMuted(repo, 'chat-game', 'u2', 'u1', true);
+    expect(await repo.listMutedUserIds('chat-game', 'u2')).toEqual(['u1']);
+    await setChatMuted(repo, 'chat-game', 'u2', 'u1', false);
+    expect(await repo.listMutedUserIds('chat-game', 'u2')).toEqual([]);
+
+    const reportId = await reportChatMessage(repo, 'chat-game', message.id, 'u2', 'Unkind message');
+    expect(reportId).toEqual(expect.any(String));
   });
 });

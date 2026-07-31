@@ -131,8 +131,73 @@ describe('DrizzleGameRepository (PGlite in-memory)', () => {
     await repo.saveChatMessage(newer);
     await repo.saveChatMessage(older);
 
-    expect(await repo.listChatMessages('g1')).toEqual([older, newer]);
-    expect(await repo.listChatMessages('g1', 1)).toEqual([newer]);
+    expect(await repo.listChatMessages('g1')).toEqual([
+      { ...older, deletedAt: null },
+      { ...newer, deletedAt: null },
+    ]);
+    expect(await repo.listChatMessages('g1', 1)).toEqual([{ ...newer, deletedAt: null }]);
     expect(await repo.listChatMessages('another-game')).toEqual([]);
+  });
+
+  it('persists the mobile readiness records', async () => {
+    const now = '2026-07-31T12:00:00.000Z';
+    const expiresAt = '2026-08-01T12:00:00.000Z';
+    expect(await repo.reserveIdempotency({
+      userId: 'u1',
+      scope: 'game:g1:reinforce',
+      key: 'mobile-retry-key',
+      requestHash: 'hash-1',
+      responseStatus: null,
+      responseBody: null,
+      createdAt: now,
+      expiresAt,
+    })).toBe(true);
+    expect(await repo.reserveIdempotency({
+      userId: 'u1',
+      scope: 'game:g1:reinforce',
+      key: 'mobile-retry-key',
+      requestHash: 'hash-1',
+      responseStatus: null,
+      responseBody: null,
+      createdAt: now,
+      expiresAt,
+    })).toBe(false);
+    await repo.completeIdempotency('u1', 'game:g1:reinforce', 'mobile-retry-key', 200, { ok: true });
+    expect(await repo.getIdempotency('u1', 'game:g1:reinforce', 'mobile-retry-key')).toMatchObject({
+      responseStatus: 200,
+      responseBody: { ok: true },
+    });
+
+    const device = await repo.upsertDeviceRegistration({
+      id: 'device-1',
+      userId: 'u1',
+      platform: 'ios',
+      token: 'a'.repeat(64),
+      environment: 'sandbox',
+      createdAt: now,
+      updatedAt: now,
+    });
+    expect(device.id).toBe('device-1');
+    expect(await repo.listDeviceRegistrations('u1')).toHaveLength(1);
+
+    await repo.saveNotification({
+      id: 'notification-1',
+      userId: 'u1',
+      type: 'game_started',
+      title: 'Game started',
+      body: 'Your game is ready.',
+      gameId: 'g1',
+      deepLink: '/game/g1',
+      createdAt: now,
+      readAt: null,
+    });
+    expect(await repo.listNotifications('u1')).toHaveLength(1);
+    await repo.markNotificationRead('notification-1', 'u1', expiresAt);
+    expect((await repo.listNotifications('u1'))[0]?.readAt).toBe(expiresAt);
+
+    await repo.setChatMute('g1', 'u1', 'u2', now);
+    expect(await repo.listMutedUserIds('g1', 'u1')).toEqual(['u2']);
+    await repo.softDeleteChatMessage('chat-1', now);
+    expect((await repo.getChatMessage('chat-1'))?.deletedAt).toBe(now);
   });
 });
