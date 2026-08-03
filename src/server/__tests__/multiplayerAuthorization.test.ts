@@ -133,7 +133,7 @@ describe('multiplayer route authorization', () => {
       body: { players: 2, practice: false },
     });
     expect(created.body.claimedPlayerCount).toBe(1);
-    expect(created.body.lobbyCapacity).toBe(4);
+    expect(created.body.lobbyCapacity).toBe(10);
     expect(created.body.players).toHaveLength(1);
     expect(created.body.lobbyHealthVoting.requiredSubmissions).toBe(1);
     const gameId = created.body.id;

@@ -39,6 +39,20 @@
           "password": { "type": "string", "minLength": 8, "maxLength": 128 }
         }
       },
+      "CreateGameRequest": {
+        "type": "object",
+        "required": ["practice"],
+        "properties": {
+          "practice": { "type": "boolean" },
+          "players": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 10,
+            "description": "Practice seat count. Multiplayer lobbies support up to 10 joined players."
+          }
+        },
+        "additionalProperties": true
+      },
       "PublicUser": {
         "type": "object",
         "required": ["id", "username"],
@@ -147,7 +161,7 @@
       "get": { "responses": { "200": { "description": "Current and historical games" } } },
       "post": {
         "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["practice"], "additionalProperties": true } } } },
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateGameRequest" } } } },
         "responses": { "201": { "description": "Created game", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GameView" } } } } }
       }
     },

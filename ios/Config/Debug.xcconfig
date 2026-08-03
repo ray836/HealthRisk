@@ -1,0 +1,7 @@
+#include "Shared.xcconfig"
+
+// Use production by default so Debug builds work on both simulators and devices.
+// Override HEALTHRISK_API_BASE_URL in the Xcode scheme when running a local API.
+// $() prevents xcconfig from interpreting the second slash as a comment.
+HEALTHRISK_API_BASE_URL = https:/$()/health-risk-ecru.vercel.app
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG

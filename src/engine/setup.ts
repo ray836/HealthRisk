@@ -12,6 +12,8 @@ import { TERRITORY_IDS, startingArmies } from './map.js';
 import type { GameConfig, GameState, Player, PlayerId, Territory } from './types.js';
 
 export const NEUTRAL_GARRISON_ARMIES = 2;
+export const MIN_GAME_PLAYERS = 2;
+export const MAX_GAME_PLAYERS = 10;
 
 export interface CreateGameInput {
   id: string;
@@ -59,8 +61,10 @@ export function dealTerritories(
  */
 export function createGame(input: CreateGameInput): GameState {
   const { id, config, players, seed } = input;
-  if (players.length < 2 || players.length > 10) {
-    throw new Error('Exercise Risk supports 2–10 players');
+  if (players.length < MIN_GAME_PLAYERS || players.length > MAX_GAME_PLAYERS) {
+    throw new Error(
+      `Exercise Risk supports ${MIN_GAME_PLAYERS}–${MAX_GAME_PLAYERS} players`,
+    );
   }
   const playerIds = players.map((p) => p.id);
   const assignment = dealTerritories(playerIds, seed);

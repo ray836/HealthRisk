@@ -7,3 +7,9 @@ dist/
 !.env.example
 
 .vercel
+
+# Xcode user and build state
+.DS_Store
+xcuserdata/
+DerivedData/
+*.xcuserstate

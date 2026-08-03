@@ -167,7 +167,7 @@ export interface HealthRulesRequest {
 }
 
 export interface CreateGameRequest {
-  /** Required only for locally controlled practice games. */
+  /** Required only for locally controlled practice games; valid range is 2–10. */
   players?: number;
   practice: boolean;
   healthRules?: HealthRulesRequest;

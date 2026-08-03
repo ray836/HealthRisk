@@ -111,6 +111,7 @@ OpenAPI 3.1 contract at `/openapi.json` can drive Swift model/client generation.
 Account and game lifecycle endpoints include:
 
 - `GET /api/games` for waiting, active, practice, completed, and cancelled games;
+- new multiplayer waiting rooms support up to 10 joined players and may start once at least 2 have joined;
 - `POST /api/games/:id/leave` to leave a lobby or forfeit an active game;
 - `DELETE /api/games/:id/members/:playerId` for creator lobby moderation;
 - `DELETE /api/account` with `{ "password": "..." }` for in-app account deletion.

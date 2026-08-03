@@ -1,0 +1,294 @@
+import SwiftUI
+
+struct WaitingRoomView: View {
+    @ObservedObject private var authenticationStore: AuthenticationStore
+    @StateObject private var store: WaitingRoomStore
+    @State private var isEditingRules = false
+
+    init(
+        gameId: String,
+        api: any HealthRiskAPI,
+        authenticationStore: AuthenticationStore
+    ) {
+        self.authenticationStore = authenticationStore
+        _store = StateObject(wrappedValue: WaitingRoomStore(gameId: gameId, api: api))
+    }
+
+    var body: some View {
+        ZStack {
+            HealthRiskTheme.appBackground
+            content
+        }
+        .navigationTitle("Waiting Room")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    Task { await load() }
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .disabled(store.isLoading)
+            }
+        }
+        .task { await load() }
+        .sheet(isPresented: $isEditingRules) {
+            if let game = store.game {
+                HealthRulesEditorView(store: store, game: game) {
+                    await invalidateIfUnauthorized(store.rulesError)
+                }
+            }
+        }
+        .foregroundStyle(HealthRiskTheme.text)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if store.isLoading && store.game == nil {
+            ProgressView("Loading waiting room…")
+                .tint(HealthRiskTheme.accent)
+        } else if let game = store.game {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    if let error = store.error {
+                        ServerErrorView(error: error)
+                    }
+                    lobbySummary(game)
+                    healthGoals(game)
+                }
+                .padding(18)
+            }
+            .refreshable { await load() }
+        } else if let error = store.error {
+            VStack(spacing: 16) {
+                ServerErrorView(error: error)
+                Button("Try Again") { Task { await load() } }
+                    .buttonStyle(.borderedProminent)
+                    .tint(HealthRiskTheme.accent)
+            }
+            .padding(18)
+        }
+    }
+
+    private func lobbySummary(_ game: LobbyGameView) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Label("\(game.claimedPlayerCount)/\(game.lobbyCapacity) players", systemImage: "person.3.fill")
+                    .font(.headline)
+                Spacer()
+                Text(game.isCreator ? "Creator" : "Player")
+                    .font(.caption.bold())
+                    .foregroundStyle(HealthRiskTheme.accent)
+            }
+
+            ForEach(game.players) { player in
+                HStack(spacing: 11) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(HealthRiskTheme.success)
+                    Text(player.name)
+                        .font(.subheadline.weight(.semibold))
+                    Spacer()
+                    if game.lobbyHealthVoting.submittedPlayerIds.contains(player.id) {
+                        Text("Goals reviewed")
+                            .font(.caption)
+                            .foregroundStyle(HealthRiskTheme.success)
+                    } else {
+                        Text("Reviewing goals")
+                            .font(.caption)
+                            .foregroundStyle(HealthRiskTheme.muted)
+                    }
+                }
+            }
+
+            let openSeats = max(0, game.lobbyCapacity - game.claimedPlayerCount)
+            if openSeats > 0 {
+                Label(
+                    "\(openSeats) open \(openSeats == 1 ? "seat" : "seats")",
+                    systemImage: "person.badge.plus"
+                )
+                .font(.subheadline)
+                .foregroundStyle(HealthRiskTheme.muted)
+            }
+        }
+        .padding(18)
+        .healthRiskSurface()
+    }
+
+    private func healthGoals(_ game: LobbyGameView) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Health Goals")
+                        .font(.title2.bold())
+                    Text("Choose the goals you would use. Everyone reviews changes before the game starts.")
+                        .font(.caption)
+                        .foregroundStyle(HealthRiskTheme.muted)
+                }
+                Spacer(minLength: 10)
+                if game.isCreator {
+                    Button("Edit") {
+                        store.clearRulesError()
+                        isEditingRules = true
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(HealthRiskTheme.accent)
+                }
+            }
+
+            ForEach(game.exercises) { goal in
+                healthGoalRow(goal, game: game)
+            }
+
+            capsSummary(game)
+
+            if let error = store.choicesError {
+                ServerErrorView(error: error)
+            }
+
+            if game.lobbyHealthVoting.enabled {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("\(game.lobbyHealthVoting.submissionCount)/\(game.lobbyHealthVoting.requiredSubmissions) players submitted")
+                            .font(.caption)
+                            .foregroundStyle(HealthRiskTheme.muted)
+                        Spacer()
+                        if game.lobbyHealthVoting.allSubmitted {
+                            Label("Ready", systemImage: "checkmark.circle.fill")
+                                .font(.caption.bold())
+                                .foregroundStyle(HealthRiskTheme.success)
+                        }
+                    }
+
+                    Button {
+                        Task {
+                            _ = await store.submitChoices()
+                            await invalidateIfUnauthorized(store.choicesError)
+                        }
+                    } label: {
+                        HStack(spacing: 9) {
+                            if store.isSubmittingChoices {
+                                ProgressView().tint(.white)
+                            }
+                            Text(choiceButtonTitle(game))
+                                .fontWeight(.bold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 46)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(HealthRiskTheme.accent)
+                    .disabled(
+                        store.isSubmittingChoices ||
+                        (game.lobbyHealthVoting.hasSubmitted && !store.choicesHaveChanges)
+                    )
+                }
+                .padding(.top, 3)
+            }
+        }
+    }
+
+    private func healthGoalRow(_ goal: HealthGoalRule, game: LobbyGameView) -> some View {
+        let selected = store.selectedGoalKeys.contains(goal.key)
+        let interested = game.lobbyHealthVoting.voteCounts[goal.key] ?? 0
+
+        return VStack(alignment: .leading, spacing: 11) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: categoryIcon(goal.category))
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(HealthRiskTheme.accent)
+                    .frame(width: 40, height: 40)
+                    .background(HealthRiskTheme.accent.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(goal.label)
+                        .font(.headline)
+                    Text(goalDescription(goal))
+                        .font(.caption)
+                        .foregroundStyle(HealthRiskTheme.muted)
+                    Text("\(interested) interested")
+                        .font(.caption2)
+                        .foregroundStyle(interested > 0 ? HealthRiskTheme.success : HealthRiskTheme.muted)
+                }
+                Spacer()
+            }
+
+            if game.lobbyHealthVoting.enabled {
+                Button {
+                    store.toggleGoal(goal.key)
+                } label: {
+                    Label("I’d use this", systemImage: selected ? "checkmark.circle.fill" : "circle")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 38)
+                }
+                .buttonStyle(.bordered)
+                .tint(selected ? HealthRiskTheme.success : HealthRiskTheme.accent)
+                .accessibilityValue(selected ? "Selected" : "Not selected")
+            }
+        }
+        .padding(16)
+        .healthRiskSurface()
+    }
+
+    private func capsSummary(_ game: LobbyGameView) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("Daily reinforcement limits")
+                .font(.subheadline.weight(.semibold))
+            ForEach(HealthCategory.allCases) { category in
+                if let cap = game.categoryTroopCaps[category.rawValue] {
+                    Text("\(category.rawValue.capitalized): up to \(number(cap)) troops")
+                        .font(.caption)
+                        .foregroundStyle(HealthRiskTheme.muted)
+                }
+            }
+            Text("Overall: up to \(number(game.dailyTotalTroopCap)) troops per day")
+                .font(.caption)
+                .foregroundStyle(HealthRiskTheme.muted)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(HealthRiskTheme.raisedPanel)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func choiceButtonTitle(_ game: LobbyGameView) -> String {
+        if store.isSubmittingChoices { return "Submitting…" }
+        if game.lobbyHealthVoting.hasSubmitted {
+            return store.choicesHaveChanges ? "Update My Choices" : "Choices Submitted"
+        }
+        return "Submit My Choices"
+    }
+
+    private func categoryIcon(_ category: HealthCategory) -> String {
+        switch category {
+        case .movement: "figure.run"
+        case .nutrition: "leaf.fill"
+        case .recovery: "moon.zzz.fill"
+        }
+    }
+
+    private func goalDescription(_ goal: HealthGoalRule) -> String {
+        if goal.trackingType == .checkbox {
+            return "\(number(goal.troopsPerUnit)) troops when completed · once daily"
+        }
+        let limit = goal.dailyUnitCap.map { "up to \(number($0)) \(goal.unitLabel) per day" }
+            ?? "no individual daily limit"
+        return "\(number(goal.troopsPerUnit)) troops per \(goal.unitLabel) · \(limit)"
+    }
+
+    private func number(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(0...3)))
+    }
+
+    private func load() async {
+        await store.load()
+        await invalidateIfUnauthorized(store.error)
+    }
+
+    private func invalidateIfUnauthorized(_ error: APIError?) async {
+        if error?.isUnauthorized == true {
+            await authenticationStore.invalidateSession()
+        }
+    }
+}

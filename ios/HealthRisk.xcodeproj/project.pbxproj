@@ -1,0 +1,300 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A00000000000000000000001 /* HealthRiskApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000001 /* HealthRiskApp.swift */; };
+		A00000000000000000000002 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000002 /* RootView.swift */; };
+		A00000000000000000000003 /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000003 /* AppConfiguration.swift */; };
+		A00000000000000000000004 /* APIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000004 /* APIModels.swift */; };
+		A00000000000000000000005 /* APIError.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000005 /* APIError.swift */; };
+		A00000000000000000000006 /* RetryPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000006 /* RetryPolicy.swift */; };
+		A00000000000000000000007 /* HealthRiskAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000007 /* HealthRiskAPI.swift */; };
+		A00000000000000000000008 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000008 /* APIClient.swift */; };
+		A00000000000000000000009 /* TokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000009 /* TokenStore.swift */; };
+		A0000000000000000000000A /* HealthRiskTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000000A /* HealthRiskTheme.swift */; };
+		A0000000000000000000000B /* ServerErrorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000000B /* ServerErrorView.swift */; };
+		A0000000000000000000000C /* AuthenticationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000000C /* AuthenticationStore.swift */; };
+		A0000000000000000000000D /* AuthenticationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000000D /* AuthenticationView.swift */; };
+		A0000000000000000000000E /* SessionRestoreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000000E /* SessionRestoreView.swift */; };
+		A0000000000000000000000F /* GamesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000000F /* GamesStore.swift */; };
+		A00000000000000000000010 /* MyGamesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000010 /* MyGamesView.swift */; };
+		A00000000000000000000012 /* CreateGameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000016 /* CreateGameView.swift */; };
+		A00000000000000000000013 /* WaitingRoomStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000017 /* WaitingRoomStore.swift */; };
+		A00000000000000000000014 /* WaitingRoomView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000018 /* WaitingRoomView.swift */; };
+		A00000000000000000000015 /* HealthRulesEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000019 /* HealthRulesEditorView.swift */; };
+		A00000000000000000000011 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000011 /* Assets.xcassets */; };
+		A00000000000000000000020 /* TestDoubles.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000020 /* TestDoubles.swift */; };
+		A00000000000000000000021 /* APIModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000021 /* APIModelTests.swift */; };
+		A00000000000000000000022 /* APIClientRetryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000022 /* APIClientRetryTests.swift */; };
+		A00000000000000000000023 /* AuthenticationStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000023 /* AuthenticationStoreTests.swift */; };
+		A00000000000000000000024 /* KeychainTokenStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000024 /* KeychainTokenStoreTests.swift */; };
+		A00000000000000000000025 /* GamesStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000025 /* GamesStoreTests.swift */; };
+		A00000000000000000000026 /* WaitingRoomStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000026 /* WaitingRoomStoreTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		D00000000000000000000030 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E00000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E00000000000000000000010;
+			remoteInfo = HealthRisk;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		B00000000000000000000001 /* HealthRiskApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthRiskApp.swift; sourceTree = "<group>"; };
+		B00000000000000000000002 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		B00000000000000000000003 /* AppConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfiguration.swift; sourceTree = "<group>"; };
+		B00000000000000000000004 /* APIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIModels.swift; sourceTree = "<group>"; };
+		B00000000000000000000005 /* APIError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIError.swift; sourceTree = "<group>"; };
+		B00000000000000000000006 /* RetryPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetryPolicy.swift; sourceTree = "<group>"; };
+		B00000000000000000000007 /* HealthRiskAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthRiskAPI.swift; sourceTree = "<group>"; };
+		B00000000000000000000008 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		B00000000000000000000009 /* TokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenStore.swift; sourceTree = "<group>"; };
+		B0000000000000000000000A /* HealthRiskTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthRiskTheme.swift; sourceTree = "<group>"; };
+		B0000000000000000000000B /* ServerErrorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerErrorView.swift; sourceTree = "<group>"; };
+		B0000000000000000000000C /* AuthenticationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationStore.swift; sourceTree = "<group>"; };
+		B0000000000000000000000D /* AuthenticationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationView.swift; sourceTree = "<group>"; };
+		B0000000000000000000000E /* SessionRestoreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionRestoreView.swift; sourceTree = "<group>"; };
+		B0000000000000000000000F /* GamesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GamesStore.swift; sourceTree = "<group>"; };
+		B00000000000000000000010 /* MyGamesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyGamesView.swift; sourceTree = "<group>"; };
+		B00000000000000000000016 /* CreateGameView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateGameView.swift; sourceTree = "<group>"; };
+		B00000000000000000000017 /* WaitingRoomStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaitingRoomStore.swift; sourceTree = "<group>"; };
+		B00000000000000000000018 /* WaitingRoomView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaitingRoomView.swift; sourceTree = "<group>"; };
+		B00000000000000000000019 /* HealthRulesEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthRulesEditorView.swift; sourceTree = "<group>"; };
+		B00000000000000000000011 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B00000000000000000000012 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B00000000000000000000013 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		B00000000000000000000014 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
+		B00000000000000000000015 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
+		B00000000000000000000020 /* TestDoubles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestDoubles.swift; sourceTree = "<group>"; };
+		B00000000000000000000021 /* APIModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIModelTests.swift; sourceTree = "<group>"; };
+		B00000000000000000000022 /* APIClientRetryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClientRetryTests.swift; sourceTree = "<group>"; };
+		B00000000000000000000023 /* AuthenticationStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationStoreTests.swift; sourceTree = "<group>"; };
+		B00000000000000000000024 /* KeychainTokenStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainTokenStoreTests.swift; sourceTree = "<group>"; };
+		B00000000000000000000025 /* GamesStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GamesStoreTests.swift; sourceTree = "<group>"; };
+		B00000000000000000000026 /* WaitingRoomStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaitingRoomStoreTests.swift; sourceTree = "<group>"; };
+		B00000000000000000000030 /* HealthRisk.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HealthRisk.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B00000000000000000000031 /* HealthRiskTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HealthRiskTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		D00000000000000000000001 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		D00000000000000000000011 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		C00000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				C00000000000000000000002 /* Config */,
+				C00000000000000000000003 /* HealthRisk */,
+				C00000000000000000000020 /* HealthRiskTests */,
+				C00000000000000000000030 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		C00000000000000000000002 /* Config */ = {isa = PBXGroup; children = (B00000000000000000000013 /* Debug.xcconfig */, B00000000000000000000014 /* Release.xcconfig */, B00000000000000000000015 /* Shared.xcconfig */); path = Config; sourceTree = "<group>"; };
+		C00000000000000000000003 /* HealthRisk */ = {isa = PBXGroup; children = (C00000000000000000000004 /* App */, C00000000000000000000005 /* Core */, C00000000000000000000009 /* DesignSystem */, C0000000000000000000000A /* Features */, C0000000000000000000000D /* Resources */); path = HealthRisk; sourceTree = "<group>"; };
+		C00000000000000000000004 /* App */ = {isa = PBXGroup; children = (B00000000000000000000001 /* HealthRiskApp.swift */, B00000000000000000000002 /* RootView.swift */); path = App; sourceTree = "<group>"; };
+		C00000000000000000000005 /* Core */ = {isa = PBXGroup; children = (C00000000000000000000006 /* API */, C00000000000000000000007 /* Configuration */, C00000000000000000000008 /* Security */); path = Core; sourceTree = "<group>"; };
+		C00000000000000000000006 /* API */ = {isa = PBXGroup; children = (B00000000000000000000008 /* APIClient.swift */, B00000000000000000000005 /* APIError.swift */, B00000000000000000000004 /* APIModels.swift */, B00000000000000000000007 /* HealthRiskAPI.swift */, B00000000000000000000006 /* RetryPolicy.swift */); path = API; sourceTree = "<group>"; };
+		C00000000000000000000007 /* Configuration */ = {isa = PBXGroup; children = (B00000000000000000000003 /* AppConfiguration.swift */); path = Configuration; sourceTree = "<group>"; };
+		C00000000000000000000008 /* Security */ = {isa = PBXGroup; children = (B00000000000000000000009 /* TokenStore.swift */); path = Security; sourceTree = "<group>"; };
+		C00000000000000000000009 /* DesignSystem */ = {isa = PBXGroup; children = (B0000000000000000000000A /* HealthRiskTheme.swift */, B0000000000000000000000B /* ServerErrorView.swift */); path = DesignSystem; sourceTree = "<group>"; };
+		C0000000000000000000000A /* Features */ = {isa = PBXGroup; children = (C0000000000000000000000B /* Authentication */, C0000000000000000000000C /* Games */); path = Features; sourceTree = "<group>"; };
+		C0000000000000000000000B /* Authentication */ = {isa = PBXGroup; children = (B0000000000000000000000C /* AuthenticationStore.swift */, B0000000000000000000000D /* AuthenticationView.swift */, B0000000000000000000000E /* SessionRestoreView.swift */); path = Authentication; sourceTree = "<group>"; };
+		C0000000000000000000000C /* Games */ = {isa = PBXGroup; children = (B00000000000000000000016 /* CreateGameView.swift */, B0000000000000000000000F /* GamesStore.swift */, B00000000000000000000019 /* HealthRulesEditorView.swift */, B00000000000000000000010 /* MyGamesView.swift */, B00000000000000000000017 /* WaitingRoomStore.swift */, B00000000000000000000018 /* WaitingRoomView.swift */); path = Games; sourceTree = "<group>"; };
+		C0000000000000000000000D /* Resources */ = {isa = PBXGroup; children = (B00000000000000000000011 /* Assets.xcassets */, B00000000000000000000012 /* Info.plist */); path = Resources; sourceTree = "<group>"; };
+		C00000000000000000000020 /* HealthRiskTests */ = {isa = PBXGroup; children = (B00000000000000000000020 /* TestDoubles.swift */, C00000000000000000000021 /* API */, C00000000000000000000022 /* Authentication */, C00000000000000000000024 /* Games */, C00000000000000000000023 /* Security */); path = HealthRiskTests; sourceTree = "<group>"; };
+		C00000000000000000000021 /* API */ = {isa = PBXGroup; children = (B00000000000000000000021 /* APIModelTests.swift */, B00000000000000000000022 /* APIClientRetryTests.swift */); path = API; sourceTree = "<group>"; };
+		C00000000000000000000022 /* Authentication */ = {isa = PBXGroup; children = (B00000000000000000000023 /* AuthenticationStoreTests.swift */); path = Authentication; sourceTree = "<group>"; };
+		C00000000000000000000023 /* Security */ = {isa = PBXGroup; children = (B00000000000000000000024 /* KeychainTokenStoreTests.swift */); path = Security; sourceTree = "<group>"; };
+		C00000000000000000000024 /* Games */ = {isa = PBXGroup; children = (B00000000000000000000025 /* GamesStoreTests.swift */, B00000000000000000000026 /* WaitingRoomStoreTests.swift */); path = Games; sourceTree = "<group>"; };
+		C00000000000000000000030 /* Products */ = {isa = PBXGroup; children = (B00000000000000000000030 /* HealthRisk.app */, B00000000000000000000031 /* HealthRiskTests.xctest */); name = Products; sourceTree = "<group>"; };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		E00000000000000000000010 /* HealthRisk */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 900000000000000000000010 /* Build configuration list for PBXNativeTarget "HealthRisk" */;
+			buildPhases = (D00000000000000000000000 /* Sources */, D00000000000000000000001 /* Frameworks */, D00000000000000000000002 /* Resources */);
+			buildRules = ();
+			dependencies = ();
+			name = HealthRisk;
+			productName = HealthRisk;
+			productReference = B00000000000000000000030 /* HealthRisk.app */;
+			productType = "com.apple.product-type.application";
+		};
+		E00000000000000000000020 /* HealthRiskTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 900000000000000000000020 /* Build configuration list for PBXNativeTarget "HealthRiskTests" */;
+			buildPhases = (D00000000000000000000010 /* Sources */, D00000000000000000000011 /* Frameworks */, D00000000000000000000012 /* Resources */);
+			buildRules = ();
+			dependencies = (D00000000000000000000031 /* PBXTargetDependency */);
+			name = HealthRiskTests;
+			productName = HealthRiskTests;
+			productReference = B00000000000000000000031 /* HealthRiskTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E00000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2630;
+				LastUpgradeCheck = 2630;
+				TargetAttributes = {
+					E00000000000000000000010 = {CreatedOnToolsVersion = 26.3; };
+					E00000000000000000000020 = {CreatedOnToolsVersion = 26.3; TestTargetID = E00000000000000000000010; };
+				};
+			};
+			buildConfigurationList = 900000000000000000000001 /* Build configuration list for PBXProject "HealthRisk" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (en, Base);
+			mainGroup = C00000000000000000000001;
+			productRefGroup = C00000000000000000000030 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (E00000000000000000000010 /* HealthRisk */, E00000000000000000000020 /* HealthRiskTests */);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		D00000000000000000000002 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000011 /* Assets.xcassets in Resources */); runOnlyForDeploymentPostprocessing = 0; };
+		D00000000000000000000012 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		D00000000000000000000000 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A00000000000000000000001 /* HealthRiskApp.swift in Sources */,
+				A00000000000000000000002 /* RootView.swift in Sources */,
+				A00000000000000000000003 /* AppConfiguration.swift in Sources */,
+				A00000000000000000000004 /* APIModels.swift in Sources */,
+				A00000000000000000000005 /* APIError.swift in Sources */,
+				A00000000000000000000006 /* RetryPolicy.swift in Sources */,
+				A00000000000000000000007 /* HealthRiskAPI.swift in Sources */,
+				A00000000000000000000008 /* APIClient.swift in Sources */,
+				A00000000000000000000009 /* TokenStore.swift in Sources */,
+				A0000000000000000000000A /* HealthRiskTheme.swift in Sources */,
+				A0000000000000000000000B /* ServerErrorView.swift in Sources */,
+				A0000000000000000000000C /* AuthenticationStore.swift in Sources */,
+				A0000000000000000000000D /* AuthenticationView.swift in Sources */,
+				A0000000000000000000000E /* SessionRestoreView.swift in Sources */,
+				A0000000000000000000000F /* GamesStore.swift in Sources */,
+				A00000000000000000000010 /* MyGamesView.swift in Sources */,
+				A00000000000000000000012 /* CreateGameView.swift in Sources */,
+				A00000000000000000000013 /* WaitingRoomStore.swift in Sources */,
+				A00000000000000000000014 /* WaitingRoomView.swift in Sources */,
+				A00000000000000000000015 /* HealthRulesEditorView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D00000000000000000000010 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A00000000000000000000020 /* TestDoubles.swift in Sources */,
+				A00000000000000000000021 /* APIModelTests.swift in Sources */,
+				A00000000000000000000022 /* APIClientRetryTests.swift in Sources */,
+				A00000000000000000000023 /* AuthenticationStoreTests.swift in Sources */,
+				A00000000000000000000024 /* KeychainTokenStoreTests.swift in Sources */,
+				A00000000000000000000025 /* GamesStoreTests.swift in Sources */,
+				A00000000000000000000026 /* WaitingRoomStoreTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		D00000000000000000000031 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = E00000000000000000000010 /* HealthRisk */; targetProxy = D00000000000000000000030 /* PBXContainerItemProxy */; };
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		F00000000000000000000001 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; COPY_PHASE_STRIP = NO; DEBUG_INFORMATION_FORMAT = dwarf; ENABLE_TESTABILITY = YES; GCC_C_LANGUAGE_STANDARD = gnu17; GCC_OPTIMIZATION_LEVEL = 0; ONLY_ACTIVE_ARCH = YES; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; }; name = Debug; };
+		F00000000000000000000002 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; COPY_PHASE_STRIP = NO; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"; ENABLE_NS_ASSERTIONS = NO; GCC_C_LANGUAGE_STANDARD = gnu17; SWIFT_COMPILATION_MODE = wholemodule; SWIFT_OPTIMIZATION_LEVEL = "-O"; VALIDATE_PRODUCT = YES; }; name = Release; };
+		F00000000000000000000011 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = B00000000000000000000013 /* Debug.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = HealthRisk/Resources/Info.plist;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_STRICT_CONCURRENCY = complete;
+			};
+			name = Debug;
+		};
+		F00000000000000000000012 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = B00000000000000000000014 /* Release.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = HealthRisk/Resources/Info.plist;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_STRICT_CONCURRENCY = complete;
+			};
+			name = Release;
+		};
+		F00000000000000000000021 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = B00000000000000000000013 /* Debug.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.raygrant.healthrisk.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HealthRisk.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HealthRisk";
+			};
+			name = Debug;
+		};
+		F00000000000000000000022 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = B00000000000000000000014 /* Release.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.raygrant.healthrisk.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HealthRisk.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HealthRisk";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		900000000000000000000001 /* Build configuration list for PBXProject "HealthRisk" */ = {isa = XCConfigurationList; buildConfigurations = (F00000000000000000000001 /* Debug */, F00000000000000000000002 /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		900000000000000000000010 /* Build configuration list for PBXNativeTarget "HealthRisk" */ = {isa = XCConfigurationList; buildConfigurations = (F00000000000000000000011 /* Debug */, F00000000000000000000012 /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		900000000000000000000020 /* Build configuration list for PBXNativeTarget "HealthRiskTests" */ = {isa = XCConfigurationList; buildConfigurations = (F00000000000000000000021 /* Debug */, F00000000000000000000022 /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+/* End XCConfigurationList section */
+	};
+	rootObject = E00000000000000000000001 /* Project object */;
+}

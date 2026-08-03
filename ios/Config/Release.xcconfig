@@ -1,0 +1,3 @@
+#include "Shared.xcconfig"
+
+HEALTHRISK_API_BASE_URL = https:/$()/health-risk-ecru.vercel.app

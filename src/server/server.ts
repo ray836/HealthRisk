@@ -58,15 +58,29 @@ import { signup, login, logout, resolveToken, type PublicUser } from '../service
 import { SESSION_TTL_MS } from '../services/authApi.js';
 import { AuthRateLimiter } from '../services/authRateLimit.js';
 import { claimSeat, claimAllSeats, claimOpenSeat, seatFor } from '../services/membership.js';
-import { createGame } from '../engine/setup.js';
+import {
+  createGame,
+  MAX_GAME_PLAYERS,
+  MIN_GAME_PLAYERS,
+} from '../engine/setup.js';
 import { CONTINENTS, CONTINENT_OF, NEIGHBORS } from '../engine/map.js';
 import { currentPlayer, type DailySession } from '../engine/turnSession.js';
 import type { ReinforcePlacement } from '../engine/reinforce.js';
 import type { GameConfig, GameState, HealthRuleGovernance, TerritoryId } from '../engine/types.js';
 
-const PLAYER_COLORS = ['#e05c4b', '#4b8fe0', '#3fae7a', '#c98a2b', '#8a63d2', '#d0518f'];
+const PLAYER_COLORS = [
+  '#e05c4b',
+  '#4b8fe0',
+  '#3fae7a',
+  '#c98a2b',
+  '#8a63d2',
+  '#d0518f',
+  '#2aa7b8',
+  '#8aa43a',
+  '#e07832',
+  '#7a8da8',
+];
 const PRACTICE_WINDOW_MINUTES = 20;
-const MULTIPLAYER_LOBBY_CAPACITY = 4;
 const SUPPORTED_TIMEZONES = new Set([
   'America/Los_Angeles',
   'America/Denver',
@@ -852,8 +866,9 @@ function publicDeviceRegistration(device: {
 }
 
 /**
- * Create a game. Multiplayer always opens four possible join slots but exposes
- * only the people who actually join; practice keeps an explicit seat count.
+ * Create a game. Multiplayer opens the engine's maximum number of join slots
+ * but exposes only the people who actually join; practice keeps an explicit
+ * seat count within the same supported range.
  */
 app.post(
   '/api/games',
@@ -862,8 +877,11 @@ app.post(
     await respondIdempotently(req, res, 'games:create', async () => {
     const practice = Boolean(req.body?.practice);
     const count = practice
-      ? Math.min(Math.max(Number(req.body?.players ?? 2), 2), MULTIPLAYER_LOBBY_CAPACITY)
-      : MULTIPLAYER_LOBBY_CAPACITY;
+      ? Math.min(
+          Math.max(Number(req.body?.players ?? MIN_GAME_PLAYERS), MIN_GAME_PLAYERS),
+          MAX_GAME_PLAYERS,
+        )
+      : MAX_GAME_PLAYERS;
     if (!practice) {
       const activeGameId = await findActiveMultiplayerGame(repo, user.id);
       if (activeGameId) {
