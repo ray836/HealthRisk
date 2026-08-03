@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 
 private enum GameRoute: Hashable {
-    case waitingRoom(String)
+    case waitingRoom(gameId: String, inviteURL: URL?)
 }
 
 struct MyGamesView: View {
@@ -55,9 +55,10 @@ struct MyGamesView: View {
             }
             .navigationDestination(for: GameRoute.self) { route in
                 switch route {
-                case let .waitingRoom(gameId):
+                case let .waitingRoom(gameId, inviteURL):
                     WaitingRoomView(
                         gameId: gameId,
+                        inviteURL: inviteURL,
                         api: api,
                         authenticationStore: authenticationStore,
                         onLobbyExited: {
@@ -241,7 +242,9 @@ private struct GameSummaryCard: View {
             if game.status == .setup,
                !game.practice,
                let inviteURL {
-                NavigationLink(value: GameRoute.waitingRoom(game.id)) {
+                NavigationLink(
+                    value: GameRoute.waitingRoom(gameId: game.id, inviteURL: inviteURL)
+                ) {
                     Label("Open Waiting Room", systemImage: "person.3.sequence.fill")
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity)

@@ -6,15 +6,18 @@ struct WaitingRoomView: View {
     @StateObject private var store: WaitingRoomStore
     @State private var isEditingRules = false
     @State private var isConfirmingExit = false
+    private let inviteURL: URL?
     private let onLobbyExited: @MainActor () async -> Void
 
     init(
         gameId: String,
+        inviteURL: URL?,
         api: any HealthRiskAPI,
         authenticationStore: AuthenticationStore,
         onLobbyExited: @escaping @MainActor () async -> Void
     ) {
         self.authenticationStore = authenticationStore
+        self.inviteURL = inviteURL
         self.onLobbyExited = onLobbyExited
         _store = StateObject(wrappedValue: WaitingRoomStore(gameId: gameId, api: api))
     }
@@ -27,7 +30,17 @@ struct WaitingRoomView: View {
         .navigationTitle("Waiting Room")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                if let inviteURL {
+                    ShareLink(
+                        item: inviteURL,
+                        subject: Text("Join my HealthRisk game"),
+                        message: Text("Join my HealthRisk game: \(inviteURL.absoluteString)")
+                    ) {
+                        Label("Share Invite", systemImage: "square.and.arrow.up")
+                    }
+                }
+
                 Button {
                     Task { await load() }
                 } label: {
