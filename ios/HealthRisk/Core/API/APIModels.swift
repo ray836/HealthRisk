@@ -180,6 +180,12 @@ struct LobbyGameMutationResponse: Codable, Equatable, Sendable {
     let game: LobbyGameView
 }
 
+struct LeaveGameResponse: Codable, Equatable, Sendable {
+    let ok: Bool
+    let activeMultiplayerGameId: String?
+    let game: GameView
+}
+
 struct ChatMessage: Codable, Identifiable, Equatable, Sendable {
     let id: String
     let gameId: String

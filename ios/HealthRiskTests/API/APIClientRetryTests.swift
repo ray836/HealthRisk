@@ -137,6 +137,40 @@ final class APIClientRetryTests: XCTestCase {
         )
     }
 
+    func testCancelLobbyRetriesWithSameRevisionAndIdempotencyKey() async throws {
+        let responseData = Data(
+            #"{"ok":true,"activeMultiplayerGameId":null,"game":{"id":"game-lobby","revision":8,"status":"cancelled","practice":false,"yourTurn":false,"players":[],"territories":[],"chatMessages":[]}}"#.utf8
+        )
+        let session = MockURLSession(outcomes: [
+            .networkFailure,
+            .response(status: 200, headers: [:], body: responseData),
+        ])
+        let client = APIClient(
+            baseURL: URL(string: "https://healthrisk.example")!,
+            session: session,
+            retryPolicy: RetryPolicy(maximumAttempts: 2, delay: .zero),
+            sleeper: ImmediateSleeper()
+        )
+        let revision = RevisionRequest(revision: 7)
+
+        let response = try await client.leaveGame(gameId: "game-lobby", request: revision)
+
+        XCTAssertTrue(response.ok)
+        XCTAssertNil(response.activeMultiplayerGameId)
+        XCTAssertEqual(response.game.status, .cancelled)
+        let requests = await session.recordedRequests()
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(requests[0].url?.path, "/api/games/game-lobby/leave")
+        XCTAssertEqual(
+            requests[0].value(forHTTPHeaderField: "Idempotency-Key"),
+            requests[1].value(forHTTPHeaderField: "Idempotency-Key")
+        )
+        XCTAssertEqual(
+            try JSONDecoder().decode(RevisionRequest.self, from: XCTUnwrap(requests[0].httpBody)),
+            revision
+        )
+    }
+
     private var authResponseData: Data {
         Data(#"{"token":"token","user":{"id":"u1","username":"ray"}}"#.utf8)
     }

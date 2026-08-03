@@ -1,16 +1,21 @@
 import SwiftUI
 
 struct WaitingRoomView: View {
+    @Environment(\.dismiss) private var dismiss
     @ObservedObject private var authenticationStore: AuthenticationStore
     @StateObject private var store: WaitingRoomStore
     @State private var isEditingRules = false
+    @State private var isConfirmingExit = false
+    private let onLobbyExited: @MainActor () async -> Void
 
     init(
         gameId: String,
         api: any HealthRiskAPI,
-        authenticationStore: AuthenticationStore
+        authenticationStore: AuthenticationStore,
+        onLobbyExited: @escaping @MainActor () async -> Void
     ) {
         self.authenticationStore = authenticationStore
+        self.onLobbyExited = onLobbyExited
         _store = StateObject(wrappedValue: WaitingRoomStore(gameId: gameId, api: api))
     }
 
@@ -37,6 +42,22 @@ struct WaitingRoomView: View {
                 HealthRulesEditorView(store: store, game: game) {
                     await invalidateIfUnauthorized(store.rulesError)
                 }
+            }
+        }
+        .confirmationDialog(
+            store.game?.isCreator == true ? "Cancel this game?" : "Leave this game?",
+            isPresented: $isConfirmingExit,
+            titleVisibility: .visible
+        ) {
+            Button(store.game?.isCreator == true ? "Cancel Game" : "Leave Game", role: .destructive) {
+                Task { await exitLobby() }
+            }
+            Button("Keep Game", role: .cancel) {}
+        } message: {
+            if store.game?.isCreator == true {
+                Text("This closes the waiting room for everyone and frees you to create another multiplayer game.")
+            } else {
+                Text("Your seat becomes available for another player.")
             }
         }
         .foregroundStyle(HealthRiskTheme.text)
@@ -109,6 +130,31 @@ struct WaitingRoomView: View {
                 .font(.subheadline)
                 .foregroundStyle(HealthRiskTheme.muted)
             }
+
+            if let error = store.exitError {
+                ServerErrorView(error: error)
+            }
+
+            Divider().overlay(HealthRiskTheme.line)
+
+            Button(role: .destructive) {
+                isConfirmingExit = true
+            } label: {
+                HStack(spacing: 9) {
+                    if store.isExitingLobby {
+                        ProgressView().tint(HealthRiskTheme.danger)
+                    } else {
+                        Image(systemName: game.isCreator ? "trash" : "rectangle.portrait.and.arrow.right")
+                    }
+                    Text(game.isCreator ? "Cancel Game" : "Leave Game")
+                        .fontWeight(.semibold)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 40)
+            }
+            .buttonStyle(.bordered)
+            .tint(HealthRiskTheme.danger)
+            .disabled(store.isExitingLobby)
         }
         .padding(18)
         .healthRiskSurface()
@@ -284,6 +330,15 @@ struct WaitingRoomView: View {
     private func load() async {
         await store.load()
         await invalidateIfUnauthorized(store.error)
+    }
+
+    private func exitLobby() async {
+        if await store.exitLobby() {
+            await onLobbyExited()
+            dismiss()
+        } else {
+            await invalidateIfUnauthorized(store.exitError)
+        }
     }
 
     private func invalidateIfUnauthorized(_ error: APIError?) async {

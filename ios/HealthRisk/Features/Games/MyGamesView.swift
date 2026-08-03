@@ -59,7 +59,10 @@ struct MyGamesView: View {
                     WaitingRoomView(
                         gameId: gameId,
                         api: api,
-                        authenticationStore: authenticationStore
+                        authenticationStore: authenticationStore,
+                        onLobbyExited: {
+                            await gamesStore.load()
+                        }
                     )
                 }
             }

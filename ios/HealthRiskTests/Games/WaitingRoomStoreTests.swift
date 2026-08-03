@@ -60,6 +60,77 @@ final class WaitingRoomStoreTests: XCTestCase {
         )
     }
 
+    func testCreatorCanCancelLobbyWithLatestRevision() async {
+        let initial = lobbyGame(revision: 7)
+        let api = MockHealthRiskAPI(
+            gameResult: .success(initial),
+            leaveGameResult: .success(
+                LeaveGameResponse(
+                    ok: true,
+                    activeMultiplayerGameId: nil,
+                    game: cancelledGame(id: initial.id)
+                )
+            )
+        )
+        let store = WaitingRoomStore(gameId: initial.id, api: api)
+        await store.load()
+
+        let succeeded = await store.exitLobby()
+
+        XCTAssertTrue(succeeded)
+        XCTAssertNil(store.game)
+        XCTAssertNil(store.exitError)
+        XCTAssertFalse(store.isExitingLobby)
+        let exits = await api.recordedGameExits()
+        XCTAssertEqual(
+            exits,
+            [
+                MockHealthRiskAPI.RecordedGameExit(
+                    gameId: "game-lobby",
+                    request: RevisionRequest(revision: 7)
+                ),
+            ]
+        )
+    }
+
+    func testCancelLobbyPublishesServerErrorAndKeepsGameVisible() async {
+        let initial = lobbyGame(revision: 7)
+        let serverError = APIError(
+            statusCode: 409,
+            code: "stale_game",
+            message: "Refresh and try again.",
+            requestId: "request-cancel",
+            retryable: false
+        )
+        let api = MockHealthRiskAPI(
+            gameResult: .success(initial),
+            leaveGameResult: .failure(serverError)
+        )
+        let store = WaitingRoomStore(gameId: initial.id, api: api)
+        await store.load()
+
+        let succeeded = await store.exitLobby()
+
+        XCTAssertFalse(succeeded)
+        XCTAssertEqual(store.game, initial)
+        XCTAssertEqual(store.exitError, serverError)
+        XCTAssertFalse(store.isExitingLobby)
+    }
+
+    private func cancelledGame(id: String) -> GameView {
+        GameView(
+            id: id,
+            revision: 8,
+            status: .cancelled,
+            practice: false,
+            yourTurn: false,
+            players: [],
+            territories: [],
+            chatMessages: [],
+            schedule: nil
+        )
+    }
+
     private func lobbyGame(
         revision: Int,
         goalLabel: String = "Running",

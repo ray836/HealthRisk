@@ -20,11 +20,17 @@ actor MockHealthRiskAPI: HealthRiskAPI {
         let request: LobbyHealthChoicesRequest
     }
 
+    struct RecordedGameExit: Equatable, Sendable {
+        let gameId: String
+        let request: RevisionRequest
+    }
+
     private var bearerTokens: [String?] = []
     private var currentUserCallCount = 0
     private var createGameRequests: [CreateGameRequest] = []
     private var rulesUpdates: [RecordedRulesUpdate] = []
     private var choicesSubmissions: [RecordedChoicesSubmission] = []
+    private var gameExits: [RecordedGameExit] = []
 
     var metadataResult: Result<APIMetadata, APIError>
     var loginResult: Result<AuthResponse, APIError>
@@ -34,6 +40,7 @@ actor MockHealthRiskAPI: HealthRiskAPI {
     var gamesResult: Result<ListGamesResponse, APIError>
     var createGameResult: Result<GameView, APIError>
     var gameResult: Result<LobbyGameView, APIError>
+    var leaveGameResult: Result<LeaveGameResponse, APIError>
     var rulesUpdateResult: Result<LobbyGameMutationResponse, APIError>
     var choicesResult: Result<LobbyGameMutationResponse, APIError>
 
@@ -47,6 +54,7 @@ actor MockHealthRiskAPI: HealthRiskAPI {
         gamesResult: Result<ListGamesResponse, APIError> = .success(ListGamesResponse(games: [])),
         createGameResult: Result<GameView, APIError> = .failure(unconfiguredAPIError),
         gameResult: Result<LobbyGameView, APIError> = .failure(unconfiguredAPIError),
+        leaveGameResult: Result<LeaveGameResponse, APIError> = .failure(unconfiguredAPIError),
         rulesUpdateResult: Result<LobbyGameMutationResponse, APIError> = .failure(unconfiguredAPIError),
         choicesResult: Result<LobbyGameMutationResponse, APIError> = .failure(unconfiguredAPIError)
     ) {
@@ -58,6 +66,7 @@ actor MockHealthRiskAPI: HealthRiskAPI {
         self.gamesResult = gamesResult
         self.createGameResult = createGameResult
         self.gameResult = gameResult
+        self.leaveGameResult = leaveGameResult
         self.rulesUpdateResult = rulesUpdateResult
         self.choicesResult = choicesResult
     }
@@ -87,6 +96,14 @@ actor MockHealthRiskAPI: HealthRiskAPI {
         try gameResult.get()
     }
 
+    func leaveGame(
+        gameId: String,
+        request: RevisionRequest
+    ) async throws -> LeaveGameResponse {
+        gameExits.append(RecordedGameExit(gameId: gameId, request: request))
+        return try leaveGameResult.get()
+    }
+
     func updateLobbyHealthRules(
         gameId: String,
         request: HealthRulesUpdateRequest
@@ -108,6 +125,7 @@ actor MockHealthRiskAPI: HealthRiskAPI {
     func recordedCreateGameRequests() -> [CreateGameRequest] { createGameRequests }
     func recordedRulesUpdates() -> [RecordedRulesUpdate] { rulesUpdates }
     func recordedChoicesSubmissions() -> [RecordedChoicesSubmission] { choicesSubmissions }
+    func recordedGameExits() -> [RecordedGameExit] { gameExits }
 
 }
 

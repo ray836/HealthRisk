@@ -57,6 +57,16 @@ actor APIClient: HealthRiskAPI {
         try await get("/api/games/\(encodedPathComponent(gameId))")
     }
 
+    func leaveGame(
+        gameId: String,
+        request: RevisionRequest
+    ) async throws -> LeaveGameResponse {
+        try await post(
+            "/api/games/\(encodedPathComponent(gameId))/leave",
+            body: request
+        )
+    }
+
     func updateLobbyHealthRules(
         gameId: String,
         request: HealthRulesUpdateRequest

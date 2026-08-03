@@ -8,9 +8,11 @@ final class WaitingRoomStore: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var isUpdatingRules = false
     @Published private(set) var isSubmittingChoices = false
+    @Published private(set) var isExitingLobby = false
     @Published var error: APIError?
     @Published var rulesError: APIError?
     @Published var choicesError: APIError?
+    @Published var exitError: APIError?
 
     let gameId: String
     private let api: any HealthRiskAPI
@@ -49,6 +51,41 @@ final class WaitingRoomStore: ObservableObject {
 
     func clearRulesError() {
         rulesError = nil
+    }
+
+    @discardableResult
+    func exitLobby() async -> Bool {
+        guard let game, !isExitingLobby else { return false }
+        isExitingLobby = true
+        exitError = nil
+        defer { isExitingLobby = false }
+
+        do {
+            let response = try await api.leaveGame(
+                gameId: gameId,
+                request: RevisionRequest(revision: game.revision)
+            )
+            guard response.ok else {
+                exitError = APIError(
+                    statusCode: nil,
+                    code: "leave_failed",
+                    message: "The game could not be left.",
+                    requestId: nil,
+                    retryable: false
+                )
+                return false
+            }
+            self.game = nil
+            selectedGoalKeys = []
+            return true
+        } catch {
+            let normalized = APIError.normalized(error)
+            if normalized.code == "stale_game" {
+                await load()
+            }
+            exitError = normalized
+            return false
+        }
     }
 
     @discardableResult
@@ -99,5 +136,6 @@ final class WaitingRoomStore: ObservableObject {
         self.game = game
         selectedGoalKeys = Set(game.lobbyHealthVoting.mySelections)
         error = nil
+        exitError = nil
     }
 }
