@@ -224,8 +224,9 @@ Turns now run on a real timed window, not just manual "End turn":
   the auto-resolve/day-rollover shows up while you're idle. Manual End turn still
   works — the timer is a backstop, not a forced wait.
 - **Config**: demo window defaults to 3 min (`EXRISK_WINDOW_MIN`, fractional ok —
-  e.g. `0.5` = 30s); demo opens the next day immediately for continuous play,
-  while the real cadence (`nextDayOpenAt` default) uses the next 7pm.
+  e.g. `0.5` = 30s). Practice games open the next round immediately after the
+  final controlled seat finishes, while multiplayer uses the real daily cadence
+  (`nextDayOpenAt` default) and waits for the next 7pm.
 
 ## Auth & multiplayer (session 9)
 

@@ -561,9 +561,10 @@ struct GameplayView: View {
                         )
                 }
                 .disabled(!canPerformSelectedAction || store.isPerformingAction)
+                .accessibilityLabel(inlinePrimaryActionTitle(game))
 
-            case .fortify, .done:
-                Label("Turn ready", systemImage: "checkmark.circle.fill")
+            case .fortify:
+                Label("Troops moved", systemImage: "checkmark.circle.fill")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(HealthRiskTheme.success)
                 Button {
@@ -574,6 +575,11 @@ struct GameplayView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(HealthRiskTheme.accent)
                 .disabled(store.isPerformingAction)
+
+            case .done:
+                Label("Turn complete", systemImage: "checkmark.circle.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(HealthRiskTheme.success)
             }
         }
         .padding(3)
@@ -710,14 +716,23 @@ struct GameplayView: View {
                 ProgressView()
                     .controlSize(.small)
                     .tint(HealthRiskTheme.background)
+            } else if actionMode == .attack {
+                Image(systemName: "figure.fencing")
+                    .font(.system(size: 23, weight: .semibold))
             }
-            Text(store.isPerformingAction ? "Updating…" : inlinePrimaryActionTitle(game))
-                .font(.caption.weight(.bold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
+            if actionMode == .fortify {
+                Text(store.isPerformingAction ? "Updating…" : inlinePrimaryActionTitle(game))
+                    .font(.caption.weight(.bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
         }
-        .padding(.horizontal, 10)
-        .frame(minWidth: 92, maxWidth: 126, minHeight: 38)
+        .padding(.horizontal, actionMode == .attack ? 0 : 10)
+        .frame(
+            minWidth: actionMode == .attack ? 54 : 92,
+            maxWidth: actionMode == .attack ? 54 : 126,
+            minHeight: actionMode == .attack ? 42 : 38
+        )
     }
 
     private func inlinePrimaryActionTitle(_ game: GameplayGame) -> String {
@@ -1337,19 +1352,23 @@ struct GameplayView: View {
             Color.black.opacity(0.68)
                 .ignoresSafeArea()
 
-            VStack(spacing: 16) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 42))
-                    .foregroundStyle(HealthRiskTheme.success)
+            VStack(spacing: 12) {
+                HStack(spacing: 11) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 36))
+                        .foregroundStyle(HealthRiskTheme.success)
 
-                VStack(spacing: 5) {
-                    Text("Turn Complete")
-                        .font(.title.bold())
-                    if let nextPlayerName = completion.nextPlayerName {
-                        Text("Waiting for \(nextPlayerName)")
-                            .font(.subheadline)
-                            .foregroundStyle(HealthRiskTheme.muted)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Turn Complete")
+                            .font(.title2.bold())
+                        if let nextPlayerName = completion.nextPlayerName {
+                            Text("Waiting for \(nextPlayerName)")
+                                .font(.caption)
+                                .foregroundStyle(HealthRiskTheme.muted)
+                        }
                     }
+
+                    Spacer()
                 }
 
                 if let summary = completion.summary {
@@ -1362,24 +1381,49 @@ struct GameplayView: View {
                 }
 
                 if let card = completion.cardAwarded {
-                    Label("Conquest card earned: \(pretty(card.territoryId))", systemImage: "rectangle.stack.fill")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(HealthRiskTheme.success)
-                } else {
-                    Text("No conquest card was earned this turn.")
-                        .font(.caption)
-                        .foregroundStyle(HealthRiskTheme.muted)
-                }
+                    HStack(spacing: 14) {
+                        ConquestCardFace(
+                            card: card,
+                            territory: store.game?.territories.first { $0.id == card.territoryId }
+                        )
+                        .frame(width: 270, height: 112)
 
-                Button("Continue") {
-                    store.clearTurnCompletion()
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Added to your hand", systemImage: "rectangle.stack.fill")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(HealthRiskTheme.success)
+
+                            Text("Collect three cards to trade for reinforcements.")
+                                .font(.caption)
+                                .foregroundStyle(HealthRiskTheme.muted)
+
+                            Button("Continue") {
+                                store.clearTurnCompletion()
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(HealthRiskTheme.accent)
+                            .frame(maxWidth: .infinity)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                } else {
+                    HStack(spacing: 16) {
+                        Text("No conquest card was earned this turn.")
+                            .font(.caption)
+                            .foregroundStyle(HealthRiskTheme.muted)
+
+                        Spacer()
+
+                        Button("Continue") {
+                            store.clearTurnCompletion()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(HealthRiskTheme.accent)
+                    }
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(HealthRiskTheme.accent)
-                .frame(maxWidth: .infinity)
             }
-            .padding(22)
-            .frame(maxWidth: 540)
+            .padding(18)
+            .frame(maxWidth: 620)
             .healthRiskSurface()
             .padding(24)
         }
@@ -1722,6 +1766,122 @@ struct GameplayView: View {
             return nil
         }
         return date.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    private func pretty(_ id: String) -> String {
+        id.split(separator: "_")
+            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+            .joined(separator: " ")
+    }
+}
+
+private struct ConquestCardFace: View {
+    let card: TerritoryCard
+    let territory: GameplayTerritory?
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+
+            ZStack {
+                LinearGradient(
+                    colors: [Color(red: 0.15, green: 0.21, blue: 0.29), HealthRiskTheme.background],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+
+                RadialGradient(
+                    colors: [continentColor.opacity(0.4), .clear],
+                    center: .topTrailing,
+                    startRadius: 2,
+                    endRadius: size.width * 0.72
+                )
+
+                Image("WorldMap")
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: size.width, height: size.height)
+                    .opacity(0.84)
+                    .accessibilityHidden(true)
+
+                if let point = TerritoryBoardView.webCoordinates[card.territoryId] {
+                    let marker = CGPoint(
+                        x: (point.x / TerritoryBoardView.mapSize.width) * size.width,
+                        y: (point.y / TerritoryBoardView.mapSize.height) * size.height
+                    )
+                    Circle()
+                        .fill(continentColor.opacity(0.3))
+                        .frame(width: 24, height: 24)
+                        .overlay {
+                            Circle()
+                                .stroke(.white.opacity(0.9), lineWidth: 1.5)
+                        }
+                        .position(marker)
+                    Circle()
+                        .fill(.white)
+                        .frame(width: 8, height: 8)
+                        .overlay {
+                            Circle()
+                                .stroke(continentColor, lineWidth: 2)
+                        }
+                        .position(marker)
+                }
+
+                LinearGradient(
+                    colors: [.clear, Color.black.opacity(0.86)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack {
+                        Text("CONQUEST CARD")
+                            .font(.system(size: 8, weight: .black, design: .rounded))
+                            .tracking(1.2)
+                            .foregroundStyle(continentColor)
+                        Spacer()
+                        Text("DAY \(card.earnedDay)")
+                            .font(.system(size: 8, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.72))
+                    }
+
+                    Spacer()
+
+                    Text(pretty(card.territoryId))
+                        .font(.headline.bold())
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    Text(continentName)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(continentColor)
+                }
+                .padding(10)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .stroke(continentColor.opacity(0.85), lineWidth: 1.2)
+            }
+            .shadow(color: continentColor.opacity(0.22), radius: 9, y: 4)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(pretty(card.territoryId)) conquest card, earned day \(card.earnedDay)")
+    }
+
+    private var continentName: String {
+        pretty(territory?.continent ?? "territory")
+    }
+
+    private var continentColor: Color {
+        switch territory?.continent {
+        case "north_america": Color(red: 0.35, green: 0.61, blue: 0.84)
+        case "south_america": Color(red: 0.33, green: 0.71, blue: 0.56)
+        case "europe": Color(red: 0.60, green: 0.51, blue: 0.83)
+        case "africa": Color(red: 0.83, green: 0.60, blue: 0.32)
+        case "asia": Color(red: 0.82, green: 0.44, blue: 0.51)
+        case "australia": Color(red: 0.33, green: 0.67, blue: 0.66)
+        default: HealthRiskTheme.accent
+        }
     }
 
     private func pretty(_ id: String) -> String {
@@ -2149,7 +2309,7 @@ private struct TerritoryBoardView: View {
         return "Double tap to inspect this territory"
     }
 
-    private static let mapSize = CGSize(width: 980, height: 545)
+    fileprivate static let mapSize = CGSize(width: 980, height: 545)
 
     private static let continentLabels: [(label: String, color: Color, point: CGPoint)] = [
         ("NORTH AMERICA", Color(red: 0.35, green: 0.61, blue: 0.84), CGPoint(x: 105, y: 50)),
@@ -2171,7 +2331,7 @@ private struct TerritoryBoardView: View {
         "greenland|iceland", "brazil|north_africa", "indonesia|siam",
     ]
 
-    private static let webCoordinates: [String: CGPoint] = [
+    fileprivate static let webCoordinates: [String: CGPoint] = [
         "alaska": CGPoint(x: 97, y: 80),
         "northwest_territory": CGPoint(x: 183, y: 80),
         "greenland": CGPoint(x: 378, y: 55),

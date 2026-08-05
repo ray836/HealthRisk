@@ -8,7 +8,8 @@
  *
  * After every event (session opened, window expired, player completed) the
  * scheduler `advance`s: if a player is now at the front of the line it schedules
- * their window; if the line is empty it schedules the next day's session_open.
+ * their window; if the line is empty it opens the next practice round immediately
+ * or schedules the next day's session_open for a multiplayer game.
  *
  * player_window handlers are stale-safe: if the front player changed before the
  * timer fired (the player completed in time), the timer is a no-op. This is why
@@ -191,7 +192,7 @@ export class GameScheduler {
     await this.advance(gameId, dayNumber);
   }
 
-  /** Schedule the next thing: this day's next player, or next day's open. */
+  /** Schedule the next thing: this day's next player, or the next round/day. */
   private async advance(
     gameId: string,
     dayNumber: number,
@@ -213,10 +214,15 @@ export class GameScheduler {
         at.getTime() -
           completedWindows * game.config.perPlayerWindowMinutes * 60 * 1000,
       );
-      const nextSessionOpensAt =
-        validDeadline(session.nextSessionOpensAt) ??
-        this.nextDayOpenAt(game.config, inferredSessionStart);
-      const nextSessionDeadline = nextSessionOpensAt.toISOString();
+      // Practice has no calendar-gated next session: its next round begins as
+      // soon as the final controlled seat ends its turn, so there is no useful
+      // future opening time to expose in the UI.
+      const nextSessionDeadline = game.practice
+        ? undefined
+        : (
+            validDeadline(session.nextSessionOpensAt) ??
+            this.nextDayOpenAt(game.config, inferredSessionStart)
+          ).toISOString();
       // Persist the deadline so the UI can render a countdown.
       if (
         session.windowExpiresAt !== deadline ||
@@ -239,6 +245,20 @@ export class GameScheduler {
         } satisfies PlayerWindowData,
         playerWindowKey(gameId, dayNumber, player),
       );
+    } else if (game.practice) {
+      // Practice is a continuous sandbox. Open the next round synchronously so
+      // the End Turn response already contains the first playable seat of the
+      // new round, including freshly calculated reinforcements.
+      await this.repo.saveSession({
+        ...session,
+        windowExpiresAt: undefined,
+        nextSessionOpensAt: undefined,
+      });
+      const nextDay = dayNumber + 1;
+      const nextSession = await openDailySession(this.repo, gameId, nextDay);
+      if (currentPlayer(nextSession)) {
+        await this.advance(gameId, nextDay, anchorNow);
+      }
     } else {
       const at =
         validDeadline(session.nextSessionOpensAt) ??

@@ -9,6 +9,7 @@ interface GameView {
   id: string;
   revision: number;
   status: string;
+  dayNumber: number;
   isCreator: boolean;
   currentPlayerId: string | null;
   mySeats: string[];
@@ -395,6 +396,44 @@ describe('multiplayer route authorization', () => {
       allowed: true,
       appliesTo: 'next_move',
     });
+  });
+
+  it('returns the next practice round immediately after the final controlled seat ends', async () => {
+    const owner = await request<AuthResult>('/api/auth/signup', {
+      method: 'POST',
+      body: { username: 'practice-fast-owner', password: 'RouteTest@2026' },
+    });
+    const created = await request<GameView>('/api/games', {
+      method: 'POST',
+      token: owner.body.token,
+      body: { practice: true, players: 2 },
+    });
+
+    expect(created.response.status).toBe(201);
+    const firstSeat = created.body.currentPlayerId;
+    expect(firstSeat).toBeTruthy();
+    expect(created.body.dayNumber).toBe(0);
+    expect(created.body.nextSessionOpensAt).toBeNull();
+
+    const firstTurn = await request<GameResult>(`/api/games/${created.body.id}/end`, {
+      method: 'POST',
+      token: owner.body.token,
+      body: { revision: created.body.revision },
+    });
+    expect(firstTurn.response.status).toBe(200);
+    expect(firstTurn.body.game.dayNumber).toBe(0);
+    expect(firstTurn.body.game.currentPlayerId).not.toBe(firstSeat);
+
+    const finalTurn = await request<GameResult>(`/api/games/${created.body.id}/end`, {
+      method: 'POST',
+      token: owner.body.token,
+      body: { revision: firstTurn.body.game.revision },
+    });
+    expect(finalTurn.response.status).toBe(200);
+    expect(finalTurn.body.game.dayNumber).toBe(1);
+    expect(finalTurn.body.game.currentPlayerId).toBe(firstSeat);
+    expect(finalTurn.body.game.nextSessionOpensAt).toBeNull();
+    expect(finalTurn.body.game.schedule.nextSessionOpensAt).toBeNull();
   });
 
   it('keeps one member-only conversation from the lobby into the active game', async () => {

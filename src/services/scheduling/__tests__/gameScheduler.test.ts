@@ -100,6 +100,44 @@ describe('GameScheduler daily cycle', () => {
     expect(new Date(nextOpen!.runAt).toISOString()).toBe('2026-01-17T00:00:00.000Z');
   });
 
+  it('opens the next practice round immediately after the final seat completes', async () => {
+    const repo = new InMemoryGameRepository({
+      games: [{ ...makeGame(), practice: true }],
+    });
+    const queue = new FakeJobQueue();
+    const nowMs = Date.parse('2026-01-16T00:10:00Z');
+    const scheduler = new GameScheduler({
+      repo,
+      planner: noopPlanner,
+      queue,
+      clock: { now: () => new Date(nowMs) },
+    });
+    scheduler.register();
+
+    await openDailySession(repo, 'g', 1);
+    await scheduler.armNextWindow('g', 1);
+    expect((await repo.loadSession('g', 1))!.nextSessionOpensAt).toBeUndefined();
+
+    await scheduler.onPlayerCompleted('g', 1, 'a');
+    expect(currentPlayer((await repo.loadSession('g', 1))!)).toBe('b');
+
+    await scheduler.onPlayerCompleted('g', 1, 'b');
+
+    expect((await repo.loadGame('g'))!.dayNumber).toBe(2);
+    const nextRound = (await repo.loadSession('g', 2))!;
+    expect(nextRound.queue).toEqual(['a', 'b']);
+    expect(currentPlayer(nextRound)).toBe('a');
+    expect(nextRound.nextSessionOpensAt).toBeUndefined();
+    expect(queue.pending().filter((job) => job.name === JOB_SESSION_OPEN)).toHaveLength(0);
+
+    const nextWindow = queue.pending().find((job) => {
+      const data = job.data as { dayNumber?: number; playerId?: string };
+      return job.name === JOB_PLAYER_WINDOW && data.dayNumber === 2 && data.playerId === 'a';
+    });
+    expect(nextWindow).toBeDefined();
+    expect(new Date(nextWindow!.runAt).toISOString()).toBe('2026-01-16T00:30:00.000Z');
+  });
+
   it('stops scheduling once the game is finished', async () => {
     const repo = new InMemoryGameRepository({ games: [{ ...makeGame(), status: 'finished', winnerId: 'a' }] });
     const queue = new FakeJobQueue();
