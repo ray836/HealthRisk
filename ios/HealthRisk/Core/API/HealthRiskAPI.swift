@@ -13,6 +13,7 @@ protocol HealthRiskAPI: Sendable {
     func getGame(_ gameId: String) async throws -> LobbyGameView
     func startGame(gameId: String, request: RevisionRequest) async throws -> GameMutationResponse
     func leaveGame(gameId: String, request: RevisionRequest) async throws -> LeaveGameResponse
+    func deletePracticeGame(gameId: String, request: RevisionRequest) async throws -> OkResponse
     func gameplayGame(_ gameId: String) async throws -> GameplayGame
     func reinforce(gameId: String, request: ReinforcementRequest) async throws -> GameplayMutationResponse
     func logExercise(gameId: String, request: ExerciseLogRequest) async throws -> ExerciseLogMutationResponse

@@ -236,6 +236,39 @@ final class APIClientRetryTests: XCTestCase {
         )
     }
 
+    func testDeletePracticeGameRetriesWithSameRevisionAndIdempotencyKey() async throws {
+        let responseData = Data(#"{"ok":true}"#.utf8)
+        let session = MockURLSession(outcomes: [
+            .networkFailure,
+            .response(status: 200, headers: [:], body: responseData),
+        ])
+        let client = APIClient(
+            baseURL: URL(string: "https://healthrisk.example")!,
+            session: session,
+            retryPolicy: RetryPolicy(maximumAttempts: 2, delay: .zero),
+            sleeper: ImmediateSleeper()
+        )
+        let revision = RevisionRequest(revision: 7)
+
+        let response = try await client.deletePracticeGame(
+            gameId: "game-practice",
+            request: revision
+        )
+
+        XCTAssertTrue(response.ok)
+        let requests = await session.recordedRequests()
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(requests[0].url?.path, "/api/games/game-practice/delete")
+        XCTAssertEqual(
+            requests[0].value(forHTTPHeaderField: "Idempotency-Key"),
+            requests[1].value(forHTTPHeaderField: "Idempotency-Key")
+        )
+        XCTAssertEqual(
+            try JSONDecoder().decode(RevisionRequest.self, from: XCTUnwrap(requests[0].httpBody)),
+            revision
+        )
+    }
+
     func testReinforcementRetriesSameAuthoritativeMutationAndAppliesServerGame() async throws {
         let session = MockURLSession(outcomes: [
             .networkFailure,

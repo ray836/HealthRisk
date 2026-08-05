@@ -25,6 +25,11 @@ actor MockHealthRiskAPI: HealthRiskAPI {
         let request: RevisionRequest
     }
 
+    struct RecordedPracticeDeletion: Equatable, Sendable {
+        let gameId: String
+        let request: RevisionRequest
+    }
+
     struct RecordedGameStart: Equatable, Sendable {
         let gameId: String
         let request: RevisionRequest
@@ -72,6 +77,7 @@ actor MockHealthRiskAPI: HealthRiskAPI {
     private var rulesUpdates: [RecordedRulesUpdate] = []
     private var choicesSubmissions: [RecordedChoicesSubmission] = []
     private var gameExits: [RecordedGameExit] = []
+    private var practiceDeletions: [RecordedPracticeDeletion] = []
 
     var metadataResult: Result<APIMetadata, APIError>
     var loginResult: Result<AuthResponse, APIError>
@@ -84,6 +90,7 @@ actor MockHealthRiskAPI: HealthRiskAPI {
     var gameResult: Result<LobbyGameView, APIError>
     var startGameResult: Result<GameMutationResponse, APIError>
     var leaveGameResult: Result<LeaveGameResponse, APIError>
+    var deletePracticeGameResult: Result<OkResponse, APIError>
     var gameplayGameResult: Result<GameplayGame, APIError>
     var reinforceResult: Result<GameplayMutationResponse, APIError>
     var exerciseLogResult: Result<ExerciseLogMutationResponse, APIError>
@@ -108,6 +115,7 @@ actor MockHealthRiskAPI: HealthRiskAPI {
         gameResult: Result<LobbyGameView, APIError> = .failure(unconfiguredAPIError),
         startGameResult: Result<GameMutationResponse, APIError> = .failure(unconfiguredAPIError),
         leaveGameResult: Result<LeaveGameResponse, APIError> = .failure(unconfiguredAPIError),
+        deletePracticeGameResult: Result<OkResponse, APIError> = .failure(unconfiguredAPIError),
         gameplayGameResult: Result<GameplayGame, APIError> = .failure(unconfiguredAPIError),
         gameplayGameResults: [Result<GameplayGame, APIError>] = [],
         reinforceResult: Result<GameplayMutationResponse, APIError> = .failure(unconfiguredAPIError),
@@ -131,6 +139,7 @@ actor MockHealthRiskAPI: HealthRiskAPI {
         self.gameResult = gameResult
         self.startGameResult = startGameResult
         self.leaveGameResult = leaveGameResult
+        self.deletePracticeGameResult = deletePracticeGameResult
         self.gameplayGameResult = gameplayGameResult
         queuedGameplayGameResults = gameplayGameResults
         self.reinforceResult = reinforceResult
@@ -193,6 +202,14 @@ actor MockHealthRiskAPI: HealthRiskAPI {
     ) async throws -> LeaveGameResponse {
         gameExits.append(RecordedGameExit(gameId: gameId, request: request))
         return try leaveGameResult.get()
+    }
+
+    func deletePracticeGame(
+        gameId: String,
+        request: RevisionRequest
+    ) async throws -> OkResponse {
+        practiceDeletions.append(RecordedPracticeDeletion(gameId: gameId, request: request))
+        return try deletePracticeGameResult.get()
     }
 
     func gameplayGame(_ gameId: String) async throws -> GameplayGame {
@@ -281,6 +298,7 @@ actor MockHealthRiskAPI: HealthRiskAPI {
     func recordedRulesUpdates() -> [RecordedRulesUpdate] { rulesUpdates }
     func recordedChoicesSubmissions() -> [RecordedChoicesSubmission] { choicesSubmissions }
     func recordedGameExits() -> [RecordedGameExit] { gameExits }
+    func recordedPracticeDeletions() -> [RecordedPracticeDeletion] { practiceDeletions }
 
 }
 

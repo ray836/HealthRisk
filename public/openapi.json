@@ -376,7 +376,21 @@
       "post": {
         "parameters": [{ "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKey" }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RevisionBody" } } } },
-        "responses": { "200": { "description": "Left lobby or forfeited game" } }
+        "responses": {
+          "200": { "description": "Left lobby, or forfeited an active multiplayer game; forfeited territories retain their armies as neutral garrisons" },
+          "400": { "description": "Practice games must be deleted instead of forfeited" }
+        }
+      }
+    },
+    "/api/games/{gameId}/delete": {
+      "post": {
+        "parameters": [{ "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RevisionBody" } } } },
+        "responses": {
+          "200": { "description": "Practice game and its stored data permanently deleted", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OkResponse" } } } },
+          "400": { "description": "Only practice games may be deleted" },
+          "403": { "description": "Only the practice-game creator may delete it" }
+        }
       }
     },
     "/api/games/{gameId}/members/{playerId}": {

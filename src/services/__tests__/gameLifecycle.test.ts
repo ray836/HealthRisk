@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { createGame } from '../../engine/setup.js';
 import type { GameConfig } from '../../engine/types.js';
 import { startDailySession } from '../../engine/turnSession.js';
-import { leaveGame, removeLobbyMember, startLobbyGame } from '../gameLifecycle.js';
+import {
+  deletePracticeGame,
+  leaveGame,
+  removeLobbyMember,
+  startLobbyGame,
+} from '../gameLifecycle.js';
 import { InMemoryGameRepository } from '../repository.js';
 
 const config: GameConfig = {
@@ -103,7 +108,7 @@ describe('multiplayer lifecycle', () => {
     expect(await repo.listMembers('lobby')).toEqual([]);
   });
 
-  it('turns an active departure into a forfeit and removes it from the queue', async () => {
+  it('awards the remaining player a win when their only opponent forfeits', async () => {
     const state = lobby('active', 2);
     state.status = 'active';
     const session = startDailySession(state, 0);
@@ -114,8 +119,78 @@ describe('multiplayer lifecycle', () => {
     const result = await leaveGame(repo, 'active', 'guest');
 
     expect(result.forfeited).toBe(true);
+    expect(result.game.status).toBe('finished');
+    expect(result.game.winnerId).toBe('p1');
+    expect(result.game.players.find((player) => player.id === 'p2')?.status).toBe('forfeited');
+    expect(result.game.territories.some((territory) => territory.owner === 'p2')).toBe(false);
+    expect(result.game.territories.some((territory) => territory.owner === null)).toBe(true);
+    expect(result.session?.queue).toEqual([]);
+  });
+
+  it('keeps a multi-player game active and turns the quitter\'s armies neutral', async () => {
+    const state = lobby('active-three', 3);
+    state.status = 'active';
+    const quittingArmies = state.territories
+      .filter((territory) => territory.owner === 'p2')
+      .reduce((total, territory) => total + territory.armies, 0);
+    const session = startDailySession(state, 0);
+    const repo = new InMemoryGameRepository({ games: [state], sessions: [session] });
+    await repo.setMember({ gameId: state.id, playerId: 'p1', userId: 'creator' });
+    await repo.setMember({ gameId: state.id, playerId: 'p2', userId: 'quitter' });
+    await repo.setMember({ gameId: state.id, playerId: 'p3', userId: 'remaining' });
+
+    const result = await leaveGame(repo, state.id, 'quitter');
+
+    expect(result.game.status).toBe('active');
+    expect(result.game.winnerId).toBeUndefined();
     expect(result.game.players.find((player) => player.id === 'p2')?.status).toBe('forfeited');
     expect(result.session?.queue).not.toContain('p2');
+    expect(result.session?.queue).toEqual(expect.arrayContaining(['p1', 'p3']));
+    expect(result.game.territories.some((territory) => territory.owner === 'p2')).toBe(false);
+    expect(result.game.territories
+      .filter((territory) => territory.owner === null)
+      .reduce((total, territory) => total + territory.armies, 0)).toBeGreaterThanOrEqual(quittingArmies);
+  });
+
+  it('requires deleting a practice game instead of forfeiting one controlled seat', async () => {
+    const state = lobby('active-practice', 2);
+    state.status = 'active';
+    state.practice = true;
+    const repo = new InMemoryGameRepository({ games: [state] });
+    for (const player of state.players) {
+      await repo.setMember({ gameId: state.id, playerId: player.id, userId: 'owner' });
+    }
+
+    await expect(leaveGame(repo, state.id, 'owner')).rejects.toMatchObject({
+      code: 'practice_delete_required',
+    });
+  });
+
+  it('lets the owner permanently delete practice data but rejects multiplayer deletion', async () => {
+    const practice = lobby('practice', 2);
+    practice.practice = true;
+    practice.status = 'active';
+    const practiceSession = startDailySession(practice, 0);
+    const multiplayer = lobby('multiplayer', 2);
+    const repo = new InMemoryGameRepository({
+      games: [practice, multiplayer],
+      sessions: [practiceSession],
+    });
+    for (const player of practice.players) {
+      await repo.setMember({ gameId: practice.id, playerId: player.id, userId: 'owner' });
+    }
+    await repo.setMember({ gameId: multiplayer.id, playerId: 'p1', userId: 'owner' });
+
+    await expect(deletePracticeGame(repo, multiplayer.id, 'owner'))
+      .rejects.toMatchObject({ code: 'practice_only' });
+    await expect(deletePracticeGame(repo, practice.id, 'someone-else'))
+      .rejects.toMatchObject({ code: 'not_creator' });
+    await deletePracticeGame(repo, practice.id, 'owner');
+
+    expect(await repo.loadGame(practice.id)).toBeNull();
+    expect(await repo.loadSession(practice.id, 0)).toBeNull();
+    expect(await repo.listMembers(practice.id)).toEqual([]);
+    expect(await repo.loadGame(multiplayer.id)).not.toBeNull();
   });
 
   it('lets only the creator free another lobby seat', async () => {

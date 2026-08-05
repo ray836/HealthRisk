@@ -106,6 +106,8 @@ struct GameplayView: View {
     @State private var limitsAttackLosses = false
     @State private var actionMode: GameplayActionMode = .attack
     @State private var isConfirmingEndTurn = false
+    @State private var isConfirmingDeletePracticeGame = false
+    @State private var isConfirmingForfeitGame = false
     @State private var isShowingCommandPanel = false
     @State private var hasDismissedGameResult = false
     @State private var selectedHealthGoalKey: String?
@@ -158,6 +160,30 @@ struct GameplayView: View {
             Button("Keep Playing", role: .cancel) {}
         } message: {
             Text("The server will advance play to the next person. You cannot add more actions to this turn afterward.")
+        }
+        .confirmationDialog(
+            "Delete this practice game?",
+            isPresented: $isConfirmingDeletePracticeGame,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Practice Game", role: .destructive) {
+                Task { await performDeletePracticeGame() }
+            }
+            Button("Keep Game", role: .cancel) {}
+        } message: {
+            Text("This permanently deletes the board, turn history, and saved practice progress. This cannot be undone.")
+        }
+        .confirmationDialog(
+            "Forfeit this game?",
+            isPresented: $isConfirmingForfeitGame,
+            titleVisibility: .visible
+        ) {
+            Button("Forfeit Game", role: .destructive) {
+                Task { await performForfeitGame() }
+            }
+            Button("Keep Playing", role: .cancel) {}
+        } message: {
+            Text("You will receive no more turns. Your territories become neutral and keep their current troops. If only one player remains, that player wins immediately.")
         }
         .alert(
             battleResultTitle,
@@ -431,6 +457,19 @@ struct GameplayView: View {
                             Text(game.mySeats.contains(player.id) ? "Your turn" : "Current turn")
                                 .font(.caption2.bold())
                                 .foregroundStyle(HealthRiskTheme.success)
+                        } else {
+                            switch player.status {
+                            case .forfeited:
+                                Text("Forfeited · territories neutral")
+                                    .font(.caption2.bold())
+                                    .foregroundStyle(HealthRiskTheme.danger)
+                            case .eliminated:
+                                Text("Eliminated")
+                                    .font(.caption2.bold())
+                                    .foregroundStyle(HealthRiskTheme.muted)
+                            case .active, .autoPiloted:
+                                EmptyView()
+                            }
                         }
                     }
                     Spacer()
@@ -817,6 +856,11 @@ struct GameplayView: View {
                         inspectionHint
                     }
                     playerSidebar(game)
+                    if game.practice {
+                        practiceGameManagement
+                    } else if canForfeit(game) {
+                        multiplayerGameManagement
+                    }
                 }
                 .padding(10)
             }
@@ -832,6 +876,83 @@ struct GameplayView: View {
         }
         .shadow(color: .black.opacity(0.5), radius: 24)
         .padding(8)
+    }
+
+    private var practiceGameManagement: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text("Practice Game")
+                .font(.headline)
+            Text("Delete this game when you no longer need the practice board or its saved progress.")
+                .font(.caption)
+                .foregroundStyle(HealthRiskTheme.muted)
+
+            Button(role: .destructive) {
+                isConfirmingDeletePracticeGame = true
+            } label: {
+                HStack {
+                    if store.isPerformingAction {
+                        ProgressView()
+                            .tint(HealthRiskTheme.danger)
+                    } else {
+                        Image(systemName: "trash")
+                    }
+                    Text("Delete Practice Game")
+                }
+                .font(.subheadline.weight(.semibold))
+                .frame(maxWidth: .infinity)
+                .frame(height: 38)
+            }
+            .buttonStyle(.bordered)
+            .tint(HealthRiskTheme.danger)
+            .disabled(store.isPerformingAction)
+        }
+        .padding(14)
+        .healthRiskSurface()
+    }
+
+    private var multiplayerGameManagement: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text("Leave Campaign")
+                .font(.headline)
+            Text("Forfeiting removes you from future turns. Your troops remain on the map as neutral defenders.")
+                .font(.caption)
+                .foregroundStyle(HealthRiskTheme.muted)
+
+            Button(role: .destructive) {
+                isConfirmingForfeitGame = true
+            } label: {
+                HStack {
+                    if store.isPerformingAction {
+                        ProgressView()
+                            .tint(HealthRiskTheme.danger)
+                    } else {
+                        Image(systemName: "flag.slash")
+                    }
+                    Text("Forfeit Game")
+                }
+                .font(.subheadline.weight(.semibold))
+                .frame(maxWidth: .infinity)
+                .frame(height: 38)
+            }
+            .buttonStyle(.bordered)
+            .tint(HealthRiskTheme.danger)
+            .disabled(store.isPerformingAction)
+        }
+        .padding(14)
+        .healthRiskSurface()
+    }
+
+    private func canForfeit(_ game: GameplayGame) -> Bool {
+        guard game.status == .active else { return false }
+        return game.players.contains { player in
+            guard game.mySeats.contains(player.id) else { return false }
+            switch player.status {
+            case .active, .autoPiloted:
+                return true
+            case .forfeited, .eliminated:
+                return false
+            }
+        }
     }
 
     private func territoryDetails(_ territory: GameplayTerritory, game: GameplayGame) -> some View {
@@ -1580,6 +1701,28 @@ struct GameplayView: View {
         if await store.endTurn() {
             resetSelection()
             await onGameChanged()
+        } else {
+            isShowingCommandPanel = true
+            await invalidateIfUnauthorized()
+        }
+    }
+
+    private func performDeletePracticeGame() async {
+        if await store.deletePracticeGame() {
+            isShowingCommandPanel = false
+            await onGameChanged()
+            dismiss()
+        } else {
+            isShowingCommandPanel = true
+            await invalidateIfUnauthorized()
+        }
+    }
+
+    private func performForfeitGame() async {
+        if await store.forfeitGame() {
+            isShowingCommandPanel = false
+            await onGameChanged()
+            dismiss()
         } else {
             isShowingCommandPanel = true
             await invalidateIfUnauthorized()

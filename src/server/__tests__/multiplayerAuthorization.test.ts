@@ -9,13 +9,15 @@ interface GameView {
   id: string;
   revision: number;
   status: string;
+  winnerId: string | null;
   dayNumber: number;
   isCreator: boolean;
   currentPlayerId: string | null;
   mySeats: string[];
   perPlayerWindowMinutes: number;
   nextSessionOpensAt: string | null;
-  players: Array<{ id: string; name: string }>;
+  players: Array<{ id: string; name: string; status: string }>;
+  territories: Array<{ id: string; owner: string | null; armies: number }>;
   exercises: Array<{
     key: string;
     label: string;
@@ -185,6 +187,39 @@ describe('multiplayer route authorization', () => {
       });
       expect(started.response.status).toBe(200);
       expect(started.body.game.status).toBe('active');
+    }
+
+    const beforeForfeit = await request<GameView>(`/api/games/${first.body.id}`, {
+      token: guest.body.token,
+    });
+    const ownerSeat = beforeForfeit.body.players.find(
+      (player) => player.name === 'multi-game-owner',
+    )!;
+    const guestSeat = beforeForfeit.body.players.find(
+      (player) => player.name === 'multi-game-guest',
+    )!;
+    const guestTerritories = new Map(
+      beforeForfeit.body.territories
+        .filter((territory) => territory.owner === guestSeat.id)
+        .map((territory) => [territory.id, territory.armies]),
+    );
+    const forfeited = await request<{ ok: true; game: GameView }>(
+      `/api/games/${first.body.id}/leave`,
+      {
+        method: 'POST',
+        token: guest.body.token,
+        body: { revision: beforeForfeit.body.revision },
+      },
+    );
+    expect(forfeited.response.status).toBe(200);
+    expect(forfeited.body.game.status).toBe('finished');
+    expect(forfeited.body.game.winnerId).toBe(ownerSeat.id);
+    expect(forfeited.body.game.currentPlayerId).toBeNull();
+    expect(forfeited.body.game.players.find((player) => player.id === guestSeat.id)?.status)
+      .toBe('forfeited');
+    for (const [territoryId, armies] of guestTerritories) {
+      expect(forfeited.body.game.territories.find((territory) => territory.id === territoryId))
+        .toMatchObject({ owner: null, armies });
     }
 
     const ownerGames = await request<{ games: Array<{ id: string }> }>('/api/games', {
@@ -434,6 +469,24 @@ describe('multiplayer route authorization', () => {
     expect(finalTurn.body.game.currentPlayerId).toBe(firstSeat);
     expect(finalTurn.body.game.nextSessionOpensAt).toBeNull();
     expect(finalTurn.body.game.schedule.nextSessionOpensAt).toBeNull();
+
+    const deleted = await request<{ ok: true }>(`/api/games/${created.body.id}/delete`, {
+      method: 'POST',
+      token: owner.body.token,
+      body: { revision: finalTurn.body.game.revision },
+    });
+    expect(deleted.response.status).toBe(200);
+    expect(deleted.body.ok).toBe(true);
+
+    const library = await request<{ games: GameView[] }>('/api/games', {
+      token: owner.body.token,
+    });
+    expect(library.body.games.map((game) => game.id)).not.toContain(created.body.id);
+    const missing = await request<{ error: string }>(`/api/games/${created.body.id}`, {
+      token: owner.body.token,
+    });
+    expect(missing.response.status).toBe(404);
+    expect(missing.body.error).toBe('no_game');
   });
 
   it('keeps one member-only conversation from the lobby into the active game', async () => {

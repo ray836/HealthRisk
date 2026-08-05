@@ -295,6 +295,79 @@ final class GameplayStore: ObservableObject {
         }
     }
 
+    @discardableResult
+    func deletePracticeGame() async -> Bool {
+        guard let game, game.practice, !isPerformingAction else { return false }
+        isPerformingAction = true
+        actionError = nil
+        defer { isPerformingAction = false }
+
+        do {
+            let response = try await api.deletePracticeGame(
+                gameId: gameId,
+                request: RevisionRequest(revision: game.revision)
+            )
+            guard response.ok else {
+                actionError = APIError(
+                    statusCode: nil,
+                    code: "delete_failed",
+                    message: "The practice game could not be deleted.",
+                    requestId: nil,
+                    retryable: false
+                )
+                return false
+            }
+            self.game = nil
+            error = nil
+            return true
+        } catch {
+            return await handleMutationError(error)
+        }
+    }
+
+    @discardableResult
+    func forfeitGame() async -> Bool {
+        let controlsEligibleSeat = game?.players.contains { player in
+            guard game?.mySeats.contains(player.id) == true else { return false }
+            switch player.status {
+            case .active, .autoPiloted:
+                return true
+            case .forfeited, .eliminated:
+                return false
+            }
+        } ?? false
+        guard let game,
+              !game.practice,
+              game.status == .active,
+              controlsEligibleSeat,
+              !isPerformingAction else { return false }
+        isPerformingAction = true
+        actionError = nil
+        defer { isPerformingAction = false }
+
+        do {
+            let response = try await api.leaveGame(
+                gameId: gameId,
+                request: RevisionRequest(revision: game.revision)
+            )
+            guard response.ok else {
+                actionError = APIError(
+                    statusCode: nil,
+                    code: "forfeit_failed",
+                    message: "The game could not be forfeited.",
+                    requestId: nil,
+                    retryable: false
+                )
+                return false
+            }
+            self.game = nil
+            error = nil
+            return true
+        } catch {
+            return await handleMutationError(error)
+        }
+    }
+
     private func mutate(
         _ action: () async throws -> GameplayMutationResponse
     ) async -> Bool {

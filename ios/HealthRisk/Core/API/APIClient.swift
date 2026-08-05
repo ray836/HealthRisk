@@ -81,6 +81,16 @@ actor APIClient: HealthRiskAPI {
         )
     }
 
+    func deletePracticeGame(
+        gameId: String,
+        request: RevisionRequest
+    ) async throws -> OkResponse {
+        try await post(
+            "/api/games/\(encodedPathComponent(gameId))/delete",
+            body: request
+        )
+    }
+
     func gameplayGame(_ gameId: String) async throws -> GameplayGame {
         try await get("/api/games/\(encodedPathComponent(gameId))")
     }

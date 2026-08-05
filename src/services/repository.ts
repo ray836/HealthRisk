@@ -151,6 +151,8 @@ export interface GameRepository {
   /** All persisted games, used to restore active schedules after a restart. */
   listGames(): Promise<GameState[]>;
   saveGame(state: GameState): Promise<void>;
+  /** Permanently remove one game and all game-scoped persisted data. */
+  deleteGame(gameId: string): Promise<void>;
   loadSession(gameId: string, dayNumber: number): Promise<DailySession | null>;
   saveSession(session: DailySession): Promise<void>;
   loadTurnState(gameId: string, dayNumber: number, playerId: string): Promise<TurnState | null>;
@@ -265,6 +267,25 @@ export class InMemoryGameRepository implements GameRepository {
 
   async saveGame(state: GameState): Promise<void> {
     this.games.set(state.id, clone(state));
+  }
+
+  async deleteGame(gameId: string): Promise<void> {
+    this.games.delete(gameId);
+    const prefix = `${gameId}:`;
+    for (const key of this.sessions.keys()) if (key.startsWith(prefix)) this.sessions.delete(key);
+    for (const key of this.turns.keys()) if (key.startsWith(prefix)) this.turns.delete(key);
+    for (const key of this.exercise.keys()) if (key.startsWith(prefix)) this.exercise.delete(key);
+    for (const key of this.members.keys()) if (key.startsWith(prefix)) this.members.delete(key);
+    for (const [id, message] of this.chatMessages) {
+      if (message.gameId === gameId) this.chatMessages.delete(id);
+    }
+    for (const key of this.chatMutes.keys()) if (key.startsWith(prefix)) this.chatMutes.delete(key);
+    for (const [id, report] of this.chatReports) {
+      if (report.gameId === gameId) this.chatReports.delete(id);
+    }
+    for (const [id, notification] of this.notifications) {
+      if (notification.gameId === gameId) this.notifications.delete(id);
+    }
   }
 
   async loadSession(gameId: string, dayNumber: number): Promise<DailySession | null> {

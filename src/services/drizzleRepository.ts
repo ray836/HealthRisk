@@ -127,6 +127,20 @@ export class DrizzleGameRepository implements GameRepository {
       });
   }
 
+  async deleteGame(gameId: string): Promise<void> {
+    await this.db.transaction(async (tx: any) => {
+      await tx.delete(turnStates).where(eq(turnStates.gameId, gameId));
+      await tx.delete(exerciseLogs).where(eq(exerciseLogs.gameId, gameId));
+      await tx.delete(sessions).where(eq(sessions.gameId, gameId));
+      await tx.delete(chatReports).where(eq(chatReports.gameId, gameId));
+      await tx.delete(chatMutes).where(eq(chatMutes.gameId, gameId));
+      await tx.delete(chatMessages).where(eq(chatMessages.gameId, gameId));
+      await tx.delete(userNotifications).where(eq(userNotifications.gameId, gameId));
+      await tx.delete(members).where(eq(members.gameId, gameId));
+      await tx.delete(games).where(eq(games.id, gameId));
+    });
+  }
+
   async loadExerciseLog(gameId: string, dayNumber: number, playerId: string): Promise<ExerciseLogEntry[]> {
     const rows = await this.db
       .select()

@@ -104,10 +104,17 @@ export function applyEliminations(state: GameState, eliminatedByPlayerId?: Playe
  * to act. Neutral garrisons do not delay the victory screen.
  */
 export function checkWin(state: GameState): GameState {
+  const remainingPlayers = state.players.filter(
+    (player) => player.status !== 'eliminated' && player.status !== 'forfeited',
+  );
+  if (remainingPlayers.length === 1) {
+    return { ...state, status: 'finished', winnerId: remainingPlayers[0]!.id };
+  }
+
   const owners = new Set(state.territories.map((t) => t.owner).filter((owner) => owner !== null));
   if (owners.size !== 1) return state;
   const [winnerId] = [...owners];
-  if (winnerId == null) return state;
+  if (winnerId == null || !remainingPlayers.some((player) => player.id === winnerId)) return state;
   return { ...state, status: 'finished', winnerId };
 }
 
@@ -120,7 +127,15 @@ export function forfeitPlayer(state: GameState, playerId: PlayerId): GameState {
     t.owner === playerId ? { ...t, owner: null } : { ...t },
   );
   const players = state.players.map((p) =>
-    p.id === playerId ? { ...p, status: 'forfeited' as const, pendingReinforcements: 0 } : p,
+    p.id === playerId
+      ? {
+          ...p,
+          status: 'forfeited' as const,
+          cards: [],
+          pendingEliminationReward: 0,
+          pendingReinforcements: 0,
+        }
+      : p,
   );
   return { ...state, territories, players };
 }

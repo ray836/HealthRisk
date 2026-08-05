@@ -212,11 +212,35 @@ describe('auto-resolution', () => {
 });
 
 describe('forfeit', () => {
-  it('converts a forfeited player\'s territories to neutral', () => {
-    const s = twoPlayerBoard(['china', 'ural'], ['india']);
+  it('converts territories to equally strong neutral garrisons and discards saved rewards', () => {
+    let s = twoPlayerBoard(['china', 'ural'], ['india']);
+    s = {
+      ...s,
+      territories: s.territories.map((territory) =>
+        territory.id === 'china' ? { ...territory, armies: 7 } : territory,
+      ),
+      players: s.players.map((player) =>
+        player.id === 'a'
+          ? {
+              ...player,
+              cards: [{ id: 'saved-card', territoryId: 'china', earnedDay: 0 }],
+              pendingEliminationReward: 3,
+              pendingReinforcements: 4,
+            }
+          : player,
+      ),
+    };
     const next = forfeitPlayer(s, 'a');
-    expect(next.players.find((p) => p.id === 'a')!.status).toBe('forfeited');
+    expect(next.players.find((p) => p.id === 'a')).toMatchObject({
+      status: 'forfeited',
+      cards: [],
+      pendingEliminationReward: 0,
+      pendingReinforcements: 0,
+    });
     expect(next.territories.filter((t) => t.owner === 'a')).toHaveLength(0);
-    expect(next.territories.filter((t) => t.id === 'china')[0]!.owner).toBeNull();
+    expect(next.territories.find((t) => t.id === 'china')).toMatchObject({
+      owner: null,
+      armies: 7,
+    });
   });
 });

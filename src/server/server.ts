@@ -48,7 +48,12 @@ import {
   summarizeLobbyHealthVotes,
 } from '../services/lobbyHealthVoting.js';
 import { findActiveMultiplayerGame, isPracticeGame } from '../services/activeGame.js';
-import { leaveGame, removeLobbyMember, startLobbyGame } from '../services/gameLifecycle.js';
+import {
+  deletePracticeGame,
+  leaveGame,
+  removeLobbyMember,
+  startLobbyGame,
+} from '../services/gameLifecycle.js';
 import { listUserGames } from '../services/gameLibrary.js';
 import { deleteAccount } from '../services/accountLifecycle.js';
 import { executeIdempotent } from '../services/idempotency.js';
@@ -983,7 +988,7 @@ app.post(
     const user = requireUser(req);
     const id = req.params.id as string;
     await respondIdempotently(req, res, `game:${id}:leave`, async () => {
-      await mutateGame(req, id, async () => {
+      const exit = await mutateGame(req, id, async () => {
         const before = await getActor(id);
         const result = await leaveGame(repo, id, user.id);
         if (
@@ -993,11 +998,14 @@ app.post(
         ) {
           await scheduler.armNextWindow(id, result.game.dayNumber);
         }
+        return result;
       });
       await notifier.notifyGameMembers(id, {
         type: 'lobby_removed',
-        title: 'Player left',
-        body: `${user.username} left the game.`,
+        title: exit.forfeited ? 'Player forfeited' : 'Player left',
+        body: exit.forfeited
+          ? `${user.username} forfeited. Their territories are now neutral.`
+          : `${user.username} left the game.`,
         deepLink: gameDeepLink(id),
         senderUserId: user.id,
       });
@@ -1009,6 +1017,30 @@ app.post(
           game: await gameView(id, user.id),
         },
       };
+    });
+  }),
+);
+
+app.post(
+  '/api/games/:id/delete',
+  asyncH(async (req, res) => {
+    const user = requireUser(req);
+    const id = req.params.id as string;
+    await respondIdempotently(req, res, `game:${id}:delete`, async () => {
+      await repo.withGameLock(id, async () => {
+        const game = await repo.loadGame(id);
+        if (!game) throw new TurnError('no_game', 'Unknown game');
+        const actualRevision = game.revision ?? 0;
+        const expectedRevision = Number(req.body?.revision);
+        if (!Number.isInteger(expectedRevision) || expectedRevision !== actualRevision) {
+          throw new TurnError(
+            'stale_game',
+            'This game changed in another browser. The latest state has been loaded; please try again.',
+          );
+        }
+        await deletePracticeGame(repo, id, user.id);
+      });
+      return { status: 200, body: { ok: true as const } };
     });
   }),
 );

@@ -200,4 +200,17 @@ describe('DrizzleGameRepository (PGlite in-memory)', () => {
     await repo.softDeleteChatMessage('chat-1', now);
     expect((await repo.getChatMessage('chat-1'))?.deletedAt).toBe(now);
   });
+
+  it('deletes a game and all of its scoped snapshots', async () => {
+    await repo.deleteGame('g1');
+
+    expect(await repo.loadGame('g1')).toBeNull();
+    expect(await repo.loadSession('g1', 1)).toBeNull();
+    expect(await repo.loadTurnState('g1', 1, 'a')).toBeNull();
+    expect(await repo.loadExerciseLog('g1', 1, 'a')).toEqual([]);
+    expect(await repo.listMembers('g1')).toEqual([]);
+    expect(await repo.listChatMessages('g1')).toEqual([]);
+    expect(await repo.listMutedUserIds('g1', 'u1')).toEqual([]);
+    expect((await repo.listNotifications('u1')).map((item) => item.gameId)).not.toContain('g1');
+  });
 });

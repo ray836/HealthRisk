@@ -104,6 +104,21 @@ export interface LeaveGameResult {
   session?: DailySession;
 }
 
+/** Practice is private and single-owner, so its creator may remove it entirely. */
+export async function deletePracticeGame(
+  repo: GameRepository,
+  gameId: string,
+  userId: string,
+): Promise<void> {
+  const game = await repo.loadGame(gameId);
+  if (!game) throw new TurnError('no_game', 'Unknown game');
+  if (!game.practice) {
+    throw new TurnError('practice_only', 'Only practice games can be deleted');
+  }
+  await requireCreator(repo, game, userId);
+  await repo.deleteGame(gameId);
+}
+
 /** Creator-only lobby moderation. Removed seats immediately become joinable. */
 export async function removeLobbyMember(
   repo: GameRepository,
@@ -185,6 +200,12 @@ export async function leaveGame(
   if (game.status !== 'active') {
     throw new TurnError('game_over', 'This game is no longer active');
   }
+  if (game.practice) {
+    throw new TurnError(
+      'practice_delete_required',
+      'Delete a practice game instead of forfeiting one of its controlled seats',
+    );
+  }
 
   const player = game.players.find((candidate) => candidate.id === member.playerId);
   if (!player || player.status === 'forfeited' || player.status === 'eliminated') {
@@ -198,4 +219,3 @@ export async function leaveGame(
   if (pruned) await repo.saveSession(pruned);
   return { game: forfeited, cancelled: false, forfeited: true, session: pruned };
 }
-

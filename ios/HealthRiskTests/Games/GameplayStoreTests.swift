@@ -195,6 +195,80 @@ final class GameplayStoreTests: XCTestCase {
         )
     }
 
+    func testPracticeGameDeletionUsesCurrentRevisionAndClearsLoadedGame() async {
+        let initial = gameplayGame(
+            revision: 13,
+            phase: .attack,
+            reinforcements: 0,
+            practice: true
+        )
+        let api = MockHealthRiskAPI(
+            deletePracticeGameResult: .success(OkResponse(ok: true)),
+            gameplayGameResult: .success(initial)
+        )
+        let store = GameplayStore(gameId: initial.id, api: api)
+        await store.load()
+
+        let succeeded = await store.deletePracticeGame()
+        let deletions = await api.recordedPracticeDeletions()
+
+        XCTAssertTrue(succeeded)
+        XCTAssertNil(store.game)
+        XCTAssertNil(store.actionError)
+        XCTAssertEqual(
+            deletions,
+            [
+                MockHealthRiskAPI.RecordedPracticeDeletion(
+                    gameId: "game-play",
+                    request: RevisionRequest(revision: 13)
+                ),
+            ]
+        )
+    }
+
+    func testMultiplayerForfeitUsesCurrentRevisionAndClosesGameplay() async {
+        let initial = gameplayGame(revision: 14, phase: .attack, reinforcements: 0)
+        let forfeitedView = GameView(
+            id: initial.id,
+            revision: 15,
+            status: .finished,
+            practice: false,
+            yourTurn: false,
+            players: [],
+            territories: [],
+            chatMessages: [],
+            schedule: nil
+        )
+        let api = MockHealthRiskAPI(
+            leaveGameResult: .success(
+                LeaveGameResponse(
+                    ok: true,
+                    activeMultiplayerGameId: nil,
+                    game: forfeitedView
+                )
+            ),
+            gameplayGameResult: .success(initial)
+        )
+        let store = GameplayStore(gameId: initial.id, api: api)
+        await store.load()
+
+        let succeeded = await store.forfeitGame()
+        let exits = await api.recordedGameExits()
+
+        XCTAssertTrue(succeeded)
+        XCTAssertNil(store.game)
+        XCTAssertNil(store.actionError)
+        XCTAssertEqual(
+            exits,
+            [
+                MockHealthRiskAPI.RecordedGameExit(
+                    gameId: "game-play",
+                    request: RevisionRequest(revision: 14)
+                ),
+            ]
+        )
+    }
+
     func testFinishedGamePresentationIdentifiesWinnerAndStandings() throws {
         let game = gameplayGame(
             revision: 20,
@@ -389,12 +463,13 @@ final class GameplayStoreTests: XCTestCase {
         winnerId: String? = nil,
         currentPlayerId: String? = "p1",
         yourTurn: Bool = true,
-        dashboard: GameplayDashboard? = nil
+        dashboard: GameplayDashboard? = nil,
+        practice: Bool = false
     ) -> GameplayGame {
         GameplayGame(
             id: "game-play",
             revision: revision,
-            practice: false,
+            practice: practice,
             status: status,
             winnerId: winnerId,
             dayNumber: 0,

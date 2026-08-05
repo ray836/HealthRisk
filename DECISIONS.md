@@ -53,7 +53,7 @@ layer exists so far.
 | 1 | Board scaling for 10 players | **Neutral garrisons.** Deal 42 territories round-robin; leftovers become neutral (2 armies, ownerless, attackable, never act). 10 players → 40 owned + 2 neutral. | `setup.ts` `dealTerritories`, `NEUTRAL_GARRISON_ARMIES`. Starting-army totals for 7–10 players scale via `startingArmies()` in `map.ts` (keeps ~120 armies on the board). |
 | 2 | Auto-resolution | **AI note-driven full turn** (updated session 2). A missed window is resolved by an AI that reads the player's persistent standing-orders note and returns a full `TurnPlan` (reinforce/attack/fortify); the engine re-validates and applies it, skipping anything illegal. Empty note → deterministic defensive fallback: whole bank on most-threatened border territory (`threat(T) = Σ(enemy/neutral neighbor armies) − armies(T)`), no attack, no fortify. | AI seam: `planner.ts` (`buildPlannerContext`, `TurnPlanner`). Executor: `turnPlan.ts` `applyTurnPlan`. Fallback: `autoplace.ts` `defensiveTurnPlan` / `chooseAutoPlaceTarget`. |
 | 3 | Combat odds | **Logged step-by-step simulation** of classic Risk dice (attacker ≤3, defender ≤2, defender wins ties), seeded/deterministic, halting on capture / stop-loss / 1-troop floor. Produces a round log for animation + audit. | `combat.ts` `resolveAttack`. To switch to single-pass closed-form, replace the loop; the result shape can stay. |
-| 4 | Inactive players | **Auto-resolve defensively each day + Admin forfeit power, plus optional auto-forfeit after N consecutive auto-resolved days** (`autoForfeitAfterDays`, null = admin-only). Forfeited player's territories become neutral so the board stays contestable. | `game.ts` `forfeitPlayer`, `applyTurnEffect`; config field `autoForfeitAfterDays`. |
+| 4 | Inactive players | **Auto-resolve defensively each day + player/admin forfeit, plus optional auto-forfeit after N consecutive auto-resolved days** (`autoForfeitAfterDays`, null = manual-only). A forfeiting player leaves the turn queue; their territories keep their armies but become attackable neutral garrisons, and their cards/rewards are discarded. One remaining eligible player wins immediately; otherwise play continues. | `game.ts` `forfeitPlayer`, `checkWin`, `applyTurnEffect`; `gameLifecycle.ts` `leaveGame`; config field `autoForfeitAfterDays`. |
 | 5 | Fortify | **Connected chain, one move** (modern Risk): move once between any two owned territories joined by an unbroken chain of owned territory (BFS). | `fortify.ts` `areConnectedThroughOwned`. For adjacent-only, swap the BFS for an `areAdjacent` check. |
 | 6 | Attacks per turn | **Unlimited by default**, but a `maxAttacksPerTurn` config field exists (null = unlimited) so you can cap it later without a schema change. | `types.ts` `GameConfig.maxAttacksPerTurn`; enforce in the turn/attack service layer. |
 
@@ -252,6 +252,16 @@ the service/persistence layer).
 - **Verified**: 12 tests (auth hashing/signup/login/logout, membership
   claim/join/practice, Drizzle round-trips) + live checks — unauth → 401, seat
   owner → 200, non-member → 409 `not_your_turn`.
+
+## Practice game cleanup
+
+Practice games can be permanently deleted by their creator from Campaign
+Controls. The action is never offered for multiplayer games, requires a second
+destructive confirmation, and submits the current game revision so a stale
+client cannot delete newer progress. `POST /api/games/:id/delete` repeats those
+checks server-side and removes all game-scoped sessions, turns, exercise logs,
+memberships, chat data, reports, mutes, and notifications in one repository
+operation. The delete request remains idempotent for safe mobile retries.
 
 ## Not built yet
 

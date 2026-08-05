@@ -62,6 +62,19 @@ describe('daily turn session', () => {
     expect(pruneIneligiblePlayers(session, state).queue).toEqual(['p1']);
   });
 
+  it('closes the turn queue when a forfeit finishes the game', () => {
+    const session = {
+      ...startDailySession(game(), 1),
+      windowExpiresAt: '2026-01-01T01:00:00.000Z',
+    };
+    const state = { ...game(), status: 'finished' as const, winnerId: 'p1' };
+
+    const pruned = pruneIneligiblePlayers(session, state);
+
+    expect(pruned.queue).toEqual([]);
+    expect(pruned.windowExpiresAt).toBeUndefined();
+  });
+
   it('throws if a non-front player tries to complete', () => {
     const s = startDailySession(game(), 1);
     expect(() => completeTurn(s, 'p2')).toThrow();

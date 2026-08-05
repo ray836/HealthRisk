@@ -52,6 +52,11 @@ function eligiblePlayers(state: GameState): Set<PlayerId> {
 
 /** Remove players who were eliminated or forfeited after today's line opened. */
 export function pruneIneligiblePlayers(session: DailySession, state: GameState): DailySession {
+  if (state.status !== 'active') {
+    return session.queue.length === 0
+      ? session
+      : { ...session, queue: [], windowExpiresAt: undefined };
+  }
   const eligible = eligiblePlayers(state);
   const queue = session.queue.filter((id) => eligible.has(id));
   return queue.length === session.queue.length ? session : { ...session, queue };
