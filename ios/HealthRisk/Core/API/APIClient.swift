@@ -53,8 +53,22 @@ actor APIClient: HealthRiskAPI {
         try await post("/api/games", body: request)
     }
 
+    func joinGame(gameId: String) async throws -> JoinGameResponse {
+        try await post("/api/games/\(encodedPathComponent(gameId))/join")
+    }
+
     func getGame(_ gameId: String) async throws -> LobbyGameView {
         try await get("/api/games/\(encodedPathComponent(gameId))")
+    }
+
+    func startGame(
+        gameId: String,
+        request: RevisionRequest
+    ) async throws -> GameMutationResponse {
+        try await post(
+            "/api/games/\(encodedPathComponent(gameId))/start",
+            body: request
+        )
     }
 
     func leaveGame(
@@ -63,6 +77,70 @@ actor APIClient: HealthRiskAPI {
     ) async throws -> LeaveGameResponse {
         try await post(
             "/api/games/\(encodedPathComponent(gameId))/leave",
+            body: request
+        )
+    }
+
+    func gameplayGame(_ gameId: String) async throws -> GameplayGame {
+        try await get("/api/games/\(encodedPathComponent(gameId))")
+    }
+
+    func reinforce(
+        gameId: String,
+        request: ReinforcementRequest
+    ) async throws -> GameplayMutationResponse {
+        try await post(
+            "/api/games/\(encodedPathComponent(gameId))/reinforce",
+            body: request
+        )
+    }
+
+    func logExercise(
+        gameId: String,
+        request: ExerciseLogRequest
+    ) async throws -> ExerciseLogMutationResponse {
+        try await post(
+            "/api/games/\(encodedPathComponent(gameId))/exercise",
+            body: request
+        )
+    }
+
+    func tradeCards(
+        gameId: String,
+        request: RevisionRequest
+    ) async throws -> CardTradeMutationResponse {
+        try await post(
+            "/api/games/\(encodedPathComponent(gameId))/cards/trade",
+            body: request
+        )
+    }
+
+    func attack(
+        gameId: String,
+        request: AttackRequest
+    ) async throws -> AttackMutationResponse {
+        try await post(
+            "/api/games/\(encodedPathComponent(gameId))/attack",
+            body: request
+        )
+    }
+
+    func fortify(
+        gameId: String,
+        request: FortifyRequest
+    ) async throws -> GameplayMutationResponse {
+        try await post(
+            "/api/games/\(encodedPathComponent(gameId))/fortify",
+            body: request
+        )
+    }
+
+    func endTurn(
+        gameId: String,
+        request: RevisionRequest
+    ) async throws -> GameplayMutationResponse {
+        try await post(
+            "/api/games/\(encodedPathComponent(gameId))/end",
             body: request
         )
     }

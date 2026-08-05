@@ -151,6 +151,7 @@ export function applyTurnEffect(
   state: GameState,
   effect: TurnEffect,
   plan?: TurnPlan,
+  combatSeedBase?: string,
 ): TurnEffectResult {
   let next = state;
   let autoReport: TurnPlanReport | undefined;
@@ -164,8 +165,14 @@ export function applyTurnEffect(
     }));
   } else if (effect.type === 'auto_resolved') {
     const effectivePlan = plan ?? defensiveTurnPlan(next, effect.playerId);
-    const seedBase = `${next.id}:${next.dayNumber}:${effect.playerId}`;
-    autoReport = applyTurnPlan(next, effect.playerId, effectivePlan, seedBase);
+    const eventBase = `${next.id}:${next.dayNumber}:${effect.playerId}`;
+    autoReport = applyTurnPlan(
+      next,
+      effect.playerId,
+      effectivePlan,
+      combatSeedBase ?? eventBase,
+      eventBase,
+    );
     next = autoReport.state;
     next = clearPending(next, effect.playerId);
     next = setPlayer(next, effect.playerId, (p) => ({

@@ -93,6 +93,65 @@ final class WaitingRoomStoreTests: XCTestCase {
         )
     }
 
+    func testCreatorCanStartWithTwoPlayersAndLatestRevision() async {
+        let initial = lobbyGame(
+            revision: 7,
+            selections: ["running"],
+            hasSubmitted: true,
+            playerCount: 2,
+            allSubmitted: true
+        )
+        let api = MockHealthRiskAPI(
+            gameResult: .success(initial),
+            startGameResult: .success(
+                GameMutationResponse(game: activeGame(id: initial.id))
+            )
+        )
+        let store = WaitingRoomStore(gameId: initial.id, api: api)
+        await store.load()
+
+        let succeeded = await store.startGame()
+
+        XCTAssertTrue(succeeded)
+        XCTAssertNil(store.game)
+        XCTAssertNil(store.startError)
+        XCTAssertFalse(store.isStartingGame)
+        let starts = await api.recordedGameStarts()
+        XCTAssertEqual(
+            starts,
+            [
+                MockHealthRiskAPI.RecordedGameStart(
+                    gameId: "game-lobby",
+                    request: RevisionRequest(revision: 7)
+                ),
+            ]
+        )
+    }
+
+    func testStartGamePublishesServerErrorAndKeepsLobbyVisible() async {
+        let initial = lobbyGame(revision: 7, playerCount: 2)
+        let serverError = APIError(
+            statusCode: 409,
+            code: "health_votes_incomplete",
+            message: "Waiting for players to review the health goals",
+            requestId: "request-start",
+            retryable: false
+        )
+        let api = MockHealthRiskAPI(
+            gameResult: .success(initial),
+            startGameResult: .failure(serverError)
+        )
+        let store = WaitingRoomStore(gameId: initial.id, api: api)
+        await store.load()
+
+        let succeeded = await store.startGame()
+
+        XCTAssertFalse(succeeded)
+        XCTAssertEqual(store.game, initial)
+        XCTAssertEqual(store.startError, serverError)
+        XCTAssertFalse(store.isStartingGame)
+    }
+
     func testCancelLobbyPublishesServerErrorAndKeepsGameVisible() async {
         let initial = lobbyGame(revision: 7)
         let serverError = APIError(
@@ -131,22 +190,45 @@ final class WaitingRoomStoreTests: XCTestCase {
         )
     }
 
+    private func activeGame(id: String) -> GameView {
+        GameView(
+            id: id,
+            revision: 8,
+            status: .active,
+            practice: false,
+            yourTurn: true,
+            players: [],
+            territories: [],
+            chatMessages: [],
+            schedule: nil
+        )
+    }
+
     private func lobbyGame(
         revision: Int,
         goalLabel: String = "Running",
         selections: [String] = [],
-        hasSubmitted: Bool = false
+        hasSubmitted: Bool = false,
+        playerCount: Int = 1,
+        allSubmitted: Bool? = nil
     ) -> LobbyGameView {
         let key = goalLabel.lowercased()
+        let players = (1...playerCount).map {
+            LobbyPlayer(id: "p\($0)", name: "Player \($0)", claimed: true)
+        }
+        let everyoneSubmitted = allSubmitted ?? (hasSubmitted && playerCount == 1)
+        let submittedPlayerIds = everyoneSubmitted
+            ? players.map(\.id)
+            : (hasSubmitted ? ["p1"] : [])
         return LobbyGameView(
             id: "game-lobby",
             revision: revision,
             status: .setup,
             practice: false,
             isCreator: true,
-            claimedPlayerCount: 1,
-            lobbyCapacity: 4,
-            players: [LobbyPlayer(id: "p1", name: "ray", claimed: true)],
+            claimedPlayerCount: playerCount,
+            lobbyCapacity: 10,
+            players: players,
             exercises: [
                 HealthGoalRule(
                     key: key,
@@ -165,11 +247,11 @@ final class WaitingRoomStoreTests: XCTestCase {
             lobbyHealthVoting: LobbyHealthVoting(
                 enabled: true,
                 voteCounts: selections.isEmpty ? [:] : [key: 1],
-                submittedPlayerIds: hasSubmitted ? ["p1"] : [],
+                submittedPlayerIds: submittedPlayerIds,
                 includedExerciseKeys: selections,
-                submissionCount: hasSubmitted ? 1 : 0,
-                requiredSubmissions: 1,
-                allSubmitted: hasSubmitted,
+                submissionCount: submittedPlayerIds.count,
+                requiredSubmissions: playerCount,
+                allSubmitted: everyoneSubmitted,
                 hasSubmitted: hasSubmitted,
                 mySelections: selections
             )

@@ -277,5 +277,6 @@ export interface ApiMetaResponse {
     apnsConfigured: boolean;
     universalInvites: boolean;
     chatSafety: boolean;
+    multipleConcurrentGames: boolean;
   };
 }

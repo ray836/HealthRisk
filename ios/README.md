@@ -17,8 +17,15 @@ Start the local API from the repository root with `npm run serve`. Tokens are st
 - Login, signup, secure session restoration, and logout.
 - My Games, multiplayer/practice creation, invite sharing, and link copying.
 - Multiplayer waiting rooms with player status, health-goal review and selection, and creator-only editing of goal rewards and daily caps.
+- Full-screen landscape campaign gameplay with reinforcement, attack, fortify, end-turn controls, and the server-authoritative territory board.
 
-The server remains authoritative for lobby revisions and health-rule validation. Full board gameplay is not implemented in the native client yet.
+The server remains authoritative for lobby revisions, health-rule validation, board state, combat resolution, and every turn mutation.
+
+The native board uses the same canonical Natural Earth vector data as the web client. After changing `public/world-map-data.js`, regenerate the Xcode vector asset from the repository root with:
+
+```sh
+node scripts/generate-ios-world-map.mjs
+```
 
 ## Apple identity and deferred capabilities
 

@@ -37,6 +37,7 @@ struct APIMetadata: Codable, Equatable, Sendable {
         let apnsConfigured: Bool
         let universalInvites: Bool
         let chatSafety: Bool
+        let multipleConcurrentGames: Bool?
     }
 
     let apiVersion: Int
@@ -94,6 +95,11 @@ struct CreateGameRequest: Codable, Equatable, Sendable {
         self.practice = practice
         self.players = players
     }
+}
+
+struct JoinGameResponse: Codable, Equatable, Sendable {
+    let seat: String
+    let game: GameView
 }
 
 enum HealthCategory: String, Codable, CaseIterable, Identifiable, Sendable {
@@ -184,6 +190,261 @@ struct LeaveGameResponse: Codable, Equatable, Sendable {
     let ok: Bool
     let activeMultiplayerGameId: String?
     let game: GameView
+}
+
+enum TurnPhase: String, Codable, CaseIterable, Sendable {
+    case reinforce
+    case attack
+    case fortify
+    case done
+}
+
+enum GamePlayerStatus: String, Codable, Sendable {
+    case active
+    case autoPiloted = "auto_piloted"
+    case forfeited
+    case eliminated
+}
+
+struct GameSchedule: Codable, Equatable, Sendable {
+    let timezone: String
+    let dailyStartMinuteOfDay: Int
+    let playerWindowMinutes: Int
+    let moveDeadlineAt: String?
+    let nextSessionOpensAt: String?
+    let missedTurnPolicy: String
+}
+
+struct GameplayPlayer: Codable, Identifiable, Equatable, Sendable {
+    let id: String
+    let name: String
+    let status: GamePlayerStatus
+    let color: String?
+    let pendingReinforcements: Int
+    let pendingEliminationReward: Int
+    let note: String
+    let claimed: Bool
+}
+
+struct GameplayContinent: Codable, Identifiable, Equatable, Sendable {
+    let id: String
+    let label: String
+    let bonus: Int
+}
+
+struct GameplayTerritory: Codable, Identifiable, Equatable, Sendable {
+    let id: String
+    let owner: String?
+    let armies: Int
+    let continent: String
+    let neighbors: [String]
+    let color: String
+}
+
+struct TerritoryCard: Codable, Identifiable, Equatable, Sendable {
+    let id: String
+    let territoryId: String
+    let earnedDay: Int
+}
+
+struct GameplayCards: Codable, Equatable, Sendable {
+    let hand: [TerritoryCard]
+    let tradeSize: Int
+    let tradeReward: Int
+    let canTrade: Bool
+}
+
+struct GameplayFortificationSummary: Codable, Equatable, Sendable {
+    let fromId: String
+    let toId: String
+    let count: Int
+}
+
+struct GameplayExerciseProgress: Codable, Identifiable, Equatable, Sendable {
+    let key: String
+    let label: String
+    let unitLabel: String
+    let category: HealthCategory
+    let trackingType: HealthTrackingType
+    let unitsLogged: Double
+    let countedUnits: Double
+    let unitCap: Double?
+    let troopsEarned: Double
+
+    var id: String { key }
+}
+
+struct GameplayExerciseDashboard: Codable, Equatable, Sendable {
+    let totalTroops: Double
+    let dailyCap: Double
+    let totalCapApplied: Bool
+    let progress: [GameplayExerciseProgress]
+}
+
+struct GameplayTurnStartIncome: Codable, Equatable, Sendable {
+    let exerciseTroops: Int
+    let healthTroopsToday: Int
+    let territoryAndContinentTroops: Int
+    let eliminationTroops: Int
+    let total: Int
+}
+
+struct GameplayTurnSummary: Codable, Equatable, Sendable {
+    let reinforcementsPlaced: Int
+    let placementsMade: Int
+    let attacksMade: Int
+    let attackerLosses: Int
+    let defenderLosses: Int
+    let territoriesCaptured: [String]
+    let cardsTraded: Int
+    let cardPending: Bool
+    let fortification: GameplayFortificationSummary?
+}
+
+struct GameplayDashboard: Codable, Equatable, Sendable {
+    let playerId: String
+    let availableReinforcements: Int?
+    let turnStart: GameplayTurnStartIncome?
+    let cards: GameplayCards
+    let turnSummary: GameplayTurnSummary?
+    let exercise: GameplayExerciseDashboard?
+}
+
+enum HealthLoggingDestination: String, Codable, Sendable {
+    case currentMove = "current_move"
+    case upcomingMove = "upcoming_move"
+    case nextMove = "next_move"
+}
+
+struct GameplayHealthLogging: Codable, Equatable, Sendable {
+    let allowed: Bool
+    let playerId: String?
+    let playerName: String?
+    let appliesTo: HealthLoggingDestination?
+    let reason: String?
+}
+
+struct GameplayGame: Codable, Identifiable, Equatable, Sendable {
+    let id: String
+    let revision: Int
+    let practice: Bool
+    let status: GameStatus
+    let winnerId: String?
+    let dayNumber: Int
+    let turnOrder: [String]
+    let currentPlayerId: String?
+    let mySeats: [String]
+    let isCreator: Bool
+    let yourTurn: Bool
+    let dashboard: GameplayDashboard?
+    let healthLogging: GameplayHealthLogging?
+    let exercises: [HealthGoalRule]?
+    let phase: TurnPhase
+    let windowExpiresAt: String?
+    let nextSessionOpensAt: String?
+    let schedule: GameSchedule
+    let players: [GameplayPlayer]
+    let continents: [GameplayContinent]
+    let territories: [GameplayTerritory]
+}
+
+extension GameplayGame {
+    var currentPlayer: GameplayPlayer? {
+        guard let currentPlayerId else { return nil }
+        return players.first { $0.id == currentPlayerId }
+    }
+
+    var currentPlayerReinforcements: Int {
+        currentPlayer?.pendingReinforcements ?? 0
+    }
+}
+
+struct GameplayMutationResponse: Codable, Equatable, Sendable {
+    let game: GameplayGame
+    let cardAwarded: TerritoryCard?
+
+    init(game: GameplayGame, cardAwarded: TerritoryCard? = nil) {
+        self.game = game
+        self.cardAwarded = cardAwarded
+    }
+}
+
+struct CardTradeMutationResponse: Codable, Equatable, Sendable {
+    let remainingBank: Int
+    let remainingCards: Int
+    let troopsAwarded: Int
+    let game: GameplayGame
+}
+
+struct ExerciseLogRequest: Codable, Equatable, Sendable {
+    let revision: Int
+    let exerciseKey: String
+    let units: Double
+}
+
+struct ExerciseLogMutationResponse: Codable, Equatable, Sendable {
+    let deltaTroops: Int
+    let dayTotal: Int
+    let totalCapApplied: Bool
+    let game: GameplayGame
+}
+
+enum AttackEndReason: String, Codable, Equatable, Sendable {
+    case capture
+    case stopLoss = "stop_loss"
+    case attackerMinimum = "attacker_min"
+}
+
+struct CombatRound: Codable, Equatable, Sendable {
+    let attackerDice: [Int]
+    let defenderDice: [Int]
+    let attackerLosses: Int
+    let defenderLosses: Int
+    let attackerForceAfter: Int
+    let defenderForceAfter: Int
+}
+
+struct AttackResult: Codable, Equatable, Sendable {
+    let fromId: String
+    let toId: String
+    let endReason: AttackEndReason
+    let captured: Bool
+    let rounds: [CombatRound]
+    let totalAttackerLosses: Int
+    let totalDefenderLosses: Int
+    let survivingAttackers: Int
+    let remainingDefenders: Int
+    let seed: Int
+}
+
+struct AttackMutationResponse: Codable, Equatable, Sendable {
+    let result: AttackResult
+    let game: GameplayGame
+}
+
+struct ReinforcementPlacement: Codable, Equatable, Sendable {
+    let territoryId: String
+    let count: Int
+}
+
+struct ReinforcementRequest: Codable, Equatable, Sendable {
+    let revision: Int
+    let placements: [ReinforcementPlacement]
+}
+
+struct AttackRequest: Codable, Equatable, Sendable {
+    let revision: Int
+    let fromId: String
+    let toId: String
+    let committedTroops: Int
+    let stopLoss: Int
+}
+
+struct FortifyRequest: Codable, Equatable, Sendable {
+    let revision: Int
+    let fromId: String
+    let toId: String
+    let count: Int
 }
 
 struct ChatMessage: Codable, Identifiable, Equatable, Sendable {

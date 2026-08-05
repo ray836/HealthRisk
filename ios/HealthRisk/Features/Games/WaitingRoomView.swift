@@ -68,7 +68,7 @@ struct WaitingRoomView: View {
             Button("Keep Game", role: .cancel) {}
         } message: {
             if store.game?.isCreator == true {
-                Text("This closes the waiting room for everyone and frees you to create another multiplayer game.")
+                Text("This closes the waiting room for everyone. You can create and play other games without cancelling this one.")
             } else {
                 Text("Your seat becomes available for another player.")
             }
@@ -148,6 +148,41 @@ struct WaitingRoomView: View {
                 ServerErrorView(error: error)
             }
 
+            if game.isCreator {
+                Divider().overlay(HealthRiskTheme.line)
+
+                if let error = store.startError {
+                    ServerErrorView(error: error)
+                }
+
+                Button {
+                    Task { await startGame() }
+                } label: {
+                    HStack(spacing: 9) {
+                        if store.isStartingGame {
+                            ProgressView().tint(.white)
+                        } else {
+                            Image(systemName: "play.fill")
+                        }
+                        Text(
+                            store.isStartingGame
+                                ? "Starting…"
+                                : "Start Game with \(game.claimedPlayerCount) \(game.claimedPlayerCount == 1 ? "Player" : "Players")"
+                        )
+                        .fontWeight(.bold)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 46)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(HealthRiskTheme.accent)
+                .disabled(store.isStartingGame || store.isExitingLobby)
+
+                Text("The campaign starts with everyone currently joined. At least two players must join and review the health goals.")
+                    .font(.caption)
+                    .foregroundStyle(HealthRiskTheme.muted)
+            }
+
             Divider().overlay(HealthRiskTheme.line)
 
             Button(role: .destructive) {
@@ -167,7 +202,7 @@ struct WaitingRoomView: View {
             }
             .buttonStyle(.bordered)
             .tint(HealthRiskTheme.danger)
-            .disabled(store.isExitingLobby)
+            .disabled(store.isExitingLobby || store.isStartingGame)
         }
         .padding(18)
         .healthRiskSurface()
@@ -351,6 +386,15 @@ struct WaitingRoomView: View {
             dismiss()
         } else {
             await invalidateIfUnauthorized(store.exitError)
+        }
+    }
+
+    private func startGame() async {
+        if await store.startGame() {
+            await onLobbyExited()
+            dismiss()
+        } else {
+            await invalidateIfUnauthorized(store.startError)
         }
     }
 

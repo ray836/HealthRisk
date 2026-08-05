@@ -8,10 +8,12 @@ final class WaitingRoomStore: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var isUpdatingRules = false
     @Published private(set) var isSubmittingChoices = false
+    @Published private(set) var isStartingGame = false
     @Published private(set) var isExitingLobby = false
     @Published var error: APIError?
     @Published var rulesError: APIError?
     @Published var choicesError: APIError?
+    @Published var startError: APIError?
     @Published var exitError: APIError?
 
     let gameId: String
@@ -54,8 +56,43 @@ final class WaitingRoomStore: ObservableObject {
     }
 
     @discardableResult
+    func startGame() async -> Bool {
+        guard let game, !isStartingGame, !isExitingLobby else { return false }
+        isStartingGame = true
+        startError = nil
+        defer { isStartingGame = false }
+
+        do {
+            let response = try await api.startGame(
+                gameId: gameId,
+                request: RevisionRequest(revision: game.revision)
+            )
+            guard response.game.status == .active else {
+                startError = APIError(
+                    statusCode: nil,
+                    code: "start_failed",
+                    message: "The game did not start.",
+                    requestId: nil,
+                    retryable: false
+                )
+                return false
+            }
+            self.game = nil
+            selectedGoalKeys = []
+            return true
+        } catch {
+            let normalized = APIError.normalized(error)
+            if normalized.code == "stale_game" {
+                await load()
+            }
+            startError = normalized
+            return false
+        }
+    }
+
+    @discardableResult
     func exitLobby() async -> Bool {
-        guard let game, !isExitingLobby else { return false }
+        guard let game, !isExitingLobby, !isStartingGame else { return false }
         isExitingLobby = true
         exitError = nil
         defer { isExitingLobby = false }
@@ -136,6 +173,7 @@ final class WaitingRoomStore: ObservableObject {
         self.game = game
         selectedGoalKeys = Set(game.lobbyHealthVoting.mySelections)
         error = nil
+        startError = nil
         exitError = nil
     }
 }

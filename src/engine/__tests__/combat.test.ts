@@ -31,13 +31,36 @@ describe('combat resolution', () => {
     }
   });
 
-  it('halts when the attacking force is exhausted (reduced to <= 1)', () => {
+  it('halts when the committed attacking force is exhausted', () => {
     // Overwhelming defender, generous stop-loss => attacker force ground out.
-    // A 2-loss round from a force of 2 can wipe it to 0, so the floor is <= 1.
     const r = resolveAttack(4, 40, 1000, 'grind');
     expect(r.endReason).toBe('attacker_min');
-    expect(r.survivingAttackers).toBeLessThanOrEqual(1);
+    expect(r.survivingAttackers).toBe(0);
     expect(r.captured).toBe(false);
+  });
+
+  it('lets the final committed troop fight because the origin garrison is separate', () => {
+    const outcomes = Array.from({ length: 200 }, (_, i) =>
+      resolveAttack(1, 1, 1, `one-on-one-${i}`),
+    );
+
+    // Before entering combat with one committed troop was fixed, every result
+    // stopped without rolling. A standard one-die exchange always resolves in
+    // exactly one comparison and can end either way.
+    expect(outcomes.every((result) => result.rounds.length === 1)).toBe(true);
+    expect(outcomes.some((result) => result.captured)).toBe(true);
+    expect(outcomes.some((result) => !result.captured)).toBe(true);
+  });
+
+  it('matches classic Risk one-attacker-die versus one-defender-die odds', () => {
+    let captures = 0;
+    const sampleSize = 20_000;
+    for (let i = 0; i < sampleSize; i++) {
+      if (resolveAttack(1, 1, 1, `one-die-odds-${i}`).captured) captures++;
+    }
+
+    // The attacker wins 15/36 comparisons (41.666...%); the defender wins ties.
+    expect(captures / sampleSize).toBeCloseTo(15 / 36, 2);
   });
 
   it('captures when defender reaches zero', () => {

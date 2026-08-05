@@ -3,6 +3,7 @@ import { InMemoryGameRepository } from '../repository.js';
 import { openDailySession, markTurnComplete, handleWindowExpiry } from '../orchestrator.js';
 import { createGame } from '../../engine/setup.js';
 import { TERRITORY_IDS } from '../../engine/map.js';
+import { seedFromString } from '../../engine/rng.js';
 import type { TurnPlanner } from '../../engine/planner.js';
 import type { GameConfig, GameState } from '../../engine/types.js';
 
@@ -68,10 +69,18 @@ describe('orchestrator', () => {
       };
     };
 
-    const res = await handleWindowExpiry(repo, planner, 'g', 1);
+    const seedContexts: string[] = [];
+    const res = await handleWindowExpiry(repo, planner, 'g', 1, (context) => {
+      seedContexts.push(context);
+      return 'opaque-auto-seed';
+    });
     expect(res.playerId).toBe('a');
     expect(res.usedFallback).toBe(false);
     expect(res.report!.attacks[0]!.result.captured).toBe(true);
+    expect(seedContexts).toEqual(['g:1:a:auto']);
+    expect(res.report!.attacks[0]!.result.seed).toBe(
+      seedFromString('opaque-auto-seed:atk:0'),
+    );
 
     const game = await repo.loadGame('g');
     expect(game!.territories.find((t) => t.id === 'india')!.owner).toBe('a');

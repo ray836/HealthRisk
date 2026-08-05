@@ -6,6 +6,7 @@ import { GameScheduler, JOB_PLAYER_WINDOW } from '../scheduling/gameScheduler.js
 import { FakeJobQueue } from '../scheduling/jobQueue.js';
 import { createGame } from '../../engine/setup.js';
 import { TERRITORY_IDS } from '../../engine/map.js';
+import { seedFromString } from '../../engine/rng.js';
 import type { TurnPlanner } from '../../engine/planner.js';
 import type { GameConfig, GameState } from '../../engine/types.js';
 
@@ -181,6 +182,33 @@ describe('TurnApi — full turn', () => {
     // Now attacking is allowed.
     const r = await api.attack('g', 1, 'a', { fromId: 'china', toId: 'india', committedTroops: 2, stopLoss: 1 });
     expect(r).toBeDefined();
+  });
+
+  it('uses the injected server seed instead of the public combat context', async () => {
+    const repo = new InMemoryGameRepository({ games: [makeGame(makeConfig())] });
+    const contexts: string[] = [];
+    const api = new TurnApi({
+      repo,
+      onPlayerCompleted: (gameId, dayNumber, playerId) =>
+        markTurnComplete(repo, gameId, dayNumber, playerId),
+      combatSeed: (context) => {
+        contexts.push(context);
+        return 'opaque-server-derived-seed';
+      },
+    });
+    await openDailySession(repo, 'g', 1);
+    await api.placeReinforcements('g', 1, 'a', [{ territoryId: 'china', count: 3 }]);
+
+    const result = await api.attack('g', 1, 'a', {
+      fromId: 'china',
+      toId: 'india',
+      committedTroops: 2,
+      stopLoss: 1,
+    });
+
+    expect(contexts).toEqual(['g:1:a:atk:0']);
+    expect(result.seed).toBe(seedFromString('opaque-server-derived-seed'));
+    expect(result.seed).not.toBe(seedFromString('g:1:a:atk:0'));
   });
 
   it('surfaces engine validation errors (attacking a non-adjacent territory)', async () => {

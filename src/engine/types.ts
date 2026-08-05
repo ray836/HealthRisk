@@ -190,7 +190,7 @@ export interface GameState {
    * they were rendered from so a second tab cannot silently replay old moves.
    */
   revision?: number;
-  /** Practice games are private hot-seat sandboxes and do not occupy a multiplayer slot. */
+  /** Practice games are private hot-seat sandboxes, separate from multiplayer campaigns. */
   practice?: boolean;
   config: GameConfig;
   players: Player[];

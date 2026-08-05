@@ -27,6 +27,7 @@ import {
   type Clock,
 } from '../orchestrator.js';
 import type { GameRepository } from '../repository.js';
+import type { CombatSeedDeriver } from '../combatSeed.js';
 import type { JobQueue } from './jobQueue.js';
 import { nextDayWindowStart, nextWindowStart, windowDeadline } from './time.js';
 
@@ -52,6 +53,8 @@ export interface GameSchedulerDeps {
   planner: TurnPlanner;
   queue: JobQueue;
   clock?: Clock;
+  /** Required at the production boundary; identity is retained for pure tests. */
+  combatSeed?: CombatSeedDeriver;
   /**
    * When to open the *next* day's session after a day's line empties. Defaults
    * to the next window-start time (the real daily cadence). A demo can pass a
@@ -65,6 +68,7 @@ export class GameScheduler {
   private planner: TurnPlanner;
   private queue: JobQueue;
   private clock: Clock;
+  private combatSeed: CombatSeedDeriver;
   private nextDayOpenAt: (config: GameState['config'], now: Date) => Date;
 
   constructor(deps: GameSchedulerDeps) {
@@ -72,6 +76,7 @@ export class GameScheduler {
     this.planner = deps.planner;
     this.queue = deps.queue;
     this.clock = deps.clock ?? systemClock;
+    this.combatSeed = deps.combatSeed ?? ((context) => context);
     this.nextDayOpenAt =
       deps.nextDayOpenAt ??
       ((config, now) =>
@@ -142,7 +147,13 @@ export class GameScheduler {
         const session = await this.repo.loadSession(gameId, dayNumber);
         if (!session || currentPlayer(session) !== playerId) return; // stale timer
         if (deadline && session.windowExpiresAt !== deadline) return; // superseded timer
-        await handleWindowExpiry(this.repo, this.planner, gameId, dayNumber);
+        await handleWindowExpiry(
+          this.repo,
+          this.planner,
+          gameId,
+          dayNumber,
+          this.combatSeed,
+        );
         await this.advance(
           gameId,
           dayNumber,

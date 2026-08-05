@@ -2897,7 +2897,13 @@
         const myGamesSection = $('#myGamesSection');
         const newSection = $('#newGameSection');
         const joinSection = $('#joinGameSection');
-        const lockedGameId = game?.activeMultiplayerGameId ?? activeMultiplayerGameId;
+        const viewedActiveMultiplayerGameId = game &&
+          !game.practice &&
+          (game.status === 'setup' || game.status === 'active') &&
+          (game.mySeats || []).length
+            ? game.id
+            : null;
+        const lockedGameId = viewedActiveMultiplayerGameId ?? game?.activeMultiplayerGameId ?? activeMultiplayerGameId;
         const hasActiveMultiplayerGame = !!currentUser && !!lockedGameId;
         const hasVisibleGame = !!currentUser && !!game;
 
@@ -2908,8 +2914,8 @@
         disclosure.style.display = hasVisibleGame ? '' : 'none';
         renderGameLibrary();
 
-        newSection.style.display = hasActiveMultiplayerGame ? 'none' : '';
-        joinSection.style.display = hasActiveMultiplayerGame ? 'none' : '';
+        newSection.style.display = '';
+        joinSection.style.display = '';
         if (!hasActiveMultiplayerGame) {
           currentSection.style.display = 'none';
           currentSection.innerHTML = '';
@@ -2938,7 +2944,7 @@
           currentSection.innerHTML = `
             <div class="userSectionHeading">
               <span class="userSectionIcon">🎮</span>
-              <div><h3>${inLobby ? 'Multiplayer waiting room' : 'Current multiplayer game'}</h3><p class="muted">${inLobby ? 'This lobby occupies your multiplayer slot until you leave or it starts.' : 'Finish or forfeit this game before starting or joining another.'}</p></div>
+              <div><h3>${inLobby ? 'Multiplayer waiting room' : 'Current multiplayer game'}</h3><p class="muted">${inLobby ? 'This lobby remains available while you create or join other games.' : 'You can switch among games at any time; each keeps its own turn and schedule.'}</p></div>
             </div>
             <div class="currentGameMeta">
               <span>${inLobby ? 'Not started' : `Day ${game.dayNumber}`}</span>
@@ -2964,8 +2970,8 @@
               <span class="userSectionIcon">${viewingPractice ? '🧪' : '🎮'}</span>
               <div><h3>${viewingPractice ? 'Practice sandbox' : 'Active multiplayer game'}</h3>
                 <p class="muted">${viewingPractice
-                  ? 'Your multiplayer game is still active while you practice.'
-                  : 'Resume your active game before starting or joining another.'}</p>
+                  ? 'Your multiplayer games remain active while you practice.'
+                  : 'Use My games to switch campaigns, or start and join another.'}</p>
               </div>
             </div>
             <div class="gameCodeBox">

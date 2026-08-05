@@ -1,8 +1,9 @@
 /**
- * Account-level game participation rules.
+ * Backward-compatible account game summary helpers.
  *
- * A player may participate in one active multiplayer game at a time. Practice
- * games are hot-seat sandboxes and deliberately do not occupy that slot.
+ * Accounts may participate in multiple multiplayer games. The singular lookup
+ * remains for older API clients that display one shortcut; new clients should
+ * use GET /api/games as the complete authoritative library.
  */
 
 import type { GameState } from '../engine/types.js';

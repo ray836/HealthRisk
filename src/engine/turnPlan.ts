@@ -66,15 +66,18 @@ export interface TurnPlanReport {
  * Validate and apply a turn plan for one player. Pure: returns a new GameState
  * plus a report. Illegal actions are skipped, not thrown.
  *
- * @param seedBase Stable base (e.g. `${gameId}:${dayNumber}:${playerId}`) used
+ * @param seedBase Opaque stable base derived by the server, used
  *   to seed each attack deterministically as `${seedBase}:atk:${index}`, so an
  *   auto-resolved turn is fully reproducible/auditable.
+ * @param eventBase Public stable base used only for idempotent event IDs. It is
+ *   intentionally separate so an event ID never needs to reveal seed material.
  */
 export function applyTurnPlan(
   state: GameState,
   playerId: PlayerId,
   plan: TurnPlan,
   seedBase: string,
+  eventBase: string = seedBase,
 ): TurnPlanReport {
   let current = state;
   const rejected: RejectedAction[] = [];
@@ -134,7 +137,7 @@ export function applyTurnPlan(
       playerId,
       decl,
       result,
-      `${seedBase}:attack_event:${i}`,
+      `${eventBase}:attack_event:${i}`,
     );
     attacks.push({ declaration: decl, result });
   }
@@ -151,7 +154,7 @@ export function applyTurnPlan(
         current,
         playerId,
         plan.fortify,
-        `${seedBase}:fortify_event`,
+        `${eventBase}:fortify_event`,
       );
       fortified = plan.fortify;
     }

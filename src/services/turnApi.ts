@@ -47,6 +47,7 @@ import {
 import { buildPlannerContext, type PlannerContext } from '../engine/planner.js';
 import { currentPlayer, pruneIneligiblePlayers } from '../engine/turnSession.js';
 import type { GameState, TerritoryCard } from '../engine/types.js';
+import type { CombatSeedDeriver } from './combatSeed.js';
 import type { GameRepository, TurnPhase, TurnState } from './repository.js';
 import { ensureTurnStarted } from './turnStart.js';
 
@@ -71,6 +72,8 @@ export type CompleteHook = (gameId: string, dayNumber: number, playerId: string)
 export interface TurnApiDeps {
   repo: GameRepository;
   onPlayerCompleted: CompleteHook;
+  /** Required at the production boundary; identity is retained for pure tests. */
+  combatSeed?: CombatSeedDeriver;
 }
 
 export interface TurnView {
@@ -97,10 +100,12 @@ export interface EndTurnResult {
 export class TurnApi {
   private repo: GameRepository;
   private onPlayerCompleted: CompleteHook;
+  private combatSeed: CombatSeedDeriver;
 
   constructor(deps: TurnApiDeps) {
     this.repo = deps.repo;
     this.onPlayerCompleted = deps.onPlayerCompleted;
+    this.combatSeed = deps.combatSeed ?? ((context) => context);
   }
 
   /** Whose turn it is, their phase, and the board context — null if no one is up. */
@@ -179,7 +184,7 @@ export class TurnApi {
       decl.committedTroops,
       defenderArmies,
       decl.stopLoss,
-      combatId,
+      this.combatSeed(combatId),
       decl.fromId,
       decl.toId,
     );

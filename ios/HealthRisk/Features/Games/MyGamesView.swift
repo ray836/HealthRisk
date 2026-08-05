@@ -3,12 +3,15 @@ import UIKit
 
 private enum GameRoute: Hashable {
     case waitingRoom(gameId: String, inviteURL: URL?)
+    case gameplay(String)
 }
 
 struct MyGamesView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var authenticationStore: AuthenticationStore
     @StateObject private var gamesStore: GamesStore
     @State private var isPresentingCreateGame = false
+    @State private var isPresentingJoinGame = false
     private let api: any HealthRiskAPI
     private let apiBaseURL: URL
 
@@ -39,11 +42,20 @@ struct MyGamesView: View {
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        gamesStore.clearCreateError()
-                        isPresentingCreateGame = true
+                    Menu {
+                        Button {
+                            presentCreateGame()
+                        } label: {
+                            Label("Create a Game", systemImage: "plus.circle")
+                        }
+
+                        Button {
+                            presentJoinGame()
+                        } label: {
+                            Label("Join with Code", systemImage: "person.badge.plus")
+                        }
                     } label: {
-                        Label("Create Game", systemImage: "plus")
+                        Label("Add Game", systemImage: "plus")
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -65,10 +77,22 @@ struct MyGamesView: View {
                             await gamesStore.load()
                         }
                     )
+                case let .gameplay(gameId):
+                    GameplayView(
+                        gameId: gameId,
+                        api: api,
+                        authenticationStore: authenticationStore,
+                        onGameChanged: {
+                            await gamesStore.load()
+                        }
+                    )
                 }
             }
         }
-        .task { await loadGames() }
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            await synchronizeGames()
+        }
         .sheet(isPresented: $isPresentingCreateGame) {
             CreateGameView(store: gamesStore) { request in
                 let created = await gamesStore.createGame(request)
@@ -76,6 +100,15 @@ struct MyGamesView: View {
                     await authenticationStore.invalidateSession()
                 }
                 return created
+            }
+        }
+        .sheet(isPresented: $isPresentingJoinGame) {
+            JoinGameView(store: gamesStore) { gameId in
+                let joined = await gamesStore.joinGame(gameId: gameId)
+                if gamesStore.joinError?.isUnauthorized == true {
+                    await authenticationStore.invalidateSession()
+                }
+                return joined
             }
         }
         .foregroundStyle(HealthRiskTheme.text)
@@ -128,8 +161,7 @@ struct MyGamesView: View {
                 .multilineTextAlignment(.center)
 
             Button {
-                gamesStore.clearCreateError()
-                isPresentingCreateGame = true
+                presentCreateGame()
             } label: {
                 Label("Create a Game", systemImage: "plus")
                     .fontWeight(.bold)
@@ -139,6 +171,17 @@ struct MyGamesView: View {
             .buttonStyle(.borderedProminent)
             .tint(HealthRiskTheme.accent)
             .padding(.top, 6)
+
+            Button {
+                presentJoinGame()
+            } label: {
+                Label("Join with Code", systemImage: "person.badge.plus")
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 42)
+            }
+            .buttonStyle(.bordered)
+            .tint(HealthRiskTheme.accent)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 54)
@@ -169,6 +212,23 @@ struct MyGamesView: View {
         if gamesStore.error?.isUnauthorized == true {
             await authenticationStore.invalidateSession()
         }
+    }
+
+    private func synchronizeGames() async {
+        await gamesStore.synchronize()
+        if gamesStore.error?.isUnauthorized == true {
+            await authenticationStore.invalidateSession()
+        }
+    }
+
+    private func presentCreateGame() {
+        gamesStore.clearCreateError()
+        isPresentingCreateGame = true
+    }
+
+    private func presentJoinGame() {
+        gamesStore.clearJoinError()
+        isPresentingJoinGame = true
     }
 }
 
@@ -282,6 +342,20 @@ private struct GameSummaryCard: View {
                 }
                 .buttonStyle(.bordered)
                 .tint(HealthRiskTheme.accent)
+            }
+
+            if game.status == .active {
+                NavigationLink(value: GameRoute.gameplay(game.id)) {
+                    Label(
+                        game.yourTurn ? "Play Your Turn" : "Open Campaign",
+                        systemImage: game.yourTurn ? "play.fill" : "map.fill"
+                    )
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 40)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(game.yourTurn ? HealthRiskTheme.success : HealthRiskTheme.accent)
             }
 
             Text("Game \(game.id)")

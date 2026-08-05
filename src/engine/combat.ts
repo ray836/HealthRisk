@@ -11,7 +11,11 @@
  * The attack ends on exactly one of the §6 conditions:
  *   1. capture       — defender reaches 0
  *   2. stop_loss     — attacker's cumulative losses reach the stop-loss limit
- *   3. attacker_min  — attacking force reduced to 1 (origin must hold >= 1)
+ *   3. attacker_min  — committed attacking force exhausted
+ *
+ * `attacker_min` is retained as the v1 wire value for compatibility. The
+ * origin's required garrison is not part of `attackerForce`: callers pass only
+ * the troops committed to the attack, so the final committed troop may fight.
  *
  * This module is pure: it computes a result; applying it to GameState is the
  * caller's job (see applyAttackResult).
@@ -91,12 +95,12 @@ export function resolveAttack(
       endReason = 'capture';
       break;
     }
-    if (attackerLosses >= stopLoss) {
-      endReason = 'stop_loss';
+    if (attackerForce <= 0) {
+      endReason = 'attacker_min';
       break;
     }
-    if (attackerForce <= 1) {
-      endReason = 'attacker_min';
+    if (attackerLosses >= stopLoss) {
+      endReason = 'stop_loss';
       break;
     }
 

@@ -26,7 +26,7 @@ function game(id: string, practice = false) {
   return state;
 }
 
-describe('active multiplayer game lookup', () => {
+describe('legacy active multiplayer game shortcut', () => {
   it('finds an active multiplayer seat but ignores practice games', async () => {
     const multiplayer = game('multi');
     const practice = game('practice', true);
@@ -38,7 +38,7 @@ describe('active multiplayer game lookup', () => {
     expect(await findActiveMultiplayerGame(repo, 'user')).toBe('multi');
   });
 
-  it('treats a waiting lobby as the account multiplayer slot', async () => {
+  it('includes a waiting lobby in the shortcut lookup', async () => {
     const waiting = game('waiting');
     waiting.status = 'setup';
     const repo = new InMemoryGameRepository({ games: [waiting] });
@@ -47,7 +47,7 @@ describe('active multiplayer game lookup', () => {
     expect(await findActiveMultiplayerGame(repo, 'user')).toBe('waiting');
   });
 
-  it('releases the slot after the player is eliminated or the game finishes', async () => {
+  it('ignores games after the player is eliminated or the game finishes', async () => {
     const eliminated = game('eliminated');
     eliminated.players[0]!.status = 'eliminated';
     const finished = game('finished');

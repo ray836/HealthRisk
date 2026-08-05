@@ -28,6 +28,7 @@ import {
   type DailySession,
 } from '../engine/turnSession.js';
 import type { GameRepository } from './repository.js';
+import type { CombatSeedDeriver } from './combatSeed.js';
 import { ensureTurnStarted } from './turnStart.js';
 import { applyApprovedHealthRules } from './healthRules.js';
 
@@ -39,8 +40,8 @@ export const systemClock: Clock = { now: () => new Date() };
 
 /**
  * Open (or return the existing) daily session for a game. Also syncs the game's
- * `dayNumber` to this session's day, since it feeds combat seeds
- * (`${gameId}:${dayNumber}:${playerId}`) and the AI planner context.
+ * `dayNumber` to this session's day, since it feeds combat context and the AI
+ * planner context.
  */
 export async function openDailySession(
   repo: GameRepository,
@@ -101,6 +102,7 @@ export async function handleWindowExpiry(
   planner: TurnPlanner,
   gameId: string,
   dayNumber: number,
+  combatSeed: CombatSeedDeriver = (context) => context,
 ): Promise<WindowExpiryResult> {
   const session = await repo.loadSession(gameId, dayNumber);
   if (!session) throw new Error(`No session for ${gameId} day ${dayNumber}`);
@@ -128,7 +130,13 @@ export async function handleWindowExpiry(
   }
 
   const { session: next, effect } = expireWindow(session);
-  const { state, autoReport } = applyTurnEffect(current, effect, plan);
+  const combatContext = `${current.id}:${current.dayNumber}:${playerId}:auto`;
+  const { state, autoReport } = applyTurnEffect(
+    current,
+    effect,
+    plan,
+    combatSeed(combatContext),
+  );
   const firstCapture = autoReport?.attacks.find((attack) => attack.result.captured);
   const rewardedState = firstCapture
     ? awardConquestCard(

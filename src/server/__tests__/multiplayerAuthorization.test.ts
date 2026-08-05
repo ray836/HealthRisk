@@ -117,6 +117,94 @@ afterAll(async () => {
 });
 
 describe('multiplayer route authorization', () => {
+  it('lets an account create, join, and start multiple concurrent multiplayer games', async () => {
+    const password = 'RouteTest@2026';
+    const owner = await request<AuthResult>('/api/auth/signup', {
+      method: 'POST',
+      body: { username: 'multi-game-owner', password },
+    });
+    const guest = await request<AuthResult>('/api/auth/signup', {
+      method: 'POST',
+      body: { username: 'multi-game-guest', password },
+    });
+
+    const first = await request<GameView>('/api/games', {
+      method: 'POST',
+      token: owner.body.token,
+      body: { practice: false },
+    });
+    const second = await request<GameView>('/api/games', {
+      method: 'POST',
+      token: owner.body.token,
+      body: { practice: false },
+    });
+
+    expect(first.response.status).toBe(201);
+    expect(second.response.status).toBe(201);
+    expect(second.body.id).not.toBe(first.body.id);
+
+    const joinedFirst = await request<GameResult>(`/api/games/${first.body.id}/join`, {
+      method: 'POST',
+      token: guest.body.token,
+      body: {},
+    });
+    const joinedSecond = await request<GameResult>(`/api/games/${second.body.id}/join`, {
+      method: 'POST',
+      token: guest.body.token,
+      body: {},
+    });
+
+    expect(joinedFirst.response.status).toBe(200);
+    expect(joinedSecond.response.status).toBe(200);
+
+    for (const gameId of [first.body.id, second.body.id]) {
+      const latest = await request<GameView>(`/api/games/${gameId}`, {
+        token: owner.body.token,
+      });
+      const ownerVote = await request<GameResult>(`/api/games/${gameId}/lobby-health-votes`, {
+        method: 'POST',
+        token: owner.body.token,
+        body: {
+          revision: latest.body.revision,
+          exerciseKeys: latest.body.exercises.map((exercise) => exercise.key),
+        },
+      });
+      const guestVote = await request<GameResult>(`/api/games/${gameId}/lobby-health-votes`, {
+        method: 'POST',
+        token: guest.body.token,
+        body: {
+          revision: ownerVote.body.game.revision,
+          exerciseKeys: ownerVote.body.game.exercises.map((exercise) => exercise.key),
+        },
+      });
+      const started = await request<GameResult>(`/api/games/${gameId}/start`, {
+        method: 'POST',
+        token: owner.body.token,
+        body: { revision: guestVote.body.game.revision },
+      });
+      expect(started.response.status).toBe(200);
+      expect(started.body.game.status).toBe('active');
+    }
+
+    const ownerGames = await request<{ games: Array<{ id: string }> }>('/api/games', {
+      token: owner.body.token,
+    });
+    const guestGames = await request<{ games: Array<{ id: string }> }>('/api/games', {
+      token: guest.body.token,
+    });
+    expect(ownerGames.body.games.map((game) => game.id)).toEqual(
+      expect.arrayContaining([first.body.id, second.body.id]),
+    );
+    expect(guestGames.body.games.map((game) => game.id)).toEqual(
+      expect.arrayContaining([first.body.id, second.body.id]),
+    );
+
+    const metadata = await request<{
+      capabilities: { multipleConcurrentGames: boolean };
+    }>('/api/meta');
+    expect(metadata.body.capabilities.multipleConcurrentGames).toBe(true);
+  });
+
   it('lets only the creator update the rules everyone sees in the lobby', async () => {
     const password = 'RouteTest@2026';
     const creator = await request<AuthResult>('/api/auth/signup', {

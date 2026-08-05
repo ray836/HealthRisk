@@ -70,10 +70,111 @@
           "status": { "enum": ["setup", "active", "finished", "cancelled"] },
           "practice": { "type": "boolean" },
           "yourTurn": { "type": "boolean" },
+          "winnerId": { "type": ["string", "null"] },
+          "currentPlayerId": { "type": ["string", "null"] },
+          "phase": { "enum": ["reinforce", "attack", "fortify", "done"] },
+          "dashboard": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/GameplayDashboard" },
+              { "type": "null" }
+            ]
+          },
+          "healthLogging": { "type": "object", "additionalProperties": true },
+          "exercises": { "type": "array", "items": { "$ref": "#/components/schemas/ExerciseRule" } },
           "players": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
           "territories": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
           "chatMessages": { "type": "array", "items": { "$ref": "#/components/schemas/ChatMessage" } },
           "schedule": { "type": "object", "additionalProperties": true }
+        },
+        "additionalProperties": true
+      },
+      "TerritoryCard": {
+        "type": "object",
+        "required": ["id", "territoryId", "earnedDay"],
+        "properties": {
+          "id": { "type": "string" },
+          "territoryId": { "type": "string" },
+          "earnedDay": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "GameplayCards": {
+        "type": "object",
+        "required": ["hand", "tradeSize", "tradeReward", "canTrade"],
+        "properties": {
+          "hand": { "type": "array", "items": { "$ref": "#/components/schemas/TerritoryCard" } },
+          "tradeSize": { "type": "integer", "minimum": 1 },
+          "tradeReward": { "type": "integer", "minimum": 1 },
+          "canTrade": { "type": "boolean" }
+        }
+      },
+      "GameplayTurnSummary": {
+        "type": "object",
+        "required": ["reinforcementsPlaced", "placementsMade", "attacksMade", "attackerLosses", "defenderLosses", "territoriesCaptured", "cardsTraded", "cardPending", "fortification"],
+        "properties": {
+          "reinforcementsPlaced": { "type": "integer", "minimum": 0 },
+          "placementsMade": { "type": "integer", "minimum": 0 },
+          "attacksMade": { "type": "integer", "minimum": 0 },
+          "attackerLosses": { "type": "integer", "minimum": 0 },
+          "defenderLosses": { "type": "integer", "minimum": 0 },
+          "territoriesCaptured": { "type": "array", "items": { "type": "string" } },
+          "cardsTraded": { "type": "integer", "minimum": 0 },
+          "cardPending": { "type": "boolean" },
+          "fortification": { "type": ["object", "null"], "additionalProperties": true }
+        }
+      },
+      "ExerciseRule": {
+        "type": "object",
+        "required": ["key", "label", "unitLabel", "category", "trackingType", "troopsPerUnit", "dailyUnitCap"],
+        "properties": {
+          "key": { "type": "string" },
+          "label": { "type": "string" },
+          "unitLabel": { "type": "string" },
+          "category": { "enum": ["movement", "nutrition", "recovery"] },
+          "trackingType": { "enum": ["quantity", "duration", "checkbox"] },
+          "troopsPerUnit": { "type": "number", "exclusiveMinimum": 0 },
+          "dailyUnitCap": { "type": ["number", "null"], "exclusiveMinimum": 0 }
+        }
+      },
+      "ExerciseProgress": {
+        "type": "object",
+        "required": ["key", "label", "unitLabel", "category", "trackingType", "unitsLogged", "countedUnits", "unitCap", "troopsEarned"],
+        "properties": {
+          "key": { "type": "string" },
+          "label": { "type": "string" },
+          "unitLabel": { "type": "string" },
+          "category": { "enum": ["movement", "nutrition", "recovery"] },
+          "trackingType": { "enum": ["quantity", "duration", "checkbox"] },
+          "unitsLogged": { "type": "number", "minimum": 0 },
+          "countedUnits": { "type": "number", "minimum": 0 },
+          "unitCap": { "type": ["number", "null"], "minimum": 0 },
+          "troopsEarned": { "type": "number", "minimum": 0 }
+        }
+      },
+      "ExerciseDashboard": {
+        "type": "object",
+        "required": ["totalTroops", "dailyCap", "totalCapApplied", "progress"],
+        "properties": {
+          "totalTroops": { "type": "number", "minimum": 0 },
+          "dailyCap": { "type": "number", "minimum": 0 },
+          "totalCapApplied": { "type": "boolean" },
+          "progress": { "type": "array", "items": { "$ref": "#/components/schemas/ExerciseProgress" } }
+        }
+      },
+      "GameplayDashboard": {
+        "type": "object",
+        "required": ["playerId", "cards", "turnSummary", "exercise"],
+        "properties": {
+          "playerId": { "type": "string" },
+          "availableReinforcements": { "type": "integer", "minimum": 0 },
+          "turnStart": { "type": ["object", "null"], "additionalProperties": true },
+          "cards": { "$ref": "#/components/schemas/GameplayCards" },
+          "turnSummary": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/GameplayTurnSummary" },
+              { "type": "null" }
+            ]
+          },
+          "exercise": { "$ref": "#/components/schemas/ExerciseDashboard" }
         },
         "additionalProperties": true
       },
@@ -112,6 +213,95 @@
         "properties": { "game": { "$ref": "#/components/schemas/GameView" } },
         "additionalProperties": true
       },
+      "CardTradeMutationResponse": {
+        "type": "object",
+        "required": ["remainingBank", "remainingCards", "troopsAwarded", "game"],
+        "properties": {
+          "remainingBank": { "type": "integer", "minimum": 0 },
+          "remainingCards": { "type": "integer", "minimum": 0 },
+          "troopsAwarded": { "type": "integer", "minimum": 1 },
+          "game": { "$ref": "#/components/schemas/GameView" }
+        }
+      },
+      "EndTurnMutationResponse": {
+        "type": "object",
+        "required": ["game", "cardAwarded"],
+        "properties": {
+          "game": { "$ref": "#/components/schemas/GameView" },
+          "cardAwarded": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/TerritoryCard" },
+              { "type": "null" }
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "ExerciseLogMutationResponse": {
+        "type": "object",
+        "required": ["deltaTroops", "dayTotal", "totalCapApplied", "game"],
+        "properties": {
+          "deltaTroops": { "type": "integer", "minimum": 0 },
+          "dayTotal": { "type": "integer", "minimum": 0 },
+          "totalCapApplied": { "type": "boolean" },
+          "game": { "$ref": "#/components/schemas/GameView" }
+        }
+      },
+      "AttackRequest": {
+        "type": "object",
+        "required": ["revision", "fromId", "toId", "committedTroops", "stopLoss"],
+        "properties": {
+          "revision": { "type": "integer", "minimum": 0 },
+          "fromId": { "type": "string" },
+          "toId": { "type": "string" },
+          "committedTroops": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Troops entering the battle. The origin must retain at least one troop."
+          },
+          "stopLoss": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Maximum attacker casualties before combat stops. Set equal to committedTroops for an all-in attack."
+          }
+        }
+      },
+      "CombatRound": {
+        "type": "object",
+        "required": ["attackerDice", "defenderDice", "attackerLosses", "defenderLosses", "attackerForceAfter", "defenderForceAfter"],
+        "properties": {
+          "attackerDice": { "type": "array", "items": { "type": "integer", "minimum": 1, "maximum": 6 } },
+          "defenderDice": { "type": "array", "items": { "type": "integer", "minimum": 1, "maximum": 6 } },
+          "attackerLosses": { "type": "integer", "minimum": 0 },
+          "defenderLosses": { "type": "integer", "minimum": 0 },
+          "attackerForceAfter": { "type": "integer", "minimum": 0 },
+          "defenderForceAfter": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "AttackResult": {
+        "type": "object",
+        "required": ["fromId", "toId", "endReason", "captured", "rounds", "totalAttackerLosses", "totalDefenderLosses", "survivingAttackers", "remainingDefenders", "seed"],
+        "properties": {
+          "fromId": { "type": "string" },
+          "toId": { "type": "string" },
+          "endReason": { "enum": ["capture", "stop_loss", "attacker_min"] },
+          "captured": { "type": "boolean" },
+          "rounds": { "type": "array", "items": { "$ref": "#/components/schemas/CombatRound" } },
+          "totalAttackerLosses": { "type": "integer", "minimum": 0 },
+          "totalDefenderLosses": { "type": "integer", "minimum": 0 },
+          "survivingAttackers": { "type": "integer", "minimum": 0 },
+          "remainingDefenders": { "type": "integer", "minimum": 0 },
+          "seed": { "type": "integer" }
+        }
+      },
+      "AttackMutationResponse": {
+        "type": "object",
+        "required": ["result", "game"],
+        "properties": {
+          "result": { "$ref": "#/components/schemas/AttackResult" },
+          "game": { "$ref": "#/components/schemas/GameView" }
+        }
+      },
       "RevisionBody": {
         "type": "object",
         "required": ["revision"],
@@ -146,7 +336,7 @@
       }
     },
     "/api/auth/me": {
-      "get": { "responses": { "200": { "description": "Current account and active game" } } }
+      "get": { "responses": { "200": { "description": "Current account; use GET /api/games for its complete game library" } } }
     },
     "/api/auth/logout": {
       "post": { "responses": { "200": { "description": "Session ended", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OkResponse" } } } } } }
@@ -162,7 +352,7 @@
       "post": {
         "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateGameRequest" } } } },
-        "responses": { "201": { "description": "Created game", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GameView" } } } } }
+        "responses": { "201": { "description": "Created game; accounts may participate in multiple concurrent games", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GameView" } } } } }
       }
     },
     "/api/games/{gameId}": {
@@ -172,7 +362,7 @@
     "/api/games/{gameId}/join": {
       "post": {
         "parameters": [{ "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKey" }],
-        "responses": { "200": { "description": "Joined lobby" } }
+        "responses": { "200": { "description": "Joined lobby; existing game participation does not prevent joining" } }
       }
     },
     "/api/games/{gameId}/start": {
@@ -232,14 +422,14 @@
       "post": {
         "parameters": [{ "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKey" }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RevisionBody" } } } },
-        "responses": { "200": { "description": "Conquest cards traded", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GameMutationResponse" } } } } }
+        "responses": { "200": { "description": "Conquest cards traded", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CardTradeMutationResponse" } } } } }
       }
     },
     "/api/games/{gameId}/attack": {
       "post": {
         "parameters": [{ "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKey" }],
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RevisionBody" } } } },
-        "responses": { "200": { "description": "Attack resolved", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GameMutationResponse" } } } } }
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AttackRequest" } } } },
+        "responses": { "200": { "description": "All combat exchanges resolved until capture, stop-loss, or attacker exhaustion", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AttackMutationResponse" } } } } }
       }
     },
     "/api/games/{gameId}/fortify": {
@@ -253,7 +443,7 @@
       "post": {
         "parameters": [{ "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKey" }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RevisionBody" } } } },
-        "responses": { "200": { "description": "Turn completed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GameMutationResponse" } } } } }
+        "responses": { "200": { "description": "Turn completed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EndTurnMutationResponse" } } } } }
       }
     },
     "/api/games/{gameId}/expire": {
@@ -267,7 +457,7 @@
       "post": {
         "parameters": [{ "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKey" }],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["exerciseKey", "units", "revision"], "properties": { "exerciseKey": { "type": "string" }, "units": { "type": "number" }, "revision": { "type": "integer" } } } } } },
-        "responses": { "200": { "description": "Health progress logged" } }
+        "responses": { "200": { "description": "Health progress logged and any newly earned troops banked", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ExerciseLogMutationResponse" } } } } }
       }
     },
     "/api/games/{gameId}/chat": {

@@ -49,6 +49,14 @@ set it as `CRON_SECRET` in the Vercel Production environment. Vercel sends it
 to the route as `Authorization: Bearer <CRON_SECRET>`; missing or incorrect
 credentials receive `401`.
 
+Combat rolls use classic Risk dice probabilities and are resolved only by the
+authoritative server. Set a separate high-entropy `COMBAT_SEED_SECRET` in
+production so future rolls cannot be calculated from public game data. If it is
+omitted, the server safely reuses `CRON_SECRET`; production startup fails when
+neither value exists. Each authoritative result includes its numeric seed and
+round log for replay and audit, while idempotent retries reuse the same derived
+result.
+
 The Hobby cron is only an idle-game backstop. Player requests enforce due
 deadlines immediately. If idle games must advance close to the exact deadline,
 use a more frequent Vercel cron plan or an external scheduler to call the same
@@ -111,6 +119,7 @@ OpenAPI 3.1 contract at `/openapi.json` can drive Swift model/client generation.
 Account and game lifecycle endpoints include:
 
 - `GET /api/games` for waiting, active, practice, completed, and cancelled games;
+- accounts may create, join, and play multiple concurrent multiplayer games;
 - new multiplayer waiting rooms support up to 10 joined players and may start once at least 2 have joined;
 - `POST /api/games/:id/leave` to leave a lobby or forfeit an active game;
 - `DELETE /api/games/:id/members/:playerId` for creator lobby moderation;

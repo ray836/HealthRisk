@@ -19,6 +19,11 @@ import { InMemoryGameRepository, type GameRepository } from '../services/reposit
 import { DrizzleGameRepository } from '../services/drizzleRepository.js';
 import { createDb, type DbHandle } from '../../db/client.js';
 import { TurnApi, TurnError } from '../services/turnApi.js';
+import {
+  createCombatSeedDeriver,
+  resolveCombatSeedSecret,
+  type CombatSeedDeriver,
+} from '../services/combatSeed.js';
 import { openDailySession, handleWindowExpiry, systemClock } from '../services/orchestrator.js';
 import { GameScheduler } from '../services/scheduling/gameScheduler.js';
 import { InProcessJobQueue, PassiveJobQueue } from '../services/scheduling/jobQueue.js';
@@ -98,6 +103,7 @@ let database: DbHandle | null = null;
 let durableSchedulerQueue: PgBossJobQueue | null = null;
 let runtimeInitialization: Promise<void> | null = null;
 let notifier: NotificationService;
+let combatSeed: CombatSeedDeriver;
 
 class RuntimeInitializationError extends Error {
   constructor(cause: unknown) {
@@ -602,7 +608,7 @@ async function mutateGame<T>(
   requireRevision = true,
 ): Promise<T> {
   requireUser(req);
-  await reconcileGameDue({ repo, planner: throwingPlanner }, gameId);
+  await reconcileGameDue({ repo, planner: throwingPlanner, combatSeed }, gameId);
   return repo.withGameLock(gameId, async () => {
     const before = await repo.loadGame(gameId);
     if (!before) throw new TurnError('no_game', 'Unknown game');
@@ -664,7 +670,6 @@ function apiStatus(code: string): number {
   if (
     code === 'not_your_turn' ||
     code === 'stale_game' ||
-    code === 'active_multiplayer_game' ||
     code === 'game_started' ||
     code === 'idempotency_conflict' ||
     code === 'idempotency_in_progress'
@@ -698,6 +703,7 @@ app.get(
       repo,
       planner: throwingPlanner,
       maxSteps: 20,
+      combatSeed,
     });
     res.json({
       ok: true,
@@ -778,6 +784,7 @@ app.get(
         apnsConfigured: notifier.pushConfigured,
         universalInvites: true,
         chatSafety: true,
+        multipleConcurrentGames: true,
       },
     });
   }),
@@ -882,15 +889,6 @@ app.post(
           MAX_GAME_PLAYERS,
         )
       : MAX_GAME_PLAYERS;
-    if (!practice) {
-      const activeGameId = await findActiveMultiplayerGame(repo, user.id);
-      if (activeGameId) {
-        throw new TurnError(
-          'active_multiplayer_game',
-          `You are already playing an active multiplayer game (${activeGameId})`,
-        );
-      }
-    }
     const players = Array.from({ length: count }, (_, i) => ({
       id: `p${i + 1}`,
       name: !practice && i === 0 ? user.username : `Player ${i + 1}`,
@@ -1102,13 +1100,6 @@ app.post(
       let seat = existing?.playerId ?? '';
       await mutateGame(req, gameId, async () => {
         const latest = (await repo.loadGame(gameId))!;
-        const activeGameId = await findActiveMultiplayerGame(repo, user.id);
-        if (!(await isPracticeGame(repo, latest)) && activeGameId && activeGameId !== gameId) {
-          throw new TurnError(
-            'active_multiplayer_game',
-            `You are already playing an active multiplayer game (${activeGameId})`,
-          );
-        }
         seat = await claimOpenSeat(repo, gameId, latest.players.map((p) => p.id), user.id);
         const lobbyHealthVotes = { ...(latest.lobbyHealthVotes ?? {}) };
         if (!existing) delete lobbyHealthVotes[seat];
@@ -1171,7 +1162,7 @@ app.get(
     if (!(await seatFor(repo, id, user.id))) {
       throw new TurnError('no_seat', 'Join this game before viewing it');
     }
-    await reconcileGameDue({ repo, planner: throwingPlanner }, id);
+    await reconcileGameDue({ repo, planner: throwingPlanner, combatSeed }, id);
     const view = await gameView(id, user.id);
     if (!view) throw new TurnError('no_game', 'Unknown game');
     res.json(view);
@@ -1348,7 +1339,7 @@ app.post(
     await respondIdempotently(req, res, `game:${id}:expire`, async () => {
       await mutateGame(req, id, async () => {
         const { day } = await actingSeat(req, id);
-        await handleWindowExpiry(repo, throwingPlanner, id, day);
+        await handleWindowExpiry(repo, throwingPlanner, id, day, combatSeed);
         await scheduler.armNextWindow(id, day);
       });
       return { status: 200, body: { game: await gameView(id, user.id) } };
@@ -1535,8 +1526,9 @@ async function initializeRuntimeOnce(): Promise<void> {
       `Store: ${database.kind} @ ${database.location} (schema v${database.migrationVersion}, ${database.persistent ? 'persistent' : 'ephemeral'})`,
     );
   }
+  combatSeed = createCombatSeedDeriver(resolveCombatSeedSecret());
   notifier = new NotificationService(repo);
-  api = new TurnApi({ repo, onPlayerCompleted });
+  api = new TurnApi({ repo, onPlayerCompleted, combatSeed });
 
   const isVercel = process.env.VERCEL === '1';
   const durableQueueUrl =
@@ -1556,6 +1548,7 @@ async function initializeRuntimeOnce(): Promise<void> {
     planner: throwingPlanner,
     queue,
     clock: systemClock,
+    combatSeed,
   });
   scheduler.register();
   if (durableSchedulerQueue) {

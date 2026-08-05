@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct HealthRiskApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     private let api: any HealthRiskAPI
     private let apiBaseURL: URL
     @StateObject private var authenticationStore: AuthenticationStore

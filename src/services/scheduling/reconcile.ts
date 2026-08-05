@@ -11,6 +11,7 @@ import { timingSafeEqual } from 'node:crypto';
 
 import type { TurnPlanner } from '../../engine/planner.js';
 import { systemClock, type Clock } from '../orchestrator.js';
+import type { CombatSeedDeriver } from '../combatSeed.js';
 import type { GameRepository } from '../repository.js';
 import { GameScheduler } from './gameScheduler.js';
 import { FakeJobQueue } from './jobQueue.js';
@@ -20,6 +21,7 @@ export interface ReconcileDeps {
   planner: TurnPlanner;
   clock?: Clock;
   maxSteps?: number;
+  combatSeed?: CombatSeedDeriver;
 }
 
 export interface ReconcileResult {
@@ -51,6 +53,7 @@ export async function reconcileGameDue(
     planner: deps.planner,
     queue,
     clock: { now: () => now },
+    combatSeed: deps.combatSeed,
   });
   scheduler.register();
   const active = await scheduler.recoverGame(gameId);
