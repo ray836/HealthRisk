@@ -172,6 +172,7 @@ final class WaitingRoomStore: ObservableObject {
         defer { isSubmittingChoices = false }
 
         let request = LobbyHealthChoicesRequest(
+            revision: game.revision,
             healthRulesVersion: game.healthRulesVersion,
             exerciseKeys: selectedGoalKeys.sorted()
         )

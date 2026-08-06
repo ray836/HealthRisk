@@ -91,6 +91,22 @@ final class APIModelTests: XCTestCase {
         XCTAssertTrue(game.lobbyHealthVoting.hasSubmitted)
     }
 
+    func testLobbyHealthChoicesEncodeBothConcurrencyVersions() throws {
+        let request = LobbyHealthChoicesRequest(
+            revision: 12,
+            healthRulesVersion: 3,
+            exerciseKeys: ["running"]
+        )
+
+        let payload = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any]
+        )
+
+        XCTAssertEqual(payload["revision"] as? Int, 12)
+        XCTAssertEqual(payload["healthRulesVersion"] as? Int, 3)
+        XCTAssertEqual(payload["exerciseKeys"] as? [String], ["running"])
+    }
+
     func testDecodesAuthoritativeGameplayContract() throws {
         let game = try JSONDecoder().decode(GameplayGame.self, from: gameplayGameData)
 

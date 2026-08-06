@@ -178,6 +178,9 @@ struct HealthRulesUpdateRequest: Codable, Equatable, Sendable {
 }
 
 struct LobbyHealthChoicesRequest: Codable, Equatable, Sendable {
+    /// Kept for compatibility while older servers still use whole-game
+    /// optimistic concurrency for lobby health choices.
+    let revision: Int
     let healthRulesVersion: Int
     let exerciseKeys: [String]
 }

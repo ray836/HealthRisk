@@ -86,6 +86,7 @@ final class WaitingRoomStoreTests: XCTestCase {
                 MockHealthRiskAPI.RecordedChoicesSubmission(
                     gameId: "game-lobby",
                     request: LobbyHealthChoicesRequest(
+                        revision: 4,
                         healthRulesVersion: 2,
                         exerciseKeys: ["running"]
                     )
