@@ -4,6 +4,17 @@ Data model + core turn engine, built as pure, UI-free, testable logic. Each
 open-item decision is isolated to one function or one config field — nothing is
 baked into the schema in a way that's expensive to revise.
 
+## Shared health momentum
+
+- Multiplayer members can compare completion consistency for the game’s shared
+  health goals. The comparison uses up to the seven prior completed game days;
+  the current day is displayed separately so an unfinished day is never counted
+  as a miss.
+- Shared health data is deliberately limited to goal status, completed-day
+  counts, and percentages in the comparison. Raw log entries and exact per-goal
+  quantities remain private. Practice and single-player games do not show the
+  comparison panel.
+
 ## Session 2 — turn-window rule change
 
 Ruleset §5 updated:

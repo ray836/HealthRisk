@@ -1,6 +1,12 @@
 import SwiftUI
 
 enum GameJoinCode {
+    static func displayCode(from gameID: String) -> String {
+        let lowered = gameID.lowercased()
+        let code = lowered.hasPrefix("game-") ? String(lowered.dropFirst(5)) : lowered
+        return code.uppercased()
+    }
+
     static func gameID(from input: String) -> String? {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }

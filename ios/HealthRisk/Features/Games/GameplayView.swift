@@ -5,6 +5,18 @@ enum GameplayActionMode: String, CaseIterable, Identifiable {
     case fortify = "Move"
 
     var id: String { rawValue }
+
+    static func synchronized(
+        current: GameplayActionMode,
+        previousPhase: TurnPhase?,
+        phase: TurnPhase?,
+        playerChanged: Bool
+    ) -> GameplayActionMode {
+        if playerChanged || (phase == .attack && previousPhase != .attack) {
+            return .attack
+        }
+        return current
+    }
 }
 
 struct AttackRiskPolicy: Equatable {
@@ -109,6 +121,7 @@ struct GameplayView: View {
     @State private var isConfirmingDeletePracticeGame = false
     @State private var isConfirmingForfeitGame = false
     @State private var isShowingCommandPanel = false
+    @State private var isShowingHealthMomentum = false
     @State private var hasDismissedGameResult = false
     @State private var selectedHealthGoalKey: String?
     @State private var healthUnitsText = "1"
@@ -130,9 +143,15 @@ struct GameplayView: View {
             HealthRiskTheme.appBackground
             content
 
-            if let completion = store.lastTurnCompletion,
-               store.game?.status != .finished {
-                turnCompletionOverlay(completion)
+            if store.game?.status != .finished,
+               store.lastAttackResult != nil || store.lastAwardedCard != nil {
+                VStack(spacing: 8) {
+                    gameplayFeedback
+                    Spacer()
+                }
+                .padding(.top, 72)
+                .padding(.horizontal, 24)
+                .zIndex(10)
             }
 
             if let game = store.game,
@@ -159,7 +178,7 @@ struct GameplayView: View {
             }
             Button("Keep Playing", role: .cancel) {}
         } message: {
-            Text("The server will advance play to the next person. You cannot add more actions to this turn afterward.")
+            Text("Any remaining attacks or troop move will be skipped. The server will advance play to the next person, and you cannot add more actions to this turn afterward.")
         }
         .confirmationDialog(
             "Delete this practice game?",
@@ -185,27 +204,27 @@ struct GameplayView: View {
         } message: {
             Text("You will receive no more turns. Your territories become neutral and keep their current troops. If only one player remains, that player wins immediately.")
         }
-        .alert(
-            battleResultTitle,
-            isPresented: Binding(
-                get: { store.lastAttackResult != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        store.clearAttackResult()
-                    }
-                }
-            )
-        ) {
-            Button("Continue") {
-                store.clearAttackResult()
-            }
-        } message: {
-            Text(battleResultMessage)
-        }
         .onChange(of: actionMode) { _, _ in resetSelection() }
         .onChange(of: store.game?.revision) { oldRevision, newRevision in
             guard newRevision != nil, oldRevision != newRevision else { return }
             resetSelection()
+        }
+        .onChange(of: store.game?.phase) { previousPhase, phase in
+            actionMode = GameplayActionMode.synchronized(
+                current: actionMode,
+                previousPhase: previousPhase,
+                phase: phase,
+                playerChanged: false
+            )
+        }
+        .onChange(of: store.game?.currentPlayerId) { previousPlayerId, playerId in
+            guard playerId != nil, previousPlayerId != playerId else { return }
+            actionMode = GameplayActionMode.synchronized(
+                current: actionMode,
+                previousPhase: store.game?.phase,
+                phase: store.game?.phase,
+                playerChanged: true
+            )
         }
         .onChange(of: store.game?.status) { _, status in
             if status == .finished {
@@ -215,30 +234,6 @@ struct GameplayView: View {
         .onChange(of: store.error) { _, error in
             guard error?.isUnauthorized == true else { return }
             Task { await authenticationStore.invalidateSession() }
-        }
-        .alert(
-            "Cards Traded",
-            isPresented: Binding(
-                get: { store.lastCardTrade != nil },
-                set: { if !$0 { store.clearCardTrade() } }
-            )
-        ) {
-            Button("Continue") { store.clearCardTrade() }
-        } message: {
-            if let trade = store.lastCardTrade {
-                Text("You received \(trade.troopsAwarded) reinforcements and have \(trade.remainingCards) conquest cards remaining.")
-            }
-        }
-        .alert(
-            "Health Progress Saved",
-            isPresented: Binding(
-                get: { store.lastExerciseLog != nil },
-                set: { if !$0 { store.clearExerciseLog() } }
-            )
-        ) {
-            Button("Continue") { store.clearExerciseLog() }
-        } message: {
-            Text(exerciseLogMessage)
         }
         .foregroundStyle(HealthRiskTheme.text)
     }
@@ -291,7 +286,8 @@ struct GameplayView: View {
                 campaignHUD(
                     game,
                     showsDeadline: size.width > 1_050,
-                    showsInlineActions: showsInlineActionTray
+                    showsInlineActions: showsInlineActionTray,
+                    usesCompactHealthButton: size.width < 1_000
                 )
                 Spacer()
                 if !game.yourTurn, let selected = selectedTerritory(in: game) {
@@ -314,8 +310,15 @@ struct GameplayView: View {
                 }
                 .transition(.move(edge: .trailing).combined(with: .opacity))
             }
+
+            if isShowingHealthMomentum {
+                healthMomentumScreen(game, size: size)
+                    .transition(.opacity.combined(with: .scale(scale: 0.985)))
+                    .zIndex(20)
+            }
         }
         .animation(.easeInOut(duration: 0.2), value: isShowingCommandPanel)
+        .animation(.easeInOut(duration: 0.22), value: isShowingHealthMomentum)
         .ignoresSafeArea()
     }
 
@@ -336,7 +339,8 @@ struct GameplayView: View {
     private func campaignHUD(
         _ game: GameplayGame,
         showsDeadline: Bool,
-        showsInlineActions: Bool
+        showsInlineActions: Bool,
+        usesCompactHealthButton: Bool
     ) -> some View {
         HStack(spacing: 9) {
             Button {
@@ -394,6 +398,29 @@ struct GameplayView: View {
             }
 
             Spacer(minLength: 6)
+
+            if healthComparisonAvailable(game) {
+                Button {
+                    presentHealthMomentum()
+                } label: {
+                    if usesCompactHealthButton {
+                        Image(systemName: "heart.text.square.fill")
+                            .font(.headline)
+                            .frame(width: 42, height: 42)
+                    } else {
+                        Label("Health", systemImage: "heart.text.square.fill")
+                            .font(.caption.weight(.bold))
+                            .frame(height: 42)
+                            .padding(.horizontal, 12)
+                    }
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(HealthRiskTheme.success)
+                .background(.ultraThinMaterial)
+                .clipShape(Capsule())
+                .accessibilityLabel("Health goals")
+                .accessibilityHint("Open the full-screen health goal comparison")
+            }
 
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
@@ -602,12 +629,30 @@ struct GameplayView: View {
                 .disabled(!canPerformSelectedAction || store.isPerformingAction)
                 .accessibilityLabel(inlinePrimaryActionTitle(game))
 
+                Button {
+                    requestEndTurn(in: game.phase)
+                } label: {
+                    Image(systemName: "forward.end.fill")
+                        .font(.caption.weight(.bold))
+                        .frame(width: 38, height: 38)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(HealthRiskTheme.accent)
+                .background(HealthRiskTheme.raisedPanel)
+                .clipShape(Circle())
+                .overlay {
+                    Circle().stroke(HealthRiskTheme.line, lineWidth: 1)
+                }
+                .disabled(store.isPerformingAction)
+                .accessibilityLabel("End turn")
+                .accessibilityHint("Skip any remaining attacks or troop movement")
+
             case .fortify:
                 Label("Troops moved", systemImage: "checkmark.circle.fill")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(HealthRiskTheme.success)
                 Button {
-                    isConfirmingEndTurn = true
+                    requestEndTurn(in: game.phase)
                 } label: {
                     inlineActionLabel("End Turn")
                 }
@@ -850,6 +895,7 @@ struct GameplayView: View {
                         healthGoalsPanel(game, dashboard: dashboard)
                         conquestCardsPanel(game, dashboard: dashboard)
                     }
+                    healthComparisonPanel(game)
                     if let selected = selectedTerritory(in: game) {
                         territoryDetails(selected, game: game)
                     } else {
@@ -1033,15 +1079,19 @@ struct GameplayView: View {
                     reinforcementControls(game)
                 case .attack:
                     attackAndFortifyControls(game)
-                case .fortify, .done:
+                case .fortify:
                     Text("Your actions are complete. End the turn when you are ready.")
+                        .font(.subheadline)
+                        .foregroundStyle(HealthRiskTheme.muted)
+                case .done:
+                    Text("Your turn is complete. The board will advance automatically.")
                         .font(.subheadline)
                         .foregroundStyle(HealthRiskTheme.muted)
                 }
 
-                if game.phase != .reinforce {
+                if game.phase == .attack || game.phase == .fortify {
                     Button {
-                        isConfirmingEndTurn = true
+                        requestEndTurn(in: game.phase)
                     } label: {
                         Label("End Turn", systemImage: "forward.end.fill")
                             .fontWeight(.bold)
@@ -1282,7 +1332,7 @@ struct GameplayView: View {
                                 ProgressView()
                                     .tint(.white)
                             } else {
-                                Text("Log Progress")
+                                Text("Log")
                                     .fontWeight(.semibold)
                             }
                         }
@@ -1300,6 +1350,571 @@ struct GameplayView: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(isSelected ? HealthRiskTheme.accent.opacity(0.55) : HealthRiskTheme.line, lineWidth: 1)
         }
+    }
+
+    @ViewBuilder
+    private func healthComparisonPanel(_ game: GameplayGame) -> some View {
+        let players = healthComparisonPlayers(game)
+
+        if healthComparisonAvailable(game) {
+            let historyDays = players.compactMap { $0.healthProgress?.historyWindowDays }.max() ?? 0
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline) {
+                    Label("Health Momentum", systemImage: "square.grid.3x3.fill")
+                        .font(.headline)
+                        .foregroundStyle(HealthRiskTheme.text)
+                    Spacer()
+                    Text(historyDays > 0 ? "Last \(historyDays) days" : "Starting today")
+                        .font(.caption2.bold())
+                        .foregroundStyle(HealthRiskTheme.success)
+                }
+
+                Text(healthComparisonSummary(game, players: players, historyDays: historyDays))
+                    .font(.caption)
+                    .foregroundStyle(HealthRiskTheme.muted)
+
+                VStack(spacing: 7) {
+                    ForEach(players.prefix(4)) { player in
+                        healthPlayerPreviewRow(player, game: game)
+                    }
+                }
+                .padding(10)
+                .background(HealthRiskTheme.background.opacity(0.55))
+                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .stroke(HealthRiskTheme.line, lineWidth: 1)
+                }
+
+                Button {
+                    presentHealthMomentum()
+                } label: {
+                    HStack {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        Text("Open Full Comparison")
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                    }
+                    .font(.subheadline.weight(.bold))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 40)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(HealthRiskTheme.success)
+                .accessibilityHint("Shows every player across the top and every shared health goal in a heat map")
+            }
+            .padding(14)
+            .healthRiskSurface()
+        }
+    }
+
+    private func healthPlayerPreviewRow(
+        _ player: GameplayPlayer,
+        game: GameplayGame
+    ) -> some View {
+        let progress = player.healthProgress
+        let todayPercent: Double = {
+            guard let progress, progress.goalsTracked > 0 else { return 0 }
+            return Double(progress.goalsCompleted) / Double(progress.goalsTracked)
+        }()
+
+        return HStack(spacing: 9) {
+            Circle()
+                .fill(Color(hex: player.color) ?? HealthRiskTheme.muted)
+                .frame(width: 10, height: 10)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 5) {
+                    Text(player.name)
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+                    if game.mySeats.contains(player.id) {
+                        Text("YOU")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(HealthRiskTheme.accent)
+                    }
+                }
+                Text("\(progress?.goalsCompleted ?? 0) of \(progress?.goalsTracked ?? 0) goals met today")
+                    .font(.caption2)
+                    .foregroundStyle(HealthRiskTheme.muted)
+            }
+
+            Spacer()
+
+            ProgressView(value: todayPercent, total: 1)
+                .tint(healthTodayColor(progress?.status ?? .notStarted))
+                .frame(width: 64)
+
+            Text(progress?.consistencyPercent.map { "\($0)%" } ?? "New")
+                .font(.caption.monospacedDigit().bold())
+                .foregroundStyle(progress?.consistencyPercent == nil ? HealthRiskTheme.muted : HealthRiskTheme.text)
+                .frame(width: 34, alignment: .trailing)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func healthMomentumScreen(_ game: GameplayGame, size: CGSize) -> some View {
+        let goals = healthComparisonGoals(game)
+        let players = healthComparisonPlayers(game)
+        let historyDays = players.compactMap { $0.healthProgress?.historyWindowDays }.max() ?? 0
+
+        return ZStack {
+            HealthRiskTheme.appBackground
+
+            VStack(spacing: 14) {
+                healthMomentumHeader(
+                    game,
+                    players: players,
+                    historyDays: historyDays,
+                    availableWidth: size.width
+                )
+                healthMomentumMatrix(
+                    game,
+                    goals: goals,
+                    players: players,
+                    availableWidth: size.width
+                )
+
+                ScrollView(.horizontal) {
+                    HStack(spacing: 18) {
+                        healthHeatLegend
+                        Divider()
+                            .frame(height: 22)
+                        healthTodayLegend("Met today", status: .goalMet)
+                        healthTodayLegend("In progress", status: .inProgress)
+                        healthTodayLegend("Not started", status: .notStarted)
+                        Text("Raw logs and quantities stay private")
+                            .font(.caption2)
+                            .foregroundStyle(HealthRiskTheme.muted)
+                    }
+                }
+                .scrollIndicators(.hidden)
+            }
+            .padding(.horizontal, 28)
+            .padding(.vertical, 16)
+        }
+        .accessibilityAddTraits(.isModal)
+    }
+
+    private func healthMomentumHeader(
+        _ game: GameplayGame,
+        players: [GameplayPlayer],
+        historyDays: Int,
+        availableWidth: CGFloat
+    ) -> some View {
+        HStack(spacing: 14) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isShowingHealthMomentum = false
+                }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.headline)
+                    .frame(width: 42, height: 42)
+            }
+            .buttonStyle(.plain)
+            .background(HealthRiskTheme.raisedPanel)
+            .clipShape(Circle())
+            .overlay {
+                Circle().stroke(HealthRiskTheme.line, lineWidth: 1)
+            }
+            .accessibilityLabel("Close health comparison")
+
+            VStack(alignment: .leading, spacing: 2) {
+                Label("Health Momentum", systemImage: "heart.text.square.fill")
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(HealthRiskTheme.text)
+                Text(healthComparisonSummary(game, players: players, historyDays: historyDays))
+                    .font(.caption)
+                    .foregroundStyle(HealthRiskTheme.muted)
+            }
+
+            Spacer()
+
+            if availableWidth >= 1_000 {
+                healthMomentumStat(
+                    value: "\(players.count)",
+                    label: players.count == 1 ? "player" : "players",
+                    systemImage: "person.2.fill"
+                )
+                healthMomentumStat(
+                    value: "\(healthComparisonGoals(game).count)",
+                    label: "shared goals",
+                    systemImage: "target"
+                )
+                healthMomentumStat(
+                    value: historyDays > 0 ? "\(historyDays)" : "Today",
+                    label: historyDays > 0 ? "days compared" : "first day",
+                    systemImage: "calendar"
+                )
+            } else {
+                Text("\(players.count) players · \(healthComparisonGoals(game).count) goals")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(HealthRiskTheme.muted)
+                    .lineLimit(1)
+            }
+
+            Button {
+                Task { await load() }
+            } label: {
+                if store.isLoading || store.isRefreshing {
+                    ProgressView()
+                        .tint(HealthRiskTheme.text)
+                        .frame(width: 42, height: 42)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.headline)
+                        .frame(width: 42, height: 42)
+                }
+            }
+            .buttonStyle(.plain)
+            .background(HealthRiskTheme.raisedPanel)
+            .clipShape(Circle())
+            .overlay {
+                Circle().stroke(HealthRiskTheme.line, lineWidth: 1)
+            }
+            .disabled(store.isLoading || store.isRefreshing || store.isPerformingAction)
+            .accessibilityLabel("Refresh health comparison")
+        }
+    }
+
+    private func healthMomentumStat(
+        value: String,
+        label: String,
+        systemImage: String
+    ) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(HealthRiskTheme.success)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(value)
+                    .font(.subheadline.monospacedDigit().bold())
+                Text(label)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(HealthRiskTheme.muted)
+            }
+        }
+        .padding(.horizontal, 11)
+        .frame(height: 42)
+        .background(HealthRiskTheme.panel)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(HealthRiskTheme.line, lineWidth: 1)
+        }
+    }
+
+    private func healthMomentumMatrix(
+        _ game: GameplayGame,
+        goals: [HealthGoalRule],
+        players: [GameplayPlayer],
+        availableWidth: CGFloat
+    ) -> some View {
+        let goalWidth: CGFloat = 210
+        let playerWidth = min(
+            178,
+            max(132, (availableWidth - goalWidth - 92) / CGFloat(max(players.count, 1)))
+        )
+
+        return ScrollView([.horizontal, .vertical]) {
+            LazyVStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .bottom, spacing: 8) {
+                    Text("SHARED GOAL")
+                        .font(.caption2.bold())
+                        .foregroundStyle(HealthRiskTheme.muted)
+                        .frame(width: goalWidth, alignment: .leading)
+                        .padding(.horizontal, 12)
+
+                    ForEach(players) { player in
+                        healthPlayerColumnHeader(player, game: game)
+                            .frame(width: playerWidth)
+                    }
+                }
+
+                ForEach(goals) { goal in
+                    HStack(spacing: 8) {
+                        healthGoalMatrixLabel(goal)
+                            .frame(width: goalWidth, height: 76, alignment: .leading)
+
+                        ForEach(players) { player in
+                            let progress = player.healthProgress?.goals?.first {
+                                $0.exerciseKey == goal.key
+                            }
+                            healthMomentumCell(
+                                progress,
+                                playerName: player.name,
+                                goalName: goal.label
+                            )
+                            .frame(width: playerWidth, height: 76)
+                        }
+                    }
+                }
+            }
+            .padding(12)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(HealthRiskTheme.panel.opacity(0.84))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(HealthRiskTheme.line, lineWidth: 1)
+        }
+        .scrollIndicators(.visible)
+    }
+
+    private func healthPlayerColumnHeader(
+        _ player: GameplayPlayer,
+        game: GameplayGame
+    ) -> some View {
+        VStack(spacing: 4) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(Color(hex: player.color) ?? HealthRiskTheme.muted)
+                    .frame(width: 10, height: 10)
+                Text(player.name)
+                    .font(.subheadline.weight(.bold))
+                    .lineLimit(1)
+                if game.mySeats.contains(player.id) {
+                    Text("YOU")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(HealthRiskTheme.accent)
+                }
+            }
+            Text(player.healthProgress?.consistencyPercent.map { "\($0)% overall" } ?? "Building history")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(HealthRiskTheme.muted)
+        }
+        .padding(.horizontal, 9)
+        .frame(height: 50)
+        .background(HealthRiskTheme.raisedPanel)
+        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .stroke(HealthRiskTheme.line, lineWidth: 1)
+        }
+    }
+
+    private func healthGoalMatrixLabel(_ goal: HealthGoalRule) -> some View {
+        HStack(spacing: 11) {
+            Image(systemName: healthGoalSymbol(goal.category))
+                .font(.headline)
+                .foregroundStyle(HealthRiskTheme.accent)
+                .frame(width: 38, height: 38)
+                .background(HealthRiskTheme.accent.opacity(0.14))
+                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(goal.label)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(2)
+                Text("Daily shared goal")
+                    .font(.caption2)
+                    .foregroundStyle(HealthRiskTheme.muted)
+            }
+        }
+        .padding(.horizontal, 12)
+        .background(HealthRiskTheme.background.opacity(0.52))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(HealthRiskTheme.line.opacity(0.8), lineWidth: 1)
+        }
+    }
+
+    private func healthMomentumCell(
+        _ progress: GameplaySharedHealthGoalProgress?,
+        playerName: String,
+        goalName: String
+    ) -> some View {
+        let percentage = progress?.consistencyPercent
+        let status = progress?.currentStatus ?? .notStarted
+
+        return ZStack {
+            VStack(spacing: 4) {
+                Text(percentage.map { "\($0)%" } ?? healthTodayStatusText(status))
+                    .font(percentage == nil ? .caption.weight(.bold) : .title3.monospacedDigit().bold())
+                    .foregroundStyle(percentage == nil ? healthTodayColor(status) : HealthRiskTheme.text)
+                if let progress, progress.trackedDays > 0 {
+                    Text("\(progress.completedDays) of \(progress.trackedDays) days completed")
+                        .font(.caption2)
+                        .foregroundStyle(HealthRiskTheme.muted)
+                } else {
+                    Text("No completed-day history yet")
+                        .font(.caption2)
+                        .foregroundStyle(HealthRiskTheme.muted)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            VStack {
+                HStack {
+                    Spacer()
+                    Image(systemName: healthTodaySymbol(status))
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(healthTodayColor(status))
+                        .padding(7)
+                }
+                Spacer()
+            }
+        }
+        .background(healthHeatColor(progress))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(healthTodayColor(status).opacity(0.38), lineWidth: 1)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(healthComparisonAccessibilityLabel(
+            progress,
+            playerName: playerName,
+            goalName: goalName
+        ))
+    }
+
+    private var healthHeatLegend: some View {
+        HStack(spacing: 7) {
+            Text("Consistency")
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(HealthRiskTheme.muted)
+            HStack(spacing: 2) {
+                ForEach([0, 25, 50, 75, 100], id: \.self) { percentage in
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(healthHeatColor(percentage))
+                        .frame(width: 22, height: 12)
+                }
+            }
+            Text("More complete")
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(HealthRiskTheme.muted)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Darker green cells mean greater consistency")
+    }
+
+    private func healthComparisonGoals(_ game: GameplayGame) -> [HealthGoalRule] {
+        game.exercises ?? []
+    }
+
+    private func healthComparisonPlayers(_ game: GameplayGame) -> [GameplayPlayer] {
+        let eligiblePlayers = game.players.filter {
+            $0.claimed && ($0.status == .active || $0.status == .autoPiloted)
+        }
+        let playersById = Dictionary(uniqueKeysWithValues: eligiblePlayers.map { ($0.id, $0) })
+        let turnOrdered = game.turnOrder.compactMap { playersById[$0] }
+        let orderedIds = Set(turnOrdered.map(\.id))
+        return turnOrdered + eligiblePlayers.filter { !orderedIds.contains($0.id) }
+    }
+
+    private func healthComparisonAvailable(_ game: GameplayGame) -> Bool {
+        let players = healthComparisonPlayers(game)
+        return !game.practice
+            && players.count > 1
+            && !healthComparisonGoals(game).isEmpty
+            && players.contains { $0.healthProgress?.goals != nil }
+    }
+
+    private func presentHealthMomentum() {
+        withAnimation(.easeInOut(duration: 0.22)) {
+            isShowingCommandPanel = false
+            isShowingHealthMomentum = true
+        }
+    }
+
+    private func healthComparisonSummary(
+        _ game: GameplayGame,
+        players: [GameplayPlayer],
+        historyDays: Int
+    ) -> String {
+        guard historyDays > 0 else {
+            return "See how everyone is progressing on today’s shared goals."
+        }
+        let percentages = players.compactMap { $0.healthProgress?.consistencyPercent }
+        let teamAverage = percentages.isEmpty ? nil : percentages.reduce(0, +) / percentages.count
+        let yours = players
+            .first { game.mySeats.contains($0.id) }?
+            .healthProgress?
+            .consistencyPercent
+        guard let yours, let teamAverage else {
+            return "Compare consistency across the game’s shared health goals."
+        }
+        return "Your consistency is \(yours)% compared with the team average of \(teamAverage)%."
+    }
+
+    private func healthTodayLegend(
+        _ label: String,
+        status: GameplaySharedHealthStatus
+    ) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: healthTodaySymbol(status))
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(healthTodayColor(status))
+            Text(label)
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(HealthRiskTheme.muted)
+        }
+    }
+
+    private func healthTodaySymbol(_ status: GameplaySharedHealthStatus) -> String {
+        switch status {
+        case .goalMet: "checkmark.circle.fill"
+        case .inProgress: "circle.lefthalf.filled"
+        case .notStarted: "circle"
+        }
+    }
+
+    private func healthTodayStatusText(_ status: GameplaySharedHealthStatus) -> String {
+        switch status {
+        case .goalMet: "Met today"
+        case .inProgress: "In progress"
+        case .notStarted: "Not started"
+        }
+    }
+
+    private func healthTodayColor(_ status: GameplaySharedHealthStatus) -> Color {
+        switch status {
+        case .goalMet: HealthRiskTheme.success
+        case .inProgress: HealthRiskTheme.accent
+        case .notStarted: HealthRiskTheme.muted
+        }
+    }
+
+    private func healthHeatColor(_ percentage: Int?) -> Color {
+        guard let percentage else { return HealthRiskTheme.raisedPanel.opacity(0.65) }
+        let intensity = 0.08 + (Double(max(0, min(100, percentage))) / 100 * 0.46)
+        return HealthRiskTheme.success.opacity(intensity)
+    }
+
+    private func healthHeatColor(_ progress: GameplaySharedHealthGoalProgress?) -> Color {
+        if let percentage = progress?.consistencyPercent {
+            return healthHeatColor(percentage)
+        }
+        switch progress?.currentStatus ?? .notStarted {
+        case .goalMet:
+            return HealthRiskTheme.success.opacity(0.34)
+        case .inProgress:
+            return HealthRiskTheme.accent.opacity(0.20)
+        case .notStarted:
+            return HealthRiskTheme.raisedPanel.opacity(0.65)
+        }
+    }
+
+    private func healthComparisonAccessibilityLabel(
+        _ progress: GameplaySharedHealthGoalProgress?,
+        playerName: String,
+        goalName: String
+    ) -> String {
+        let today: String
+        switch progress?.currentStatus ?? .notStarted {
+        case .goalMet: today = "met today"
+        case .inProgress: today = "in progress today"
+        case .notStarted: today = "not started today"
+        }
+        guard let progress, let percentage = progress.consistencyPercent else {
+            return "\(playerName), \(goalName), \(today), no completed-day history yet"
+        }
+        return "\(playerName), \(goalName), \(percentage) percent consistency over \(progress.trackedDays) completed days, \(today)"
     }
 
     private func reinforcementControls(_ game: GameplayGame) -> some View {
@@ -1468,102 +2083,90 @@ struct GameplayView: View {
         game.territories.first { $0.id == selectedSourceId }
     }
 
-    private func turnCompletionOverlay(_ completion: TurnCompletionPresentation) -> some View {
-        ZStack {
-            Color.black.opacity(0.68)
-                .ignoresSafeArea()
-
-            VStack(spacing: 12) {
-                HStack(spacing: 11) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 36))
-                        .foregroundStyle(HealthRiskTheme.success)
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Turn Complete")
-                            .font(.title2.bold())
-                        if let nextPlayerName = completion.nextPlayerName {
-                            Text("Waiting for \(nextPlayerName)")
-                                .font(.caption)
-                                .foregroundStyle(HealthRiskTheme.muted)
-                        }
-                    }
-
-                    Spacer()
+    @ViewBuilder
+    private var gameplayFeedback: some View {
+        if let result = store.lastAttackResult {
+            gameplayNotice(
+                icon: result.captured ? "flag.fill" : "shield.lefthalf.filled",
+                tint: result.captured ? HealthRiskTheme.success : HealthRiskTheme.accent,
+                title: battleResultTitle(result),
+                message: battleResultMessage(result),
+                onDismiss: { store.clearAttackResult() }
+            )
+            .task(id: "\(result.seed):\(result.fromId):\(result.toId)") {
+                do {
+                    try await Task.sleep(for: .seconds(5))
+                } catch {
+                    return
                 }
-
-                if let summary = completion.summary {
-                    HStack(spacing: 8) {
-                        turnStat("Placed", value: summary.reinforcementsPlaced)
-                        turnStat("Battles", value: summary.attacksMade)
-                        turnStat("Captured", value: summary.territoriesCaptured.count)
-                        turnStat("Losses", value: summary.attackerLosses)
-                    }
-                }
-
-                if let card = completion.cardAwarded {
-                    HStack(spacing: 14) {
-                        ConquestCardFace(
-                            card: card,
-                            territory: store.game?.territories.first { $0.id == card.territoryId }
-                        )
-                        .frame(width: 270, height: 112)
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            Label("Added to your hand", systemImage: "rectangle.stack.fill")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(HealthRiskTheme.success)
-
-                            Text("Collect three cards to trade for reinforcements.")
-                                .font(.caption)
-                                .foregroundStyle(HealthRiskTheme.muted)
-
-                            Button("Continue") {
-                                store.clearTurnCompletion()
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .tint(HealthRiskTheme.accent)
-                            .frame(maxWidth: .infinity)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                } else {
-                    HStack(spacing: 16) {
-                        Text("No conquest card was earned this turn.")
-                            .font(.caption)
-                            .foregroundStyle(HealthRiskTheme.muted)
-
-                        Spacer()
-
-                        Button("Continue") {
-                            store.clearTurnCompletion()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(HealthRiskTheme.accent)
-                    }
+                guard store.lastAttackResult == result else { return }
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    store.clearAttackResult()
                 }
             }
-            .padding(18)
-            .frame(maxWidth: 620)
-            .healthRiskSurface()
-            .padding(24)
         }
-        .transition(.opacity.combined(with: .scale(scale: 0.96)))
-        .zIndex(10)
+
+        if let card = store.lastAwardedCard {
+            gameplayNotice(
+                icon: "rectangle.stack.fill",
+                tint: HealthRiskTheme.success,
+                title: "Conquest card earned",
+                message: "\(pretty(card.territoryId)) was added to your hand.",
+                onDismiss: { store.clearAwardedCard() }
+            )
+            .task(id: card.id) {
+                do {
+                    try await Task.sleep(for: .seconds(5))
+                } catch {
+                    return
+                }
+                guard store.lastAwardedCard == card else { return }
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    store.clearAwardedCard()
+                }
+            }
+        }
     }
 
-    private func turnStat(_ label: String, value: Int) -> some View {
-        VStack(spacing: 3) {
-            Text("\(value)")
-                .font(.title3.monospacedDigit().bold())
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(HealthRiskTheme.muted)
+    private func gameplayNotice(
+        icon: String,
+        tint: Color,
+        title: String,
+        message: String,
+        onDismiss: @escaping () -> Void
+    ) -> some View {
+        HStack(spacing: 11) {
+            Image(systemName: icon)
+                .font(.headline)
+                .foregroundStyle(tint)
+                .frame(width: 34, height: 34)
+                .background(tint.opacity(0.14))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(HealthRiskTheme.muted)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 6)
+
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.bold))
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(HealthRiskTheme.muted)
+            .accessibilityLabel("Dismiss")
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 9)
-        .background(HealthRiskTheme.raisedPanel)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(11)
+        .frame(maxWidth: 540)
+        .healthRiskSurface()
+        .transition(.move(edge: .top).combined(with: .opacity))
     }
 
     private func gameCompletionOverlay(_ completion: GameCompletionPresentation) -> some View {
@@ -1697,6 +2300,14 @@ struct GameplayView: View {
         }
     }
 
+    private func requestEndTurn(in phase: TurnPhase) {
+        if phase == .attack {
+            isConfirmingEndTurn = true
+        } else if phase == .fortify {
+            Task { await performEndTurn() }
+        }
+    }
+
     private func performEndTurn() async {
         if await store.endTurn() {
             resetSelection()
@@ -1759,9 +2370,8 @@ struct GameplayView: View {
         limitsAttackLosses = false
     }
 
-    private var battleResultTitle: String {
-        guard let result = store.lastAttackResult else { return "Battle Resolved" }
-        return result.captured ? "Territory Captured" : "Attack Stopped"
+    private func battleResultTitle(_ result: AttackResult) -> String {
+        result.captured ? "Territory Captured" : "Attack Stopped"
     }
 
     private var parsedHealthUnits: Double? {
@@ -1770,24 +2380,6 @@ struct GameplayView: View {
             .replacingOccurrences(of: ",", with: ".")
         guard let value = Double(normalized), value.isFinite, value > 0 else { return nil }
         return value
-    }
-
-    private var exerciseLogMessage: String {
-        guard let result = store.lastExerciseLog else { return "" }
-        let goalName = store.game?.dashboard?.exercise?.progress
-            .first { $0.key == result.exerciseKey }?.label ?? "Health progress"
-
-        if result.deltaTroops > 0 {
-            let troopLabel = result.deltaTroops == 1 ? "troop" : "troops"
-            let capNote = result.totalCapApplied ? " Daily reward limits were applied." : ""
-            return "\(goalName) was saved. +\(result.deltaTroops) reinforcement \(troopLabel) was banked; today’s health total is \(result.dayTotal).\(capNote)"
-        }
-
-        if result.totalCapApplied {
-            return "\(goalName) was saved, but today’s reward limits prevented another troop from being added."
-        }
-
-        return "\(goalName) was saved. It did not add a whole troop yet, but fractional progress continues accumulating toward the next troop."
     }
 
     private func healthLoggingMessage(
@@ -1867,8 +2459,7 @@ struct GameplayView: View {
         return "\(unit)s"
     }
 
-    private var battleResultMessage: String {
-        guard let result = store.lastAttackResult else { return "" }
+    private func battleResultMessage(_ result: AttackResult) -> String {
         let exchangeLabel = result.rounds.count == 1 ? "exchange" : "exchanges"
         let lossSummary = "\(result.rounds.count) \(exchangeLabel). You lost \(result.totalAttackerLosses); the defender lost \(result.totalDefenderLosses)."
 
@@ -1909,122 +2500,6 @@ struct GameplayView: View {
             return nil
         }
         return date.formatted(date: .abbreviated, time: .shortened)
-    }
-
-    private func pretty(_ id: String) -> String {
-        id.split(separator: "_")
-            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
-            .joined(separator: " ")
-    }
-}
-
-private struct ConquestCardFace: View {
-    let card: TerritoryCard
-    let territory: GameplayTerritory?
-
-    var body: some View {
-        GeometryReader { proxy in
-            let size = proxy.size
-
-            ZStack {
-                LinearGradient(
-                    colors: [Color(red: 0.15, green: 0.21, blue: 0.29), HealthRiskTheme.background],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-
-                RadialGradient(
-                    colors: [continentColor.opacity(0.4), .clear],
-                    center: .topTrailing,
-                    startRadius: 2,
-                    endRadius: size.width * 0.72
-                )
-
-                Image("WorldMap")
-                    .resizable()
-                    .interpolation(.high)
-                    .frame(width: size.width, height: size.height)
-                    .opacity(0.84)
-                    .accessibilityHidden(true)
-
-                if let point = TerritoryBoardView.webCoordinates[card.territoryId] {
-                    let marker = CGPoint(
-                        x: (point.x / TerritoryBoardView.mapSize.width) * size.width,
-                        y: (point.y / TerritoryBoardView.mapSize.height) * size.height
-                    )
-                    Circle()
-                        .fill(continentColor.opacity(0.3))
-                        .frame(width: 24, height: 24)
-                        .overlay {
-                            Circle()
-                                .stroke(.white.opacity(0.9), lineWidth: 1.5)
-                        }
-                        .position(marker)
-                    Circle()
-                        .fill(.white)
-                        .frame(width: 8, height: 8)
-                        .overlay {
-                            Circle()
-                                .stroke(continentColor, lineWidth: 2)
-                        }
-                        .position(marker)
-                }
-
-                LinearGradient(
-                    colors: [.clear, Color.black.opacity(0.86)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack {
-                        Text("CONQUEST CARD")
-                            .font(.system(size: 8, weight: .black, design: .rounded))
-                            .tracking(1.2)
-                            .foregroundStyle(continentColor)
-                        Spacer()
-                        Text("DAY \(card.earnedDay)")
-                            .font(.system(size: 8, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.72))
-                    }
-
-                    Spacer()
-
-                    Text(pretty(card.territoryId))
-                        .font(.headline.bold())
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                    Text(continentName)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(continentColor)
-                }
-                .padding(10)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .stroke(continentColor.opacity(0.85), lineWidth: 1.2)
-            }
-            .shadow(color: continentColor.opacity(0.22), radius: 9, y: 4)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(pretty(card.territoryId)) conquest card, earned day \(card.earnedDay)")
-    }
-
-    private var continentName: String {
-        pretty(territory?.continent ?? "territory")
-    }
-
-    private var continentColor: Color {
-        switch territory?.continent {
-        case "north_america": Color(red: 0.35, green: 0.61, blue: 0.84)
-        case "south_america": Color(red: 0.33, green: 0.71, blue: 0.56)
-        case "europe": Color(red: 0.60, green: 0.51, blue: 0.83)
-        case "africa": Color(red: 0.83, green: 0.60, blue: 0.32)
-        case "asia": Color(red: 0.82, green: 0.44, blue: 0.51)
-        case "australia": Color(red: 0.33, green: 0.67, blue: 0.66)
-        default: HealthRiskTheme.accent
-        }
     }
 
     private func pretty(_ id: String) -> String {

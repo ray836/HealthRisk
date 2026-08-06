@@ -178,7 +178,7 @@ struct HealthRulesUpdateRequest: Codable, Equatable, Sendable {
 }
 
 struct LobbyHealthChoicesRequest: Codable, Equatable, Sendable {
-    let revision: Int
+    let healthRulesVersion: Int
     let exerciseKeys: [String]
 }
 
@@ -215,6 +215,33 @@ struct GameSchedule: Codable, Equatable, Sendable {
     let missedTurnPolicy: String
 }
 
+enum GameplaySharedHealthStatus: String, Codable, Sendable {
+    case notStarted = "not_started"
+    case inProgress = "in_progress"
+    case goalMet = "goal_met"
+}
+
+struct GameplaySharedHealthGoalProgress: Codable, Equatable, Sendable {
+    let exerciseKey: String
+    let currentStatus: GameplaySharedHealthStatus
+    let completedDays: Int
+    let trackedDays: Int
+    let consistencyPercent: Int?
+}
+
+struct GameplaySharedHealthProgress: Codable, Equatable, Sendable {
+    let playerId: String
+    let troopsEarned: Double
+    let dailyCap: Double
+    let percent: Int
+    let goalsCompleted: Int
+    let goalsTracked: Int
+    let status: GameplaySharedHealthStatus
+    let historyWindowDays: Int?
+    let consistencyPercent: Int?
+    let goals: [GameplaySharedHealthGoalProgress]?
+}
+
 struct GameplayPlayer: Codable, Identifiable, Equatable, Sendable {
     let id: String
     let name: String
@@ -224,6 +251,7 @@ struct GameplayPlayer: Codable, Identifiable, Equatable, Sendable {
     let pendingEliminationReward: Int
     let note: String
     let claimed: Bool
+    let healthProgress: GameplaySharedHealthProgress?
 }
 
 struct GameplayContinent: Codable, Identifiable, Equatable, Sendable {

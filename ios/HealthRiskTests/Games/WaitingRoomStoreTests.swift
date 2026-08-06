@@ -3,9 +3,68 @@ import XCTest
 
 @MainActor
 final class WaitingRoomStoreTests: XCTestCase {
-    func testLoadsGoalsAndSubmitsSelectedChoicesWithLatestRevision() async {
-        let initial = lobbyGame(revision: 4)
-        let submitted = lobbyGame(revision: 5, selections: ["running"], hasSubmitted: true)
+    func testSynchronizationDetectsWhenAnotherPlayerStartsTheGame() async {
+        let waiting = lobbyGame(revision: 7)
+        let active = lobbyGame(revision: 8, status: .active)
+        let api = MockHealthRiskAPI(
+            gameResults: [.success(waiting), .success(active)]
+        )
+        let store = WaitingRoomStore(
+            gameId: waiting.id,
+            api: api,
+            syncSleeper: OneRefreshWaitingRoomSyncSleeper()
+        )
+
+        await store.synchronize()
+
+        let callCount = await api.recordedGetGameCallCount()
+        XCTAssertEqual(store.game, active)
+        XCTAssertEqual(callCount, 2)
+    }
+
+    func testRefreshPreservesUnsubmittedChoicesWhenOnlyGameRevisionChanges() async {
+        let initial = lobbyGame(revision: 4, healthRulesVersion: 2)
+        let refreshed = lobbyGame(revision: 5, healthRulesVersion: 2, playerCount: 2)
+        let api = MockHealthRiskAPI(gameResults: [.success(initial), .success(refreshed)])
+        let store = WaitingRoomStore(gameId: initial.id, api: api)
+
+        await store.load()
+        store.toggleGoal("running")
+        await store.load()
+
+        XCTAssertEqual(store.game?.revision, 5)
+        XCTAssertEqual(store.selectedGoalKeys, ["running"])
+        XCTAssertTrue(store.choicesHaveChanges)
+    }
+
+    func testRefreshResetsUnsubmittedChoicesWhenHealthRulesChange() async {
+        let initial = lobbyGame(revision: 4, healthRulesVersion: 2)
+        let refreshed = lobbyGame(
+            revision: 5,
+            healthRulesVersion: 3,
+            goalLabel: "Walking"
+        )
+        let api = MockHealthRiskAPI(gameResults: [.success(initial), .success(refreshed)])
+        let store = WaitingRoomStore(gameId: initial.id, api: api)
+
+        await store.load()
+        store.toggleGoal("running")
+        await store.load()
+
+        XCTAssertEqual(store.game?.healthRulesVersion, 3)
+        XCTAssertEqual(store.game?.exercises.first?.label, "Walking")
+        XCTAssertTrue(store.selectedGoalKeys.isEmpty)
+        XCTAssertFalse(store.choicesHaveChanges)
+    }
+
+    func testLoadsGoalsAndSubmitsSelectedChoicesWithReviewedRulesVersion() async {
+        let initial = lobbyGame(revision: 4, healthRulesVersion: 2)
+        let submitted = lobbyGame(
+            revision: 5,
+            healthRulesVersion: 2,
+            selections: ["running"],
+            hasSubmitted: true
+        )
         let api = MockHealthRiskAPI(
             gameResult: .success(initial),
             choicesResult: .success(LobbyGameMutationResponse(game: submitted))
@@ -26,7 +85,10 @@ final class WaitingRoomStoreTests: XCTestCase {
             [
                 MockHealthRiskAPI.RecordedChoicesSubmission(
                     gameId: "game-lobby",
-                    request: LobbyHealthChoicesRequest(revision: 4, exerciseKeys: ["running"])
+                    request: LobbyHealthChoicesRequest(
+                        healthRulesVersion: 2,
+                        exerciseKeys: ["running"]
+                    )
                 ),
             ]
         )
@@ -206,6 +268,8 @@ final class WaitingRoomStoreTests: XCTestCase {
 
     private func lobbyGame(
         revision: Int,
+        status: GameStatus = .setup,
+        healthRulesVersion: Int? = nil,
         goalLabel: String = "Running",
         selections: [String] = [],
         hasSubmitted: Bool = false,
@@ -223,7 +287,7 @@ final class WaitingRoomStoreTests: XCTestCase {
         return LobbyGameView(
             id: "game-lobby",
             revision: revision,
-            status: .setup,
+            status: status,
             practice: false,
             isCreator: true,
             claimedPlayerCount: playerCount,
@@ -242,7 +306,7 @@ final class WaitingRoomStoreTests: XCTestCase {
             ],
             categoryTroopCaps: ["movement": 5],
             healthRuleGovernance: .creator,
-            healthRulesVersion: revision,
+            healthRulesVersion: healthRulesVersion ?? revision,
             dailyTotalTroopCap: 10,
             lobbyHealthVoting: LobbyHealthVoting(
                 enabled: true,
@@ -256,5 +320,16 @@ final class WaitingRoomStoreTests: XCTestCase {
                 mySelections: selections
             )
         )
+    }
+}
+
+private actor OneRefreshWaitingRoomSyncSleeper: WaitingRoomSyncSleeping {
+    private var hasRefreshed = false
+
+    func sleep() async throws {
+        if hasRefreshed {
+            throw CancellationError()
+        }
+        hasRefreshed = true
     }
 }

@@ -89,7 +89,7 @@ final class GameplayStoreTests: XCTestCase {
         )
     }
 
-    func testCardTradeUsesCurrentRevisionAndPublishesAward() async {
+    func testCardTradeUsesCurrentRevisionAndAppliesServerResponse() async {
         let dashboard = gameplayDashboard(cardCount: 3, canTrade: true)
         let initial = gameplayGame(
             revision: 9,
@@ -123,10 +123,6 @@ final class GameplayStoreTests: XCTestCase {
         XCTAssertTrue(succeeded)
         XCTAssertEqual(store.game, updated)
         XCTAssertEqual(
-            store.lastCardTrade,
-            CardTradePresentation(remainingCards: 0, troopsAwarded: 3)
-        )
-        XCTAssertEqual(
             trades,
             [
                 MockHealthRiskAPI.RecordedCardTrade(
@@ -137,7 +133,7 @@ final class GameplayStoreTests: XCTestCase {
         )
     }
 
-    func testFinishedTurnPublishesSummaryCardAndNextPlayer() async {
+    func testFinishedTurnPublishesAwardedCard() async {
         let summary = GameplayTurnSummary(
             reinforcementsPlaced: 5,
             placementsMade: 2,
@@ -176,14 +172,7 @@ final class GameplayStoreTests: XCTestCase {
         let endedTurns = await api.recordedEndedTurns()
 
         XCTAssertTrue(succeeded)
-        XCTAssertEqual(
-            store.lastTurnCompletion,
-            TurnCompletionPresentation(
-                summary: summary,
-                cardAwarded: awarded,
-                nextPlayerName: "Tess"
-            )
-        )
+        XCTAssertEqual(store.lastAwardedCard, awarded)
         XCTAssertEqual(
             endedTurns,
             [
@@ -398,6 +387,36 @@ final class GameplayStoreTests: XCTestCase {
         )
     }
 
+    func testActionModeFollowsTurnSequenceWithoutOverridingMidAttackChoice() {
+        XCTAssertEqual(
+            GameplayActionMode.synchronized(
+                current: .fortify,
+                previousPhase: .reinforce,
+                phase: .attack,
+                playerChanged: false
+            ),
+            .attack
+        )
+        XCTAssertEqual(
+            GameplayActionMode.synchronized(
+                current: .fortify,
+                previousPhase: .attack,
+                phase: .attack,
+                playerChanged: false
+            ),
+            .fortify
+        )
+        XCTAssertEqual(
+            GameplayActionMode.synchronized(
+                current: .fortify,
+                previousPhase: .attack,
+                phase: .attack,
+                playerChanged: true
+            ),
+            .attack
+        )
+    }
+
     func testSelectionGuideHighlightsOnlyOwnedReinforcementTargets() {
         let game = gameplayGame(revision: 1, phase: .reinforce, reinforcements: 5)
 
@@ -501,7 +520,8 @@ final class GameplayStoreTests: XCTestCase {
                     pendingReinforcements: reinforcements,
                     pendingEliminationReward: 0,
                     note: "",
-                    claimed: true
+                    claimed: true,
+                    healthProgress: nil
                 ),
                 GameplayPlayer(
                     id: "p2",
@@ -511,7 +531,8 @@ final class GameplayStoreTests: XCTestCase {
                     pendingReinforcements: 0,
                     pendingEliminationReward: 0,
                     note: "",
-                    claimed: true
+                    claimed: true,
+                    healthProgress: nil
                 ),
             ],
             continents: [GameplayContinent(id: "north_america", label: "North America", bonus: 5)],

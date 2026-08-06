@@ -61,6 +61,53 @@
           "username": { "type": "string" }
         }
       },
+      "SharedHealthGoalProgress": {
+        "type": "object",
+        "required": ["exerciseKey", "currentStatus", "completedDays", "trackedDays", "consistencyPercent"],
+        "properties": {
+          "exerciseKey": { "type": "string" },
+          "currentStatus": { "enum": ["not_started", "in_progress", "goal_met"] },
+          "completedDays": { "type": "integer", "minimum": 0 },
+          "trackedDays": { "type": "integer", "minimum": 0, "maximum": 7 },
+          "consistencyPercent": { "type": ["integer", "null"], "minimum": 0, "maximum": 100 }
+        }
+      },
+      "SharedHealthProgress": {
+        "type": "object",
+        "required": ["playerId", "troopsEarned", "dailyCap", "percent", "goalsCompleted", "goalsTracked", "status", "historyWindowDays", "consistencyPercent", "goals"],
+        "properties": {
+          "playerId": { "type": "string" },
+          "troopsEarned": { "type": "number", "minimum": 0 },
+          "dailyCap": { "type": "number", "minimum": 0 },
+          "percent": { "type": "integer", "minimum": 0, "maximum": 100 },
+          "goalsCompleted": { "type": "integer", "minimum": 0 },
+          "goalsTracked": { "type": "integer", "minimum": 0 },
+          "status": { "enum": ["not_started", "in_progress", "goal_met"] },
+          "historyWindowDays": { "type": "integer", "minimum": 0, "maximum": 7 },
+          "consistencyPercent": { "type": ["integer", "null"], "minimum": 0, "maximum": 100 },
+          "goals": { "type": "array", "items": { "$ref": "#/components/schemas/SharedHealthGoalProgress" } }
+        }
+      },
+      "GameplayPlayer": {
+        "type": "object",
+        "required": ["id", "name", "status", "pendingReinforcements", "pendingEliminationReward", "note", "claimed", "healthProgress"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "status": { "enum": ["active", "auto_piloted", "forfeited", "eliminated"] },
+          "color": { "type": ["string", "null"] },
+          "pendingReinforcements": { "type": "integer", "minimum": 0 },
+          "pendingEliminationReward": { "type": "integer", "minimum": 0 },
+          "note": { "type": "string" },
+          "claimed": { "type": "boolean" },
+          "healthProgress": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/SharedHealthProgress" },
+              { "type": "null" }
+            ]
+          }
+        }
+      },
       "GameView": {
         "type": "object",
         "required": ["id", "revision", "status", "players", "territories", "chatMessages"],
@@ -81,7 +128,7 @@
           },
           "healthLogging": { "type": "object", "additionalProperties": true },
           "exercises": { "type": "array", "items": { "$ref": "#/components/schemas/ExerciseRule" } },
-          "players": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "players": { "type": "array", "items": { "$ref": "#/components/schemas/GameplayPlayer" } },
           "territories": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
           "chatMessages": { "type": "array", "items": { "$ref": "#/components/schemas/ChatMessage" } },
           "schedule": { "type": "object", "additionalProperties": true }
@@ -421,7 +468,7 @@
     "/api/games/{gameId}/lobby-health-votes": {
       "post": {
         "parameters": [{ "name": "gameId", "in": "path", "required": true, "schema": { "type": "string" } }, { "$ref": "#/components/parameters/IdempotencyKey" }],
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "allOf": [{ "$ref": "#/components/schemas/RevisionBody" }, { "type": "object", "required": ["exerciseKeys"], "properties": { "exerciseKeys": { "type": "array", "items": { "type": "string" } } } }] } } } },
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["healthRulesVersion", "exerciseKeys"], "properties": { "healthRulesVersion": { "type": "integer", "minimum": 1 }, "exerciseKeys": { "type": "array", "items": { "type": "string" } } } } } } },
         "responses": { "200": { "description": "Lobby health choices saved", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GameMutationResponse" } } } } }
       }
     },

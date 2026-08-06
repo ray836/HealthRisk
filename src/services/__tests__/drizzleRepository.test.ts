@@ -75,6 +75,14 @@ describe('DrizzleGameRepository (PGlite in-memory)', () => {
     // upsert overwrites
     await repo.saveExerciseLog('g1', 1, 'a', [...entries, { exerciseKey: 'running', units: 1 }]);
     expect(await repo.loadExerciseLog('g1', 1, 'a')).toHaveLength(2);
+    await repo.saveExerciseLog('g1', 2, 'b', [{ exerciseKey: 'running', units: 2 }]);
+    await repo.saveExerciseLog('g1', 4, 'a', [{ exerciseKey: 'running', units: 4 }]);
+
+    expect(await repo.listExerciseLogs('g1', 1, 2)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ gameId: 'g1', dayNumber: 1, playerId: 'a' }),
+      expect.objectContaining({ gameId: 'g1', dayNumber: 2, playerId: 'b' }),
+    ]));
+    expect(await repo.listExerciseLogs('g1', 1, 2)).toHaveLength(2);
   });
 
   it('persists across a new repository instance on the same db', async () => {

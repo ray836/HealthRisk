@@ -1,6 +1,22 @@
 import Combine
 import Foundation
 
+protocol WaitingRoomSyncSleeping: Sendable {
+    func sleep() async throws
+}
+
+struct WaitingRoomSyncSleeper: WaitingRoomSyncSleeping {
+    let interval: Duration
+
+    init(interval: Duration = .seconds(5)) {
+        self.interval = interval
+    }
+
+    func sleep() async throws {
+        try await Task.sleep(for: interval)
+    }
+}
+
 @MainActor
 final class WaitingRoomStore: ObservableObject {
     @Published private(set) var game: LobbyGameView?
@@ -18,10 +34,16 @@ final class WaitingRoomStore: ObservableObject {
 
     let gameId: String
     private let api: any HealthRiskAPI
+    private let syncSleeper: any WaitingRoomSyncSleeping
 
-    init(gameId: String, api: any HealthRiskAPI) {
+    init(
+        gameId: String,
+        api: any HealthRiskAPI,
+        syncSleeper: any WaitingRoomSyncSleeping = WaitingRoomSyncSleeper()
+    ) {
         self.gameId = gameId
         self.api = api
+        self.syncSleeper = syncSleeper
     }
 
     var choicesHaveChanges: Bool {
@@ -39,6 +61,23 @@ final class WaitingRoomStore: ObservableObject {
             apply(try await api.getGame(gameId))
         } catch {
             self.error = APIError.normalized(error)
+        }
+    }
+
+    /// Keep the lobby current until it starts. The view-owned task cancels
+    /// this loop automatically when the waiting room leaves the foreground.
+    func synchronize() async {
+        await load()
+        while !Task.isCancelled {
+            if let status = game?.status, status != .setup { return }
+            if error?.isUnauthorized == true { return }
+            do {
+                try await syncSleeper.sleep()
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            await load()
         }
     }
 
@@ -133,7 +172,7 @@ final class WaitingRoomStore: ObservableObject {
         defer { isSubmittingChoices = false }
 
         let request = LobbyHealthChoicesRequest(
-            revision: game.revision,
+            healthRulesVersion: game.healthRulesVersion,
             exerciseKeys: selectedGoalKeys.sorted()
         )
         do {
@@ -141,7 +180,7 @@ final class WaitingRoomStore: ObservableObject {
             return true
         } catch {
             let normalized = APIError.normalized(error)
-            if normalized.code == "stale_game" {
+            if normalized.code == "stale_health_rules" {
                 await load()
             }
             choicesError = normalized
@@ -170,8 +209,14 @@ final class WaitingRoomStore: ObservableObject {
     }
 
     private func apply(_ game: LobbyGameView) {
+        let shouldPreserveDraft = self.game.map {
+            selectedGoalKeys != Set($0.lobbyHealthVoting.mySelections) &&
+                $0.healthRulesVersion == game.healthRulesVersion
+        } ?? false
         self.game = game
-        selectedGoalKeys = Set(game.lobbyHealthVoting.mySelections)
+        if !shouldPreserveDraft {
+            selectedGoalKeys = Set(game.lobbyHealthVoting.mySelections)
+        }
         error = nil
         startError = nil
         exitError = nil

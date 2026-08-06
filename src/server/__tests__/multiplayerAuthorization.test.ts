@@ -16,7 +16,22 @@ interface GameView {
   mySeats: string[];
   perPlayerWindowMinutes: number;
   nextSessionOpensAt: string | null;
-  players: Array<{ id: string; name: string; status: string }>;
+  players: Array<{
+    id: string;
+    name: string;
+    status: string;
+    healthProgress: null | {
+      historyWindowDays: number;
+      consistencyPercent: number | null;
+      goals: Array<{
+        exerciseKey: string;
+        currentStatus: 'not_started' | 'in_progress' | 'goal_met';
+        completedDays: number;
+        trackedDays: number;
+        consistencyPercent: number | null;
+      }>;
+    };
+  }>;
   territories: Array<{ id: string; owner: string | null; armies: number }>;
   exercises: Array<{
     key: string;
@@ -29,6 +44,7 @@ interface GameView {
   }>;
   categoryTroopCaps: Record<string, number>;
   dailyTotalTroopCap: number;
+  healthRulesVersion: number;
   pendingHealthRuleProposal?: unknown;
   claimedPlayerCount: number;
   lobbyCapacity: number;
@@ -164,26 +180,48 @@ describe('multiplayer route authorization', () => {
       const latest = await request<GameView>(`/api/games/${gameId}`, {
         token: owner.body.token,
       });
-      const ownerVote = await request<GameResult>(`/api/games/${gameId}/lobby-health-votes`, {
-        method: 'POST',
+      const choices = latest.body.exercises.map((exercise) => exercise.key);
+      const mismatchedRules = await request<{ error: string }>(
+        `/api/games/${gameId}/lobby-health-votes`,
+        {
+          method: 'POST',
+          token: owner.body.token,
+          body: {
+            healthRulesVersion: latest.body.healthRulesVersion + 1,
+            exerciseKeys: choices,
+          },
+        },
+      );
+      expect(mismatchedRules.response.status).toBe(409);
+      expect(mismatchedRules.body.error).toBe('stale_health_rules');
+      const [ownerVote, guestVote] = await Promise.all([
+        request<GameResult>(`/api/games/${gameId}/lobby-health-votes`, {
+          method: 'POST',
+          token: owner.body.token,
+          body: {
+            healthRulesVersion: latest.body.healthRulesVersion,
+            exerciseKeys: choices,
+          },
+        }),
+        request<GameResult>(`/api/games/${gameId}/lobby-health-votes`, {
+          method: 'POST',
+          token: guest.body.token,
+          body: {
+            healthRulesVersion: latest.body.healthRulesVersion,
+            exerciseKeys: choices,
+          },
+        }),
+      ]);
+      expect(ownerVote.response.status).toBe(200);
+      expect(guestVote.response.status).toBe(200);
+      const ready = await request<GameView>(`/api/games/${gameId}`, {
         token: owner.body.token,
-        body: {
-          revision: latest.body.revision,
-          exerciseKeys: latest.body.exercises.map((exercise) => exercise.key),
-        },
       });
-      const guestVote = await request<GameResult>(`/api/games/${gameId}/lobby-health-votes`, {
-        method: 'POST',
-        token: guest.body.token,
-        body: {
-          revision: ownerVote.body.game.revision,
-          exerciseKeys: ownerVote.body.game.exercises.map((exercise) => exercise.key),
-        },
-      });
+      expect(ready.body.lobbyHealthVoting.submissionCount).toBe(2);
       const started = await request<GameResult>(`/api/games/${gameId}/start`, {
         method: 'POST',
         token: owner.body.token,
-        body: { revision: guestVote.body.game.revision },
+        body: { revision: ready.body.revision },
       });
       expect(started.response.status).toBe(200);
       expect(started.body.game.status).toBe('active');
@@ -349,7 +387,7 @@ describe('multiplayer route authorization', () => {
       method: 'POST',
       token: creator.body.token,
       body: {
-        revision: latest.body.revision,
+        healthRulesVersion: latest.body.healthRulesVersion,
         exerciseKeys: latest.body.exercises.map((exercise) => exercise.key),
       },
     });
@@ -357,7 +395,7 @@ describe('multiplayer route authorization', () => {
       method: 'POST',
       token: other.body.token,
       body: {
-        revision: creatorVote.body.game.revision,
+        healthRulesVersion: creatorVote.body.game.healthRulesVersion,
         exerciseKeys: creatorVote.body.game.exercises.map((exercise) => exercise.key),
       },
     });
@@ -392,6 +430,20 @@ describe('multiplayer route authorization', () => {
     expect(loggedBetweenTurns.body.game.healthLogging).toMatchObject({
       allowed: true,
       appliesTo: 'upcoming_move',
+    });
+    const loggingSeat = [...tokensBySeat].find(([, token]) => token === wrongToken)?.[0];
+    const sharedProgress = loggedBetweenTurns.body.game.players
+      .find((player) => player.id === loggingSeat)
+      ?.healthProgress;
+    expect(sharedProgress).toMatchObject({
+      historyWindowDays: 0,
+      consistencyPercent: null,
+    });
+    expect(sharedProgress?.goals.find((goal) => goal.exerciseKey === 'running')).toMatchObject({
+      currentStatus: 'in_progress',
+      completedDays: 0,
+      trackedDays: 0,
+      consistencyPercent: null,
     });
     game = loggedBetweenTurns.body.game;
 
@@ -550,7 +602,7 @@ describe('multiplayer route authorization', () => {
       method: 'POST',
       token: creator.body.token,
       body: {
-        revision: latest.body.revision,
+        healthRulesVersion: latest.body.healthRulesVersion,
         exerciseKeys: latest.body.exercises.map((exercise) => exercise.key),
       },
     });
@@ -558,7 +610,7 @@ describe('multiplayer route authorization', () => {
       method: 'POST',
       token: other.body.token,
       body: {
-        revision: creatorVote.body.game.revision,
+        healthRulesVersion: creatorVote.body.game.healthRulesVersion,
         exerciseKeys: creatorVote.body.game.exercises.map((exercise) => exercise.key),
       },
     });

@@ -675,6 +675,7 @@ function apiStatus(code: string): number {
   if (
     code === 'not_your_turn' ||
     code === 'stale_game' ||
+    code === 'stale_health_rules' ||
     code === 'game_started' ||
     code === 'idempotency_conflict' ||
     code === 'idempotency_in_progress'
@@ -1173,13 +1174,36 @@ app.post(
     if (!Array.isArray(req.body?.exerciseKeys)) {
       throw new TurnError('bad_health_vote', 'Submit a list of selected health goals');
     }
+    const hasHealthRulesVersion = req.body?.healthRulesVersion !== undefined;
+    const healthRulesVersion = Number(req.body?.healthRulesVersion);
+    const legacyRevision = Number(req.body?.revision);
+    if (
+      (hasHealthRulesVersion && (!Number.isInteger(healthRulesVersion) || healthRulesVersion < 1)) ||
+      (!hasHealthRulesVersion && !Number.isInteger(legacyRevision))
+    ) {
+      throw new TurnError('bad_health_vote', 'Submit the health-goal rules version you reviewed');
+    }
     const exerciseKeys = req.body.exerciseKeys.map((value: unknown) => String(value));
     await respondIdempotently(req, res, `game:${id}:lobby-health-votes`, async () => {
       await mutateGame(req, id, async () => {
+        const game = await repo.loadGame(id);
+        if (!game) throw new TurnError('no_game', 'Unknown game');
+        if (hasHealthRulesVersion && (game.healthRulesVersion ?? 1) !== healthRulesVersion) {
+          throw new TurnError(
+            'stale_health_rules',
+            'The health goals changed. Review the latest goals and submit your choices again.',
+          );
+        }
+        if (!hasHealthRulesVersion && (game.revision ?? 0) !== legacyRevision) {
+          throw new TurnError(
+            'stale_game',
+            'This game changed in another browser. The latest state has been loaded; please try again.',
+          );
+        }
         for (const playerId of mySeats) {
           await submitLobbyHealthVotes(repo, id, playerId, exerciseKeys);
         }
-      });
+      }, false);
       return { status: 200, body: { game: await gameView(id, user.id) } };
     });
   }),

@@ -140,6 +140,13 @@ export interface ChatReport {
   createdAt: string;
 }
 
+export interface ExerciseLogSnapshot {
+  gameId: string;
+  dayNumber: number;
+  playerId: string;
+  entries: ExerciseLogEntry[];
+}
+
 export interface GameRepository {
   /**
    * Run one logical game operation exclusively. Every read-modify-write flow
@@ -159,6 +166,12 @@ export interface GameRepository {
   saveTurnState(state: TurnState): Promise<void>;
   /** A player's accumulated exercise logs for one day (for cap accounting). */
   loadExerciseLog(gameId: string, dayNumber: number, playerId: string): Promise<ExerciseLogEntry[]>;
+  /** All player logs in one bounded day range, used for privacy-safe shared trends. */
+  listExerciseLogs(
+    gameId: string,
+    fromDayNumber: number,
+    throughDayNumber: number,
+  ): Promise<ExerciseLogSnapshot[]>;
   saveExerciseLog(gameId: string, dayNumber: number, playerId: string, entries: ExerciseLogEntry[]): Promise<void>;
 
   // --- Auth & membership ---
@@ -308,6 +321,31 @@ export class InMemoryGameRepository implements GameRepository {
 
   async loadExerciseLog(gameId: string, dayNumber: number, playerId: string): Promise<ExerciseLogEntry[]> {
     return clone(this.exercise.get(this.turnKey(gameId, dayNumber, playerId)) ?? []);
+  }
+
+  async listExerciseLogs(
+    gameId: string,
+    fromDayNumber: number,
+    throughDayNumber: number,
+  ): Promise<ExerciseLogSnapshot[]> {
+    const prefix = `${gameId}:`;
+    const snapshots: ExerciseLogSnapshot[] = [];
+    for (const [key, entries] of this.exercise) {
+      if (!key.startsWith(prefix)) continue;
+      const dayAndPlayer = key.slice(prefix.length);
+      const separator = dayAndPlayer.indexOf(':');
+      const dayNumber = Number(dayAndPlayer.slice(0, separator));
+      if (separator < 0 || dayNumber < fromDayNumber || dayNumber > throughDayNumber) continue;
+      snapshots.push({
+        gameId,
+        dayNumber,
+        playerId: dayAndPlayer.slice(separator + 1),
+        entries: clone(entries),
+      });
+    }
+    return snapshots.sort(
+      (left, right) => left.dayNumber - right.dayNumber || left.playerId.localeCompare(right.playerId),
+    );
   }
 
   async saveExerciseLog(

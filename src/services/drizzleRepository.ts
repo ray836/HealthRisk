@@ -6,7 +6,7 @@
  * The engine's load→run→save value semantics map directly onto upserts here.
  */
 
-import { and, desc, eq, gte, or } from 'drizzle-orm';
+import { and, desc, eq, gte, lte, or } from 'drizzle-orm';
 import type { AppDatabase } from '../../db/client.js';
 import {
   authTokens,
@@ -28,6 +28,7 @@ import type {
   ChatReport,
   ChatMessage,
   DeviceRegistration,
+  ExerciseLogSnapshot,
   GameRepository,
   IdempotencyRecord,
   Member,
@@ -149,6 +150,29 @@ export class DrizzleGameRepository implements GameRepository {
         and(eq(exerciseLogs.gameId, gameId), eq(exerciseLogs.dayNumber, dayNumber), eq(exerciseLogs.playerId, playerId)),
       );
     return rows.length ? (rows[0].entries as ExerciseLogEntry[]) : [];
+  }
+
+  async listExerciseLogs(
+    gameId: string,
+    fromDayNumber: number,
+    throughDayNumber: number,
+  ): Promise<ExerciseLogSnapshot[]> {
+    const rows = await this.db
+      .select()
+      .from(exerciseLogs)
+      .where(
+        and(
+          eq(exerciseLogs.gameId, gameId),
+          gte(exerciseLogs.dayNumber, fromDayNumber),
+          lte(exerciseLogs.dayNumber, throughDayNumber),
+        ),
+      );
+    return rows.map((row: ExerciseLogSnapshot) => ({
+      gameId: row.gameId,
+      dayNumber: row.dayNumber,
+      playerId: row.playerId,
+      entries: row.entries as ExerciseLogEntry[],
+    }));
   }
 
   async saveExerciseLog(

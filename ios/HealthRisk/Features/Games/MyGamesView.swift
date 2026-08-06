@@ -12,6 +12,7 @@ struct MyGamesView: View {
     @StateObject private var gamesStore: GamesStore
     @State private var isPresentingCreateGame = false
     @State private var isPresentingJoinGame = false
+    @State private var navigationPath: [GameRoute] = []
     private let api: any HealthRiskAPI
     private let apiBaseURL: URL
 
@@ -27,7 +28,7 @@ struct MyGamesView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             ZStack {
                 HealthRiskTheme.appBackground
                 content
@@ -75,6 +76,9 @@ struct MyGamesView: View {
                         authenticationStore: authenticationStore,
                         onLobbyExited: {
                             await gamesStore.load()
+                        },
+                        onGameStarted: { gameId in
+                            await showGameplay(gameId)
                         }
                     )
                 case let .gameplay(gameId):
@@ -219,6 +223,16 @@ struct MyGamesView: View {
         if gamesStore.error?.isUnauthorized == true {
             await authenticationStore.invalidateSession()
         }
+    }
+
+    private func showGameplay(_ gameId: String) async {
+        var updatedPath = navigationPath
+        if !updatedPath.isEmpty {
+            updatedPath.removeLast()
+        }
+        updatedPath.append(.gameplay(gameId))
+        navigationPath = updatedPath
+        await loadGames()
     }
 
     private func presentCreateGame() {

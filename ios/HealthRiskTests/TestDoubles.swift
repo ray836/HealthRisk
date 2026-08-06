@@ -65,6 +65,8 @@ actor MockHealthRiskAPI: HealthRiskAPI {
     private var createGameRequests: [CreateGameRequest] = []
     private var joinedGameIds: [String] = []
     private var gameStarts: [RecordedGameStart] = []
+    private var getGameCallCount = 0
+    private var queuedGameResults: [Result<LobbyGameView, APIError>]
     private var listGamesCallCount = 0
     private var queuedGamesResults: [Result<ListGamesResponse, APIError>]
     private var gameplayGameCallCount = 0
@@ -113,6 +115,7 @@ actor MockHealthRiskAPI: HealthRiskAPI {
         createGameResult: Result<GameView, APIError> = .failure(unconfiguredAPIError),
         joinGameResult: Result<JoinGameResponse, APIError> = .failure(unconfiguredAPIError),
         gameResult: Result<LobbyGameView, APIError> = .failure(unconfiguredAPIError),
+        gameResults: [Result<LobbyGameView, APIError>] = [],
         startGameResult: Result<GameMutationResponse, APIError> = .failure(unconfiguredAPIError),
         leaveGameResult: Result<LeaveGameResponse, APIError> = .failure(unconfiguredAPIError),
         deletePracticeGameResult: Result<OkResponse, APIError> = .failure(unconfiguredAPIError),
@@ -137,6 +140,7 @@ actor MockHealthRiskAPI: HealthRiskAPI {
         self.createGameResult = createGameResult
         self.joinGameResult = joinGameResult
         self.gameResult = gameResult
+        queuedGameResults = gameResults
         self.startGameResult = startGameResult
         self.leaveGameResult = leaveGameResult
         self.deletePracticeGameResult = deletePracticeGameResult
@@ -185,7 +189,11 @@ actor MockHealthRiskAPI: HealthRiskAPI {
     }
 
     func getGame(_ gameId: String) async throws -> LobbyGameView {
-        try gameResult.get()
+        getGameCallCount += 1
+        if !queuedGameResults.isEmpty {
+            return try queuedGameResults.removeFirst().get()
+        }
+        return try gameResult.get()
     }
 
     func startGame(
@@ -289,6 +297,7 @@ actor MockHealthRiskAPI: HealthRiskAPI {
     func recordedCreateGameRequests() -> [CreateGameRequest] { createGameRequests }
     func recordedJoinedGameIds() -> [String] { joinedGameIds }
     func recordedGameStarts() -> [RecordedGameStart] { gameStarts }
+    func recordedGetGameCallCount() -> Int { getGameCallCount }
     func recordedGameplayGameCallCount() -> Int { gameplayGameCallCount }
     func recordedReinforcements() -> [RecordedReinforcement] { reinforcements }
     func recordedCardTrades() -> [RecordedCardTrade] { cardTrades }

@@ -1,24 +1,31 @@
 import SwiftUI
+import UIKit
 
 struct WaitingRoomView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var authenticationStore: AuthenticationStore
     @StateObject private var store: WaitingRoomStore
     @State private var isEditingRules = false
     @State private var isConfirmingExit = false
+    @State private var didCopyGameCode = false
+    @State private var isEnteringGameplay = false
     private let inviteURL: URL?
     private let onLobbyExited: @MainActor () async -> Void
+    private let onGameStarted: @MainActor (String) async -> Void
 
     init(
         gameId: String,
         inviteURL: URL?,
         api: any HealthRiskAPI,
         authenticationStore: AuthenticationStore,
-        onLobbyExited: @escaping @MainActor () async -> Void
+        onLobbyExited: @escaping @MainActor () async -> Void,
+        onGameStarted: @escaping @MainActor (String) async -> Void
     ) {
         self.authenticationStore = authenticationStore
         self.inviteURL = inviteURL
         self.onLobbyExited = onLobbyExited
+        self.onGameStarted = onGameStarted
         _store = StateObject(wrappedValue: WaitingRoomStore(gameId: gameId, api: api))
     }
 
@@ -49,7 +56,10 @@ struct WaitingRoomView: View {
                 .disabled(store.isLoading)
             }
         }
-        .task { await load() }
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            await synchronizeLobby()
+        }
         .sheet(isPresented: $isEditingRules) {
             if let game = store.game {
                 HealthRulesEditorView(store: store, game: game) {
@@ -106,6 +116,8 @@ struct WaitingRoomView: View {
 
     private func lobbySummary(_ game: LobbyGameView) -> some View {
         VStack(alignment: .leading, spacing: 14) {
+            gameCodeBanner(game)
+
             HStack {
                 Label("\(game.claimedPlayerCount)/\(game.lobbyCapacity) players", systemImage: "person.3.fill")
                     .font(.headline)
@@ -206,6 +218,64 @@ struct WaitingRoomView: View {
         }
         .padding(18)
         .healthRiskSurface()
+    }
+
+    private func gameCodeBanner(_ game: LobbyGameView) -> some View {
+        let code = GameJoinCode.displayCode(from: game.id)
+
+        return HStack(spacing: 14) {
+            Image(systemName: "number")
+                .font(.title2.weight(.bold))
+                .foregroundStyle(HealthRiskTheme.accent)
+                .frame(width: 44, height: 44)
+                .background(HealthRiskTheme.accent.opacity(0.16))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("GAME CODE")
+                    .font(.caption2.bold())
+                    .tracking(1.2)
+                    .foregroundStyle(HealthRiskTheme.muted)
+                Text(code)
+                    .font(.system(size: 30, weight: .black, design: .monospaced))
+                    .tracking(4)
+                    .foregroundStyle(HealthRiskTheme.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .textSelection(.enabled)
+                    .accessibilityLabel("Game code \(code)")
+                Text("Share this six-character code so others can join.")
+                    .font(.caption)
+                    .foregroundStyle(HealthRiskTheme.muted)
+            }
+
+            Spacer(minLength: 12)
+
+            Button {
+                UIPasteboard.general.string = code
+                didCopyGameCode = true
+                Task {
+                    try? await Task.sleep(for: .seconds(2))
+                    didCopyGameCode = false
+                }
+            } label: {
+                Label(
+                    didCopyGameCode ? "Copied" : "Copy",
+                    systemImage: didCopyGameCode ? "checkmark" : "doc.on.doc"
+                )
+                .font(.subheadline.weight(.semibold))
+                .frame(height: 36)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(didCopyGameCode ? HealthRiskTheme.success : HealthRiskTheme.accent)
+        }
+        .padding(14)
+        .background(HealthRiskTheme.accent.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(HealthRiskTheme.accent.opacity(0.5), lineWidth: 1)
+        }
     }
 
     private func healthGoals(_ game: LobbyGameView) -> some View {
@@ -378,6 +448,17 @@ struct WaitingRoomView: View {
     private func load() async {
         await store.load()
         await invalidateIfUnauthorized(store.error)
+        if store.game?.status == .active {
+            await enterGameplay()
+        }
+    }
+
+    private func synchronizeLobby() async {
+        await store.synchronize()
+        await invalidateIfUnauthorized(store.error)
+        if store.game?.status == .active {
+            await enterGameplay()
+        }
     }
 
     private func exitLobby() async {
@@ -391,11 +472,16 @@ struct WaitingRoomView: View {
 
     private func startGame() async {
         if await store.startGame() {
-            await onLobbyExited()
-            dismiss()
+            await enterGameplay()
         } else {
             await invalidateIfUnauthorized(store.startError)
         }
+    }
+
+    private func enterGameplay() async {
+        guard !isEnteringGameplay else { return }
+        isEnteringGameplay = true
+        await onGameStarted(store.gameId)
     }
 
     private func invalidateIfUnauthorized(_ error: APIError?) async {

@@ -136,6 +136,7 @@ final class GamesStoreTests: XCTestCase {
     }
 
     func testJoinCodeAcceptsShortCodeFullIdAndInviteLink() {
+        XCTAssertEqual(GameJoinCode.displayCode(from: "game-jen36x"), "JEN36X")
         XCTAssertEqual(GameJoinCode.gameID(from: " JEN36X "), "game-jen36x")
         XCTAssertEqual(GameJoinCode.gameID(from: "game-JEN36X"), "game-jen36x")
         XCTAssertEqual(

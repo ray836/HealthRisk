@@ -2103,7 +2103,8 @@
         if (submitVotes) submitVotes.onclick = async () => {
           submitVotes.disabled = true;
           try {
-            const data = await post(`/api/games/${gameId}/lobby-health-votes`, {
+            const data = await api.post(`/api/games/${gameId}/lobby-health-votes`, {
+              healthRulesVersion: game.healthRulesVersion,
               exerciseKeys: [...lobbyVoteDraft],
             });
             game = data.game;
@@ -2115,6 +2116,7 @@
             showToast('Health choices submitted');
             render();
           } catch (error) {
+            if (error.code === 'stale_health_rules') await refresh();
             showToast(error.message);
             submitVotes.disabled = false;
           }

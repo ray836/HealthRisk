@@ -17,24 +17,6 @@ struct GameplaySyncSleeper: GameplaySyncSleeping {
     }
 }
 
-struct TurnCompletionPresentation: Equatable {
-    let summary: GameplayTurnSummary?
-    let cardAwarded: TerritoryCard?
-    let nextPlayerName: String?
-}
-
-struct CardTradePresentation: Equatable {
-    let remainingCards: Int
-    let troopsAwarded: Int
-}
-
-struct ExerciseLogPresentation: Equatable {
-    let exerciseKey: String
-    let deltaTroops: Int
-    let dayTotal: Int
-    let totalCapApplied: Bool
-}
-
 struct GameCompletionPresentation: Equatable {
     struct Standing: Identifiable, Equatable {
         let id: String
@@ -84,9 +66,7 @@ final class GameplayStore: ObservableObject {
     @Published private(set) var isRefreshing = false
     @Published private(set) var isPerformingAction = false
     @Published private(set) var lastAttackResult: AttackResult?
-    @Published private(set) var lastTurnCompletion: TurnCompletionPresentation?
-    @Published private(set) var lastCardTrade: CardTradePresentation?
-    @Published private(set) var lastExerciseLog: ExerciseLogPresentation?
+    @Published private(set) var lastAwardedCard: TerritoryCard?
     @Published var error: APIError?
     @Published var actionError: APIError?
 
@@ -152,16 +132,8 @@ final class GameplayStore: ObservableObject {
         lastAttackResult = nil
     }
 
-    func clearTurnCompletion() {
-        lastTurnCompletion = nil
-    }
-
-    func clearCardTrade() {
-        lastCardTrade = nil
-    }
-
-    func clearExerciseLog() {
-        lastExerciseLog = nil
+    func clearAwardedCard() {
+        lastAwardedCard = nil
     }
 
     @discardableResult
@@ -190,12 +162,6 @@ final class GameplayStore: ObservableObject {
         do {
             let response = try await api.logExercise(gameId: gameId, request: request)
             applyAuthoritativeGame(response.game)
-            lastExerciseLog = ExerciseLogPresentation(
-                exerciseKey: exerciseKey,
-                deltaTroops: response.deltaTroops,
-                dayTotal: response.dayTotal,
-                totalCapApplied: response.totalCapApplied
-            )
             error = nil
             return true
         } catch {
@@ -215,10 +181,6 @@ final class GameplayStore: ObservableObject {
         do {
             let response = try await api.tradeCards(gameId: gameId, request: request)
             applyAuthoritativeGame(response.game)
-            lastCardTrade = CardTradePresentation(
-                remainingCards: response.remainingCards,
-                troopsAwarded: response.troopsAwarded
-            )
             error = nil
             return true
         } catch {
@@ -274,20 +236,16 @@ final class GameplayStore: ObservableObject {
     func endTurn() async -> Bool {
         guard let game else { return false }
         let request = RevisionRequest(revision: game.revision)
-        let summary = game.dashboard?.turnSummary
         guard !isPerformingAction else { return false }
         isPerformingAction = true
         actionError = nil
+        lastAwardedCard = nil
         defer { isPerformingAction = false }
 
         do {
             let response = try await api.endTurn(gameId: gameId, request: request)
             applyAuthoritativeGame(response.game)
-            lastTurnCompletion = TurnCompletionPresentation(
-                summary: summary,
-                cardAwarded: response.cardAwarded,
-                nextPlayerName: response.game.currentPlayer?.name
-            )
+            lastAwardedCard = response.cardAwarded
             error = nil
             return true
         } catch {

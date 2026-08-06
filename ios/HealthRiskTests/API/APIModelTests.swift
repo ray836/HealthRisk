@@ -110,6 +110,20 @@ final class APIModelTests: XCTestCase {
         XCTAssertTrue(game.dashboard?.turnSummary?.cardPending == true)
     }
 
+    func testDecodesPrivacySafeSharedHealthMomentum() throws {
+        let data = Data(
+            #"{"playerId":"p1","troopsEarned":4,"dailyCap":6,"percent":67,"goalsCompleted":1,"goalsTracked":2,"status":"in_progress","historyWindowDays":3,"consistencyPercent":50,"goals":[{"exerciseKey":"running","currentStatus":"in_progress","completedDays":2,"trackedDays":3,"consistencyPercent":67}]}"#.utf8
+        )
+
+        let progress = try JSONDecoder().decode(GameplaySharedHealthProgress.self, from: data)
+
+        XCTAssertEqual(progress.historyWindowDays, 3)
+        XCTAssertEqual(progress.consistencyPercent, 50)
+        XCTAssertEqual(progress.goals?.first?.exerciseKey, "running")
+        XCTAssertEqual(progress.goals?.first?.currentStatus, .inProgress)
+        XCTAssertEqual(progress.goals?.first?.completedDays, 2)
+    }
+
     func testDecodesAuthoritativeMultiRoundAttackResult() throws {
         let data = Data(
             ##"{"result":{"fromId":"alaska","toId":"northwest_territory","endReason":"capture","captured":true,"rounds":[{"attackerDice":[6,5,2],"defenderDice":[5,4],"attackerLosses":0,"defenderLosses":2,"attackerForceAfter":5,"defenderForceAfter":1},{"attackerDice":[4,3,1],"defenderDice":[2],"attackerLosses":0,"defenderLosses":1,"attackerForceAfter":5,"defenderForceAfter":0}],"totalAttackerLosses":0,"totalDefenderLosses":3,"survivingAttackers":5,"remainingDefenders":0,"seed":42},"game":{"id":"game-play","revision":7,"practice":false,"status":"active","winnerId":null,"dayNumber":0,"turnOrder":["p1","p2"],"currentPlayerId":"p1","mySeats":["p1"],"isCreator":true,"yourTurn":true,"phase":"attack","windowExpiresAt":"2026-08-03T02:00:00.000Z","nextSessionOpensAt":null,"schedule":{"timezone":"America/Denver","dailyStartMinuteOfDay":1140,"playerWindowMinutes":720,"moveDeadlineAt":"2026-08-03T02:00:00.000Z","nextSessionOpensAt":null,"missedTurnPolicy":"auto_resolve"},"players":[{"id":"p1","name":"Ray","status":"active","color":"#6ea8fe","pendingReinforcements":0,"pendingEliminationReward":0,"note":"","claimed":true},{"id":"p2","name":"Tess","status":"active","color":"#69d39b","pendingReinforcements":0,"pendingEliminationReward":0,"note":"","claimed":true}],"continents":[{"id":"north_america","label":"North America","bonus":5}],"territories":[{"id":"alaska","owner":"p1","armies":1,"continent":"north_america","neighbors":["northwest_territory"],"color":"#6ea8fe"},{"id":"northwest_territory","owner":"p1","armies":5,"continent":"north_america","neighbors":["alaska"],"color":"#6ea8fe"}]}}"##.utf8
